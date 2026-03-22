@@ -332,7 +332,6 @@ export function BoxViewer({
     if (!sceneRefForCleanup.current || !boxRef.current) return;
 
     const scene = sceneRefForCleanup.current;
-    const box = boxRef.current;
 
     // Remove existing selected face mesh
     if (selectedFaceMeshRef.current) {
