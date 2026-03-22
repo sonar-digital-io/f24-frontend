@@ -197,6 +197,7 @@ export function Nurbs() {
           showWireframe={showWireframe}
           showSurface={showSurface}
           showPlanes={showPlanes}
+          selectedPlaneIdx={selectedPlaneIdx}
           loftTrigger={loftTrigger}
           edgePlacementMode={edgePlacementMode}
           onEdgePlaced={handleEdgePlaced}
