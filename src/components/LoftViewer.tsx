@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -254,8 +254,7 @@ export function LoftViewer({
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
-    // Invisible horizontal plane for raycasting Y position
-    const rayPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // will be oriented per-frame
+
 
     const onMouseMove = (event: MouseEvent) => {
       if (!edgeModeRef.current) {
@@ -365,7 +364,7 @@ export function LoftViewer({
       }
     };
 
-    const onClick = (event: MouseEvent) => {
+    const onClick = (_event: MouseEvent) => {
       if (!edgeModeRef.current) return;
       if (previewGroup.userData.pendingY != null) {
         onEdgePlacedRef.current?.(previewGroup.userData.pendingY);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -15,7 +15,7 @@ interface SplitViewProps {
   selectedVertex: THREE.Vector3 | null;
   onVertexSelect: (vertex: THREE.Vector3 | null, vertexIndex?: number) => void;
   bezierPoints?: THREE.Vector3[] | null;
-  onViewZoom?: (view: string) => void;
+  onViewZoom?: (view: 'top' | 'left' | 'front' | 'perspective') => void;
 }
 
 type ViewType = 'top' | 'left' | 'front' | 'perspective';
@@ -345,7 +345,6 @@ export function SplitView({
 
       // Create new selected face
       if (selectedFace && boxRefs.current[index]) {
-        const box = boxRefs.current[index];
         let faceGeometry: THREE.PlaneGeometry;
         let facePos = new THREE.Vector3(positionX, positionY, positionZ);
         let faceRotation = new THREE.Euler(0, 0, 0);
