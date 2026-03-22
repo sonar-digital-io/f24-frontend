@@ -2,8 +2,8 @@
 export default {
   darkMode: ['class'],
   content: [
-    'C:/code/f24-frontend/index.html',
-    'C:/code/f24-frontend/src/**/*.{js,ts,jsx,tsx}',
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {
