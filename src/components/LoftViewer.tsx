@@ -16,6 +16,7 @@ interface LoftViewerProps {
   showSurface: boolean;
   showPlanes: boolean;
   loftTrigger: number;
+  selectedPlaneIdx: number | null;
   edgePlacementMode: boolean;
   onEdgePlaced?: (y: number) => void;
   onStatsUpdate?: (stats: { faces: number; edges: number; vertices: number }) => void;
@@ -168,6 +169,7 @@ export function LoftViewer({
   showWireframe,
   showSurface,
   showPlanes,
+  selectedPlaneIdx,
   loftTrigger,
   edgePlacementMode,
   onEdgePlaced,
@@ -205,9 +207,9 @@ export function LoftViewer({
     canvas.width = 2; canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
     const grad = ctx.createLinearGradient(0, 0, 0, 512);
-    grad.addColorStop(0, '#0a0a1a');
-    grad.addColorStop(0.5, '#1a1a2e');
-    grad.addColorStop(1, '#0a0a1a');
+    grad.addColorStop(0, '#1a1a1a');
+    grad.addColorStop(0.5, '#2a2a2a');
+    grad.addColorStop(1, '#1a1a1a');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 2, 512);
     scene.background = new THREE.CanvasTexture(canvas);
@@ -234,7 +236,7 @@ export function LoftViewer({
     scene.add(sun);
     scene.add(new THREE.DirectionalLight(0x4488ff, 0.3).translateX(-10).translateY(5));
 
-    const grid = new THREE.GridHelper(20, 20, 0x333355, 0x222244);
+    const grid = new THREE.GridHelper(20, 20, 0x444444, 0x333333);
     grid.position.y = -0.5;
     (grid.material as THREE.Material).opacity = 0.4;
     (grid.material as THREE.Material).transparent = true;
@@ -419,13 +421,15 @@ export function LoftViewer({
 
     if (!showPlanes) return;
 
-    const colors = [0x44ff88, 0x4488ff, 0xff4488, 0xffaa44, 0xaa44ff];
     planes.forEach((plane, idx) => {
-      const color = colors[idx % colors.length];
+      const isSelected = idx === selectedPlaneIdx;
+      const color = isSelected ? 0xffcc00 : 0xffffff;
+      const lineOpacity = isSelected ? 1.0 : 0.5;
+      const planeOpacity = isSelected ? 0.08 : 0.03;
 
       // Semi-transparent plane
       const planeGeo = new THREE.PlaneGeometry(8, 8);
-      const planeMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false });
+      const planeMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: planeOpacity, side: THREE.DoubleSide, depthWrite: false });
       const planeMesh = new THREE.Mesh(planeGeo, planeMat);
       planeMesh.rotation.x = -Math.PI / 2;
       planeMesh.position.y = plane.y;
@@ -442,7 +446,7 @@ export function LoftViewer({
         }
         const lineGeo = new THREE.BufferGeometry();
         lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(lineVerts, 3));
-        const lineMat = new THREE.LineBasicMaterial({ color, opacity: 0.9, transparent: true });
+        const lineMat = new THREE.LineBasicMaterial({ color, opacity: lineOpacity, transparent: true });
         s.planeGroup.add(new THREE.LineSegments(lineGeo, lineMat));
 
         // Anchor spheres
@@ -455,7 +459,7 @@ export function LoftViewer({
         });
       }
     });
-  }, [planes, showPlanes]);
+  }, [planes, showPlanes, selectedPlaneIdx]);
 
   // Build loft when triggered
   useEffect(() => {
