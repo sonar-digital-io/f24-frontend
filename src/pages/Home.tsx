@@ -64,8 +64,8 @@ function TopNavigation() {
 
 function TabsSection() {
   return (
-    <div className="content-stretch flex flex-wrap items-center justify-between gap-4 px-[16px] py-[8px] relative shrink-0 w-full bg-transparent">
-      <Tabs defaultValue="general" className="bg-[#f3f4f6] h-[36px] p-[3px] rounded-[10px]">
+    <div className="content-stretch flex flex-wrap items-center justify-between gap-4 px-[16px] py-[8px] relative shrink-0 w-full bg-transparent pointer-events-none">
+      <Tabs defaultValue="general" className="bg-[#f3f4f6] h-[36px] p-[3px] rounded-[10px] pointer-events-auto">
         <TabsList className="h-full bg-transparent p-0 gap-0">
           <TabsTrigger
             value="general"
@@ -96,10 +96,10 @@ function TabsSection() {
           </TabsTrigger>
         </TabsList>
       </Tabs>
-      <div className="flex flex-col font-['Geist',sans-serif] font-semibold justify-center leading-[0] relative shrink-0 text-[18px] text-black whitespace-nowrap hidden lg:block">
+      <div className="flex flex-col font-['Geist',sans-serif] font-semibold justify-center leading-[0] relative shrink-0 text-[18px] text-black whitespace-nowrap hidden lg:block pointer-events-auto">
         <p className="leading-[28px]">New composition: Wind_turbine_2026</p>
       </div>
-      <div className="content-stretch flex flex-col items-end relative shrink-0">
+      <div className="content-stretch flex flex-col items-end relative shrink-0 pointer-events-auto">
         <Button
           variant="secondary"
           size="sm"
@@ -225,14 +225,14 @@ export function Home() {
         {/* 3D Background */}
         <BackgroundScene wireframe={renderMode === 'Wireframe'} />
 
-        {/* Tabs Section — floating over 3D */}
-        <div className="absolute top-0 left-0 right-0 z-10 pointer-events-auto">
+        {/* Tabs Section — floating over 3D, pointer-events only on interactive children */}
+        <div className="absolute top-0 left-0 right-0 z-10">
           <TabsSection />
         </div>
 
-        {/* Form overlay — pointer-events-none so 3D controls work through it */}
-        <div className="absolute inset-0 overflow-y-auto pointer-events-none">
-          <div className="pointer-events-auto pt-[60px]">
+        {/* Form overlay — pointer-events-none so 3D controls work through empty areas */}
+        <div className="absolute inset-0 overflow-y-auto pointer-events-none pt-[60px]">
+          <div className="pointer-events-auto inline-block">
             <FormSection />
           </div>
         </div>
