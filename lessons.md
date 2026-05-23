@@ -91,6 +91,50 @@ Ha hozzáadnál egy `overflow-hidden`-t bármelyik szülőhöz (pl. animation pu
 
 **Kivétel:** `GeometryEdit` `<main>`-je SZÁNDÉKOSAN `overflow-hidden` — ott a Three.js canvas a fő terület, nem akarjuk hogy az túllógjon. A `MainNav` ezen kívül van (a parent flex-col-on), tehát továbbra is sticky.
 
+### Controlled input + reformat anti-pattern
+
+A táblázat input mezői és a bezier görbe két-irányú szinkronja: drag a chart-on → input frissül, gépelés az inputba → görbe frissül.
+
+**Anti-pattern**: `value={p.x.toFixed(4)}` minden render-en — a user által beírt `"0.5"` rögtön `"0.5000"`-ré formázódik, a cursor a végére ugrik, a következő karakter rossz helyre kerül. A teszt szerint technikailag a propagation működik, de az UX zavart.
+
+**Helyes minta**: local `editingValues: Record<string, string>` state. Render value: `editingValues[key] ?? p.x.toFixed(4)`. OnChange: lerakja a nyers stringet a buffer-be, és ha `Number.isFinite(parseFloat(raw))`, propagálja a parent state-be. OnBlur: törli a buffer entry-t → render visszaáll a canonical formátumra.
+
+```tsx
+const [editingValues, setEditingValues] = useState<Record<string, string>>({});
+
+function handleChange(key, raw) {
+  setEditingValues(v => ({ ...v, [key]: raw }));
+  const parsed = parseFloat(raw);
+  if (Number.isFinite(parsed)) propagateToParent(key, parsed);
+}
+function handleBlur(key) {
+  setEditingValues(v => { const n = {...v}; delete n[key]; return n; });
+}
+```
+
+### HTML5 `type="number"` intermediate state "0." → ""
+
+A `<input type="number">` "0." átmeneti gépelési állapotot a böngésző `validity.valid: false`-nek tekinti, és az `.value` üres stringet ad vissza JS-en keresztül. A `0.5` és `0.55` rendben — de a "0." pillanat nem.
+
+Ha ez számít a use-case-nek (pl. tudományos jelölés `1e-6`), váltsd `type="text" inputMode="decimal"`-re, és a JS-en validálj saját regex-szel. Most a profil paraméterekhez `type="number"` elfogadott (a `0.` pillanat invisible — a user folytatja a tizedes számokat).
+
+### viewBox-based zoom drag math no-op
+
+A `BezierEditor`-ben a zoom + pan a `<svg>` viewBox szélességén és top-left offset-en történik. A control point drag handler használ `svg.getScreenCTM().inverse()`-t — és **ez automatikusan figyelembe veszi az új viewBox-ot**. Tehát semmi manuális zoom-adjustment a drag math-ban.
+
+Plusz `vectorEffect="non-scaling-stroke"` minden stroke-on → vonalvastagság változatlan marad zoomban (különben 8x zoomban a 2.5px stroke 20px-szé válna).
+
+### Y axis label float drift
+
+A `for (let v = yMin; v <= yMax; v += yStep)` ciklusban a `v` float drift-be megy: `0.1 + 0.1 + 0.1 = 0.30000000000000004`. Ha a labelt `{v}` rendereled, az JS `String(0.30000000000000004)` → "0.30000000000000004" — csúnya.
+
+**Fix**: `v.toFixed(decimals)` ahol `decimals = -log10(yStep)`. Ha `yStep = 0.1` → 1 decimális → "0.3" tisztán. Ha `yStep = 1` → 0 decimális → "24".
+
+```tsx
+const decimals = yStep >= 1 ? 0 : Math.max(0, -Math.floor(Math.log10(yStep)));
+const label = v.toFixed(decimals);
+```
+
 ### Custom Switch thumb pozicionálás
 
 A `<span>` thumb-ot ne dinamikus `translate-x-[18px]`-szel mozgasd a track-en belül, mert a `top-[2px]` + `translate-x-[N]` kombináció gyakran 1-2px-szel "kilóg" a track-ből. **Helyes minta**:
@@ -210,6 +254,16 @@ A `Layout` komponens passthrough lett. Lehetne globális, de:
 - A `GeometryEdit` és `Composition` szándékosan footer NÉLKÜL (edit mode)
 
 **Trade-off:** kicsit több ismétlődés (`<MainNav />` + `<Footer />` minden page elején/végén), cserébe nincs "page kivétel" logika a Layout-ban. Ha minden page biztosan MainNav-ot akar, a `PagePlaceholder` mintát kell követni — minden új page-be expliciten beilleszteni.
+
+### Interaktív bezier editor: custom SVG > D3/visx
+
+A `BezierEditor` 4 control point-tal, zoom+pan-nel ~430 sor kód, 0 új dependency. Alternatívák:
+
+- **D3** (`d3-drag` + `d3-shape` + `d3-zoom`): ipari standard, de imperatív API — React-tel `useEffect`-tel + DOM manipulationnel kell wrap-elni. Bundle ~30KB gzip. Overkill 4 pontra.
+- **visx** (`@visx/curve` + `@visx/drag` + `@visx/zoom`): React-natív, deklaratív D3-wrap. Bundle ~15KB gzip per modul. Jó alternatíva ha sok más chart is jön a projektbe.
+- **Konva / react-konva**: Canvas-alapú, excellent performance 100+ interaktív elemre. Bundle ~70KB. Túl nagy ehhez a use-case-hez.
+
+A custom SVG + Pointer Events minta a projekt méreténél (4 pont, 2 chart) optimális. Pattern: state data-space-ben (`{x, y}`), pixel-koordinátákat minden render-en újraszámol, `getScreenCTM().inverse()` a screen→viewBox átalakításhoz. Lásd `BezierEditor.tsx`-et.
 
 ### Custom expand state vs shadcn Accordion
 

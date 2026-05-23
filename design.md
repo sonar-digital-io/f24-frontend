@@ -173,6 +173,40 @@ Custom modal a "Project configuration" dialog-hoz.
 - Create gomb disabled amíg Blade type + Name nincs kitöltve
 - Belső `Select` komponens — custom dropdown (lásd Pattern-ek lent)
 
+### `BezierEditor` (`src/components/BezierEditor.tsx`)
+
+Interaktív cubic Bézier görbe szerkesztő, 4 control point-tal, dragelhető pontokkal és viewBox-based zoom+pan-nel.
+
+- **State data space-ben**: `points: { x: 0..1, y: yMin..yMax }[]`. Pixel-koordinátákat minden render-en újraszámol — resize / zoom = no-op a state-re.
+- **Pointer Events** + `setPointerCapture` → unified mouse + touch + pen drag. `touch-action: none` a draggable elemeken, hogy mobil böngészők ne scrolloljanak drag közben.
+- **Two-way sync**: a parent owns a `points` state-et, `onChange` callback-kel. Ugyanaz az array renderelődik a chart-on és a táblázatban (lásd `ProfileDistributionPanel`, `StackingPanel`).
+- **Constraints**: P0.x és P_last.x fix; közbenső pontok monoton x-ben (`points[idx-1].x + 0.001 ≤ x ≤ points[idx+1].x - 0.001`).
+- **Zoom**: viewBox alapú. `+`/`-` gombok (center pivot), scroll-wheel zoom (cursor pivot), pan drag a background `<rect>`-en (csak `zoom > 1` esetén), dupla klikk reset. `vectorEffect="non-scaling-stroke"` minden stroke-on → vonalvastagság változatlan zoom-ban.
+- **`yMin` / `yMax` props** (default 0 / 24): negatív Y range is támogatott (pl. Stacking tab Sweep: `-0.3..0.3`).
+- **`yStep` prop** + automatikus label formatting: `v.toFixed(decimals)` ahol `decimals = -log10(yStep)` → integer ha `yStep >= 1`, különben annyi decimális ahány a step pontossága.
+- **`previousPoints`** prop (read-only): vékony zöld referencia görbe.
+- **`rootX`** prop: narancs root indicator (vertikális vonal a chart-on a root pozíciónál).
+
+Bundle cost: 0 (csak React + Pointer Events). Skálázáshoz lásd `lessons.md`-t.
+
+### `ProfilesPanel` + `ProfileDetailPopover` (`src/components/ProfilesPanel.tsx`)
+
+A Geometry edit "Profiles" tab tartalma. 404px wide panel: kis tábla (Profile name | Position) 6 sorral + "Add new profile" gomb. Sor click → highlight + kuka ikon megjelenik a jobb oldalán + popover nyit.
+
+`ProfileDetailPopover` — floating dialog `fixed left-1/2 top-1/2 z-40 w-[791px]`. Nincs overlay (clickelhető háttér), ESC bezárja. Form mezők: Name, Position (relative radius), Type custom `Select`, Maximum camber (%), Max camber position, Thickness (TMC) (%) + 2D airfoil preview SVG a jobb oldalon.
+
+Az `AirfoilPreview` komponens NACA 4-digit airfoil parametric equations alapján rendereli a kontúrt (cosine-spaced 50 pont, upper + lower surface, kék 2px stroke). A `maxCamber`, `maxCamberPosition`, `thickness` paraméterek %-ban változnak.
+
+Figma: `596:19631` (panel), `596:19710` (opened profile)
+
+### `StackingPanel` (`src/components/StackingPanel.tsx`)
+
+A Geometry edit "Stacking" tab tartalma. 516px wide, scroll-olható panel (max-h, overflow-y-auto), accordion 2 szekcióval: **Sweep** + **Dihedral**. Mindkettő bezier editor (Y range `-0.3..0.3`, step `0.1`) + table két irányú sync-kel.
+
+Top: Undo/Redo gombok. Section accordion ugyanazt a stílust követi mint a Profile distribution folded mode (lásd Accordion card style pattern).
+
+Figma: `596:20399`
+
 ### `ProfileDistributionPanel` (`src/components/ProfileDistributionPanel.tsx`)
 
 A Geometry edit "Profile distribution" tab panel-tartalma. 924px wide (a többi tab 280px-es panelhez képest).
@@ -357,8 +391,12 @@ Sem shadcn select, sem dropdown-menu — minden helyen ahol `<select>` kéne, in
 Most több helyen használjuk:
 - `MaterialNew` (Type)
 - `NewGeometryModal` (Blade type, Manufacturing technology)
+- `ProfileDistributionPanel` (Type — NACA 4/5/Custom)
+- `ProfilesPanel` (Type a popover form-ban)
 
-Ha egységes komponensbe extraktálni szeretnéd, `src/components/ui/select.tsx` jó hely.
+**Dropdown overlay overflow**: `min-w-full whitespace-nowrap` az `<ul>`-en → ha a leghosszabb opció hosszabb mint a trigger, jobbra túlnyúlik. Folded mode-ban a Type oszlop csak 160px wide, de a "Custom airfoil" opció befér.
+
+Ha egységes komponensbe extraktálni szeretnéd, `src/components/ui/select.tsx` jó hely (4+ helyen ismétlődik már).
 
 ### Modal pattern
 
@@ -370,6 +408,69 @@ Ha egységes komponensbe extraktálni szeretnéd, `src/components/ui/select.tsx`
 - Click overlay → `onClose()`, click form → `stopPropagation()` (nem terjed)
 
 Ha sok modal kell, érdemes shadcn `dialog` primitivre váltani (`npx shadcn add dialog`), ami Radix-on alapul (a11y + focus trap).
+
+### Accordion card style (vertikális szekciólista)
+
+A `ProfileDistributionPanel` folded mode-ban és a `StackingPanel`-ben azonos minta:
+
+```tsx
+<div className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
+  <button
+    type="button"
+    onClick={toggle}
+    aria-expanded={open}
+    className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-[#f9fafb]"
+  >
+    <span className="text-[16px] font-semibold leading-6 text-[#0a0a0a]">
+      {label}
+    </span>
+    {open ? <ChevronUp .../> : <ChevronDown .../>}
+  </button>
+  {open && (
+    <div className="border-t border-[#e5e7eb] p-4">{body}</div>
+  )}
+</div>
+```
+
+A wrapper külön bordered card → vizuálisan elválasztja a szekciókat anélkül hogy nagy `gap-6` kéne. Külső `gap-3` az item-ek közt.
+
+### Two-way sync controlled input + editing buffer
+
+A `ProfileDistributionPanel` táblázat-input-jai két irányba szinkronok a `BezierEditor`-rel: drag a chart-on → input frissül; gépelés az inputba → bezier görbe módosul.
+
+**Anti-pattern**: `value={p.x.toFixed(4)}` minden render-en — a user által beírt `"0.5"` rögtön `"0.5000"`-ré formázódik, a cursor a végére ugrik, a következő karakter rossz helyre kerül.
+
+**Helyes minta**: local `editingValues: Record<string,string>` buffer. Render value: `editingValues[key] ?? canonicalFormat(...)`. OnChange: lerakja a nyers stringet a buffer-be, és ha `Number.isFinite(parseFloat(raw))`, propagálja a parent state-be. OnBlur: törli a buffer entry-t → render visszaáll a canonical formátumra.
+
+### viewBox-based zoom + pan SVG-ben
+
+A `BezierEditor` viewBox-szal zoomol — a `<svg>` viewBox-ának szélessége `BASE / zoom`, a pan offset módosítja a top-left-et. Pan korlátozott `±centerOffset` range-re (a chart nem mehet ki a látható területről).
+
+**Mellék előny**: a pointer-event drag math ugyanaz marad. A `svg.getScreenCTM().inverse()` automatikusan figyelembe veszi az új viewBox-ot — semmi manuális zoom-adjustment a control point drag handler-ben.
+
+**`vectorEffect="non-scaling-stroke"`** minden vonalon és path-on → stroke-width változatlan marad zoom-ban (2.5px aktív görbe 8x zoomban is 2.5px).
+
+**Wheel zoom focal point math**:
+```js
+const local = screenToViewBox(cursorX, cursorY);
+const ratioX = (local.x - viewX) / viewW;
+const nextViewX = local.x - ratioX * nextViewW;
+```
+A cursor data-koordinátáját a zoom előtt és után ugyanazon a screen pozíción tartjuk.
+
+### Tab-függő panel width
+
+A `GeometryEdit` aside-ja `width` tab szerint változik:
+
+| Tab | Width |
+|---|---|
+| Global properties | 280px |
+| Profile distribution (expanded) | 924px |
+| Profile distribution (folded) | 516px |
+| Profiles | 404px |
+| Stacking | 516px |
+
+Mindegyik `max-w-[calc(100vw-2rem)]`-mel kiegészítve a kisebb viewportra.
 
 ### Custom Switch toggle
 
@@ -435,7 +536,7 @@ Click a sidebar item-en → `window.scrollTo({ top: targetY - 100, behavior: 'sm
 | `/material` | `Material` | Data table accordion-szerű soros expand-dal (Figma 576:19313) |
 | `/material/new` | `MaterialNew` | 3-tab edit (Figma 584:15600 / 596:2160 / 584:15789) |
 | `/geometry` | `Geometry` | List + grid view toggle (Figma 600:22786 / 600:22858) |
-| `/geometry/:id` | `GeometryEdit` | Full-bleed Three.js + floating panel (Figma 596:22661) |
+| `/geometry/:id` | `GeometryEdit` | Full-bleed Three.js + floating panel. Tabs: Global properties / Profile distribution / Profiles / Stacking / Spars (Figma 596:22661 + 596:19816 + 596:19631 + 596:20399) |
 | `/layup` | `Layup` | Stub |
 | `/composition` | `Composition` | 3D editor (régi Home tartalma) |
 | `/load-group` | `LoadGroup` | Stub |

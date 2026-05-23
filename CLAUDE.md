@@ -32,7 +32,11 @@ src/
 │   ├── NewGeometryModal.tsx     # "Project configuration" modal a Geometry létrehozáshoz
 │   ├── BladeScene.tsx           # Three.js full-bleed 3D scene a GeometryEdit-en (tapered blade placeholder)
 │   ├── BladeThumbnail.tsx       # SVG szárny thumbnail a Geometry grid kártyákon
-│   ├── ProfileDistributionPanel.tsx  # GeometryEdit "Profile distribution" tab — bezier chart placeholder + table
+│   ├── BezierEditor.tsx         # Interaktív cubic Bézier editor (drag + zoom + pan + yMin/yMax)
+│   ├── ProfileDistributionPanel.tsx  # GeometryEdit "Profile distribution" tab — 3 szekció bezier + table
+│   ├── ProfilesPanel.tsx        # GeometryEdit "Profiles" tab — profil lista + popover detail (NACA params)
+│   ├── StackingPanel.tsx        # GeometryEdit "Stacking" tab — Sweep + Dihedral bezier-szerkesztő
+│   ├── AirfoilPreview.tsx       # 2D NACA airfoil SVG (paraméterezhető m / p / t)
 │   ├── Layout.tsx               # Passthrough wrapper — minden page maga rendereli MainNav+Footer
 │   ├── BackgroundScene.tsx      # 3D háttér jelenet a Composition route-on
 │   ├── CadViewer.tsx            # Szélturbina 3D megjelenítő
@@ -63,7 +67,8 @@ src/
 ├── data/
 │   ├── materials.ts             # Material[] mock + típusok (cseréld API hívásra)
 │   ├── materialFormFields.ts    # MECHANICAL_SECTIONS + FATIGUE_SECTIONS — PropertyFormTab data
-│   └── geometries.ts            # Geometry[] mock + típusok
+│   ├── geometries.ts            # Geometry[] mock + típusok
+│   └── profiles.ts              # Profile[] mock + PROFILE_TYPES — Profiles tab data
 ├── lib/utils.ts                 # cn() segédfüggvény (clsx + tailwind-merge)
 ├── types/                       # TypeScript típusok
 ├── App.tsx                      # Router konfiguráció
@@ -79,7 +84,7 @@ src/
 | `/material` | `Material` | Material data table accordion-szerű expand-dal — Figma 576:19313 |
 | `/material/new` | `MaterialNew` | Új material létrehozás 3 tab-bal — Figma 584:15600 |
 | `/geometry` | `Geometry` | Geometry list + grid view toggle — Figma 600:22786 / 600:22858 |
-| `/geometry/:id` | `GeometryEdit` | Geometry edit full-bleed Three.js canvas-szal — Figma 596:22661 |
+| `/geometry/:id` | `GeometryEdit` | Geometry edit full-bleed Three.js canvas-szal. Sub-tabs: Global properties (596:22661), Profile distribution (596:19816), Profiles (596:19631), Stacking (596:20399), Spars (placeholder) |
 | `/geometry?new=1` | `Geometry` | Lista + auto-nyíló New geometry modal (Home dashboard-ról jövő flow) |
 | `/layup` | `Layup` | Stub |
 | `/composition` | `Composition` | 3D composition editor (régi Home-ról áthelyezve) |
