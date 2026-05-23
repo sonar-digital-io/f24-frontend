@@ -173,6 +173,36 @@ Custom modal a "Project configuration" dialog-hoz.
 - Create gomb disabled amíg Blade type + Name nincs kitöltve
 - Belső `Select` komponens — custom dropdown (lásd Pattern-ek lent)
 
+### `GeometryCard` (`src/components/GeometryCard.tsx`)
+
+Geometry kártya, használja:
+- A `Geometry` list page grid view-ja
+- A `CompositionNew` "Geometry" sub-tab geometry-pickere
+
+Cím (14px semibold) + `BladeThumbnail` (aspect-2/1) + dátum. `selected` prop esetén kék `border-[#006496]` + 30% opacity ring → a CompositionNew picker használja az aktív választás highlight-jára.
+
+### `LayupPickerDialog` (`src/components/LayupPickerDialog.tsx`)
+
+Modal-szerű layup picker — a `CompositionNew` Layup mapping során a "Select" gombra kattintva nyílik meg.
+
+- `fixed inset-0 z-50 bg-black/40` overlay, click-outside + ESC bezárás, body scroll lock
+- Header "Layups" + close X
+- Search input (autofocus, query reset open-re)
+- Scrollable table (sticky thead): Name (sortable) | Description | Last updated (sortable) | "Select" gomb per sor (primary kék)
+- `currentLayupId` highlight (`bg-[#eef9ff]` az éppen kiválasztott sornál)
+- Pagination
+
+### `LayupMappingBezierDialog` (`src/components/LayupMappingBezierDialog.tsx`)
+
+Bezier modal a layup mapping per-row "Open bezier view" gombra.
+
+- Title: dinamikus `"Upper side / mappingName"` vagy `"Lower side / mappingName"`
+- Undo/Redo gombok (placeholder handler-ekkel)
+- `BezierEditor` `xMin=5 / xMax=55 / xStep=5`, `yMin=-14 / yMax=0 / yStep=2` (longitudinal vs transversal m)
+- 2 oszlopos layout: bal chart, jobb tábla (Index | Longitudinal (m) | Transversal (m) | Delete)
+- 2-irányú sync az `editingValues` buffer pattern-rel
+- Sor delete: min 2 control point marad (cubic-szerű alacsony fokszámú görbéhez kell)
+
 ### `LayupBuilder` + `PlyStackViz` (`src/components/LayupBuilder.tsx`, `PlyStackViz.tsx`)
 
 A LayupNew "Layup building" tab tartalma. Két oldalt: bal egy ply-tábla, jobb egy izometrikus SVG ply-stack.
@@ -205,7 +235,8 @@ Interaktív cubic Bézier görbe szerkesztő, 4 control point-tal, dragelhető p
 - **Constraints**: P0.x és P_last.x fix; közbenső pontok monoton x-ben (`points[idx-1].x + 0.001 ≤ x ≤ points[idx+1].x - 0.001`).
 - **Zoom**: viewBox alapú. `+`/`-` gombok (center pivot), scroll-wheel zoom (cursor pivot), pan drag a background `<rect>`-en (csak `zoom > 1` esetén), dupla klikk reset. `vectorEffect="non-scaling-stroke"` minden stroke-on → vonalvastagság változatlan zoom-ban.
 - **`yMin` / `yMax` props** (default 0 / 24): negatív Y range is támogatott (pl. Stacking tab Sweep: `-0.3..0.3`).
-- **`yStep` prop** + automatikus label formatting: `v.toFixed(decimals)` ahol `decimals = -log10(yStep)` → integer ha `yStep >= 1`, különben annyi decimális ahány a step pontossága.
+- **`xMin` / `xMax` / `xStep` props** (default 0 / 1 / 0.1): a layup mapping bezier `5..55 m / step 5`-ben dolgozik. Az x-monoton constraint epsilon scale-aware: `(xMax - xMin) * 0.001`.
+- **`yStep` / `xStep` driven label formatting**: `v.toFixed(decimals)` ahol `decimals = -log10(step)` → integer ha `step >= 1`, különben annyi decimális ahány a step pontossága.
 - **`previousPoints`** prop (read-only): vékony zöld referencia görbe.
 - **`rootX`** prop: narancs root indicator (vertikális vonal a chart-on a root pozíciónál).
 
@@ -431,6 +462,32 @@ Ha egységes komponensbe extraktálni szeretnéd, `src/components/ui/select.tsx`
 
 Ha sok modal kell, érdemes shadcn `dialog` primitivre váltani (`npx shadcn add dialog`), ami Radix-on alapul (a11y + focus trap).
 
+### Hover-only row actions
+
+A `CompositionNew` Layup mapping táblájában minden sor 4 actiont kínál (Drag handle, Duplicate, Open bezier, Delete) — de a táblázat scan-elhetősége érdekében ezek **csak hover-en jelennek meg**. Pattern:
+
+```tsx
+<tr className="group">
+  <td>
+    {/* Drag handle */}
+    <span className="opacity-0 transition-opacity group-hover:opacity-100">
+      <GripVertical />
+    </span>
+  </td>
+  {/* ... */}
+  <td>
+    {/* Action button cluster */}
+    <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <button>Duplicate</button>
+      <button>Open</button>
+      <button>Delete</button>
+    </div>
+  </td>
+</tr>
+```
+
+A `group` osztály a `<tr>`-en, és a `group-hover:opacity-100` a gyerekeknek — Tailwind alap pattern. A drop slot átmenete (`bg-[#eef9ff]` aktív drop target-en) így nem zavarja a hover-only láthatóságot, mert ez egy másik prop.
+
 ### HTML5 native drag-and-drop reorder
 
 `LayupBuilder` mintája. Egy `<tr draggable>` + handlerek:
@@ -619,6 +676,8 @@ Click a sidebar item-en → `window.scrollTo({ top: targetY - 100, behavior: 'sm
 | `/geometry/:id` | `GeometryEdit` | Full-bleed Three.js + floating panel. Tabs: Global properties / Profile distribution / Profiles / Stacking / Spars (Figma 596:22661 + 596:19816 + 596:19631 + 596:20399) |
 | `/layup` | `Layup` | Layup list page (table) — Figma 600:23689 |
 | `/layup/new` | `LayupNew` | New layup edit, 2 tabs (General + Layup building) — Figma 600:27124 + 600:24328 |
+| `/composition` | `Composition` | Composition list page (table) — Figma 600:27699 |
+| `/composition/new` | `CompositionNew` | New composition, 4 tabs (General + Geometry + Layup mapping + Transversal mapping) — Figma 600:27773 + 600:29097 + 600:28625 + 600:27811 |
 | `/layup` | `Layup` | Stub |
 | `/composition` | `Composition` | 3D editor (régi Home tartalma) |
 | `/load-group` | `LoadGroup` | Stub |

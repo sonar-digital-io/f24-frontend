@@ -91,6 +91,29 @@ Ha hozzáadnál egy `overflow-hidden`-t bármelyik szülőhöz (pl. animation pu
 
 **Kivétel:** `GeometryEdit` `<main>`-je SZÁNDÉKOSAN `overflow-hidden` — ott a Three.js canvas a fő terület, nem akarjuk hogy az túllógjon. A `MainNav` ezen kívül van (a parent flex-col-on), tehát továbbra is sticky.
 
+### Hover-only row actions via Tailwind `group`
+
+A `LayupMappingTable`-ben minden sor drag-handle + 3 actiont (Duplicate / Open / Delete) kínál. Ha mindezt mindig megjelenítjük, a táblázat zsúfolt. Pattern: hover-en jelenjenek meg.
+
+```tsx
+<tr className="group">
+  <td>
+    <span className="opacity-0 transition-opacity group-hover:opacity-100">
+      {/* drag handle icon */}
+    </span>
+  </td>
+  <td>
+    <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      {/* actions */}
+    </div>
+  </td>
+</tr>
+```
+
+A `group` a `<tr>`-en, `group-hover:opacity-100` a gyerekeken. **Fontos**: a `transition-opacity` is kell, különben "ugrik" a látvány.
+
+A drop target highlight (`bg-[#eef9ff]` ha drag van az adott sor felett) tovább MŰKÖDIK párhuzamosan az `opacity` átmenettel — egy másik attribútum.
+
 ### HTML5 native drag-and-drop reorder gotchas
 
 A `LayupBuilder` sortable ply-listája natív DnD-vel. Pár klassikus buktató:
@@ -264,6 +287,21 @@ A `Layout` komponens passthrough lett. Lehetne globális, de:
 - A `GeometryEdit` és `Composition` szándékosan footer NÉLKÜL (edit mode)
 
 **Trade-off:** kicsit több ismétlődés (`<MainNav />` + `<Footer />` minden page elején/végén), cserébe nincs "page kivétel" logika a Layout-ban. Ha minden page biztosan MainNav-ot akar, a `PagePlaceholder` mintát kell követni — minden új page-be expliciten beilleszteni.
+
+### BezierEditor x-axis generalizáció
+
+A `BezierEditor` eredetileg 0..1 x-range volt fixen. A Stacking tab Sweep curve negativ Y-t kívánt, ezért `yMin` prop hozzáadása már megvolt. A layup mapping bezier (5..55 m) ezt x-re is kibővítette.
+
+**Pattern**: minden axis range-paraméter `xMin/xMax/xStep` és `yMin/yMax/yStep` formátumú. A monotone constraint epsilon scale-aware:
+
+```ts
+const xEps = (xMax - xMin) * 0.001;
+// Inner control points keep monotone x:
+const minX = points[idx - 1].x + xEps;
+const maxX = points[idx + 1].x - xEps;
+```
+
+`xEps = 0.001` fix érték a 0..1 range-en jó volt, de 5..55 range-en alig láthatóan szigorítja. A scale-aware verzió mindig 0.1% widthnyi minimal gapet biztosít.
 
 ### Két nézet egyetlen state-tel (sortable list + viz)
 

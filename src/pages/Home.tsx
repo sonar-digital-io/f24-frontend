@@ -95,7 +95,7 @@ export function Home() {
                 title="Composition"
                 description="Add materials to any geometry"
                 buttonLabel="New composition"
-                to="/composition"
+                to="/composition/new"
               />
               <AddNewCard
                 title="Calculation"

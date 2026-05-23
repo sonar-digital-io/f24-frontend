@@ -44,6 +44,13 @@ export interface BezierEditorProps {
   yMin?: number;
   /** Y axis step for grid + labels. Default 2. */
   yStep?: number;
+  /** X axis lower bound (data units). Default 0. */
+  xMin?: number;
+  /** X axis upper bound (data units). Default 1. Set to e.g. 55 for layup
+   *  mapping bezier (longitudinal distance along blade in metres). */
+  xMax?: number;
+  /** X axis step for grid + labels. Default 0.1. */
+  xStep?: number;
   /** Previous curve for reference (read-only). */
   previousPoints?: ControlPoint[];
   /** Position of the root indicator (orange vertical line) in data x. */
@@ -63,22 +70,37 @@ const ZOOM_MAX = 8;
 const ZOOM_STEP_BUTTON = 1.25; // each click multiplies zoom by this
 const ZOOM_STEP_WHEEL = 1.1; // each wheel notch
 
-function dataToPx(p: ControlPoint, yMin: number, yMax: number) {
+function dataToPx(
+  p: ControlPoint,
+  xMin: number,
+  xMax: number,
+  yMin: number,
+  yMax: number,
+) {
   const w = VB_WIDTH - PAD_LEFT - PAD_RIGHT;
   const h = VB_HEIGHT - PAD_TOP - PAD_BOTTOM;
+  const xRange = xMax - xMin;
   const yRange = yMax - yMin;
   return {
-    cx: PAD_LEFT + p.x * w,
+    cx: PAD_LEFT + ((p.x - xMin) / xRange) * w,
     cy: PAD_TOP + (1 - (p.y - yMin) / yRange) * h,
   };
 }
 
-function pxToData(cx: number, cy: number, yMin: number, yMax: number): ControlPoint {
+function pxToData(
+  cx: number,
+  cy: number,
+  xMin: number,
+  xMax: number,
+  yMin: number,
+  yMax: number,
+): ControlPoint {
   const w = VB_WIDTH - PAD_LEFT - PAD_RIGHT;
   const h = VB_HEIGHT - PAD_TOP - PAD_BOTTOM;
+  const xRange = xMax - xMin;
   const yRange = yMax - yMin;
   return {
-    x: (cx - PAD_LEFT) / w,
+    x: xMin + xRange * ((cx - PAD_LEFT) / w),
     y: yMin + yRange * (1 - (cy - PAD_TOP) / h),
   };
 }
@@ -93,6 +115,9 @@ export function BezierEditor({
   yMax = 24,
   yMin = 0,
   yStep = 2,
+  xMin = 0,
+  xMax = 1,
+  xStep = 0.1,
   previousPoints,
   rootX = 0.05,
 }: BezierEditorProps) {
@@ -151,16 +176,19 @@ export function BezierEditor({
     const local = screenToViewBox(e.clientX, e.clientY);
     if (!local) return;
 
-    let { x, y } = pxToData(local.x, local.y, yMin, yMax);
+    let { x, y } = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
     y = clamp(y, yMin, yMax);
 
+    // x epsilon scales with the x range so the monotone constraint feels the
+    // same whether the chart spans 0..1 or 5..55.
+    const xEps = (xMax - xMin) * 0.001;
     if (idx === 0) {
-      x = 0;
+      x = xMin;
     } else if (idx === points.length - 1) {
-      x = 1;
+      x = xMax;
     } else {
-      const minX = points[idx - 1].x + 0.001;
-      const maxX = points[idx + 1].x - 0.001;
+      const minX = points[idx - 1].x + xEps;
+      const maxX = points[idx + 1].x - xEps;
       x = clamp(x, minX, maxX);
     }
 
@@ -272,16 +300,16 @@ export function BezierEditor({
   // --- Path building ---
   function curvePath(pts: ControlPoint[]) {
     if (pts.length < 2) return '';
-    const m = dataToPx(pts[0], yMin, yMax);
+    const m = dataToPx(pts[0], xMin, xMax, yMin, yMax);
     let d = `M ${m.cx},${m.cy}`;
     if (pts.length === 4) {
-      const c1 = dataToPx(pts[1], yMin, yMax);
-      const c2 = dataToPx(pts[2], yMin, yMax);
-      const c3 = dataToPx(pts[3], yMin, yMax);
+      const c1 = dataToPx(pts[1], xMin, xMax, yMin, yMax);
+      const c2 = dataToPx(pts[2], xMin, xMax, yMin, yMax);
+      const c3 = dataToPx(pts[3], xMin, xMax, yMin, yMax);
       d += ` C ${c1.cx},${c1.cy} ${c2.cx},${c2.cy} ${c3.cx},${c3.cy}`;
     } else {
       for (let i = 1; i < pts.length; i++) {
-        const p = dataToPx(pts[i], yMin, yMax);
+        const p = dataToPx(pts[i], xMin, xMax, yMin, yMax);
         d += ` L ${p.cx},${p.cy}`;
       }
     }
@@ -297,8 +325,12 @@ export function BezierEditor({
     yTicks.push(Math.round(v / yStep) * yStep);
   }
   const xTicks: number[] = [];
-  for (let i = 0; i <= 10; i++) xTicks.push(i / 10);
-  const rootPx = dataToPx({ x: rootX, y: 0 }, yMin, yMax).cx;
+  const firstXTick = Math.ceil(xMin / xStep) * xStep;
+  for (let v = firstXTick; v <= xMax + 1e-9; v += xStep) {
+    xTicks.push(Math.round(v / xStep) * xStep);
+  }
+  const xDecimals = xStep >= 1 ? 0 : Math.max(0, -Math.floor(Math.log10(xStep)));
+  const rootPx = dataToPx({ x: rootX, y: 0 }, xMin, xMax, yMin, yMax).cx;
 
   // vector-effect="non-scaling-stroke" keeps line widths the same when zoomed.
   // For text we'd need to counter-scale, but the viewBox scale we use is mild
@@ -357,7 +389,7 @@ export function BezierEditor({
 
         {/* Y grid + labels */}
         {yTicks.map((v) => {
-          const { cy } = dataToPx({ x: 0, y: v }, yMin, yMax);
+          const { cy } = dataToPx({ x: xMin, y: v }, xMin, xMax, yMin, yMax);
           // Format: integer if yStep >= 1, otherwise enough decimals for yStep
           const decimals = yStep >= 1 ? 0 : Math.max(0, -Math.floor(Math.log10(yStep)));
           const label = v.toFixed(decimals);
@@ -381,9 +413,10 @@ export function BezierEditor({
 
         {/* X grid + labels */}
         {xTicks.map((v) => {
-          const { cx } = dataToPx({ x: v, y: 0 }, yMin, yMax);
+          const { cx } = dataToPx({ x: v, y: yMin }, xMin, xMax, yMin, yMax);
+          const label = v.toFixed(xDecimals);
           return (
-            <g key={`x${v.toFixed(2)}`}>
+            <g key={`x${label}`}>
               <line
                 x1={cx}
                 y1={PAD_TOP}
@@ -394,7 +427,7 @@ export function BezierEditor({
                 vectorEffect="non-scaling-stroke"
               />
               <text x={cx - 9} y={VB_HEIGHT - PAD_BOTTOM + 14} fontSize="9" fill="#6b7280">
-                {v.toFixed(2)}
+                {label}
               </text>
             </g>
           );
@@ -428,7 +461,7 @@ export function BezierEditor({
         {points.length === 4 && (
           <>
             <line
-              {...lineProps(points[0], points[1], yMin, yMax)}
+              {...lineProps(points[0], points[1], xMin, xMax, yMin, yMax)}
               stroke="#0066cc"
               strokeWidth="1"
               strokeDasharray="3 3"
@@ -436,7 +469,7 @@ export function BezierEditor({
               vectorEffect="non-scaling-stroke"
             />
             <line
-              {...lineProps(points[1], points[2], yMin, yMax)}
+              {...lineProps(points[1], points[2], xMin, xMax, yMin, yMax)}
               stroke="#0066cc"
               strokeWidth="1"
               strokeDasharray="3 3"
@@ -444,7 +477,7 @@ export function BezierEditor({
               vectorEffect="non-scaling-stroke"
             />
             <line
-              {...lineProps(points[2], points[3], yMin, yMax)}
+              {...lineProps(points[2], points[3], xMin, xMax, yMin, yMax)}
               stroke="#0066cc"
               strokeWidth="1"
               strokeDasharray="3 3"
@@ -465,7 +498,7 @@ export function BezierEditor({
 
         {/* Draggable control points (rendered LAST so they sit on top) */}
         {points.map((p, idx) => {
-          const { cx, cy } = dataToPx(p, yMin, yMax);
+          const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
           const isDragging = draggingIndex === idx;
           return (
             <g key={idx}>
@@ -503,8 +536,15 @@ export function BezierEditor({
   );
 }
 
-function lineProps(a: ControlPoint, b: ControlPoint, yMin: number, yMax: number) {
-  const A = dataToPx(a, yMin, yMax);
-  const B = dataToPx(b, yMin, yMax);
+function lineProps(
+  a: ControlPoint,
+  b: ControlPoint,
+  xMin: number,
+  xMax: number,
+  yMin: number,
+  yMax: number,
+) {
+  const A = dataToPx(a, xMin, xMax, yMin, yMax);
+  const B = dataToPx(b, xMin, xMax, yMin, yMax);
   return { x1: A.cx, y1: A.cy, x2: B.cx, y2: B.cy };
 }

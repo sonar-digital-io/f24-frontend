@@ -3,6 +3,7 @@ import { Layout } from '@/components/Layout';
 import { Home } from '@/pages/Home';
 import { Nurbs } from '@/pages/Nurbs';
 import { Composition } from '@/pages/Composition';
+import { CompositionNew } from '@/pages/CompositionNew';
 import { Material } from '@/pages/Material';
 import { MaterialNew } from '@/pages/MaterialNew';
 import { Geometry } from '@/pages/Geometry';
@@ -27,6 +28,7 @@ function App() {
           <Route path="/layup" element={<Layup />} />
           <Route path="/layup/new" element={<LayupNew />} />
           <Route path="/composition" element={<Composition />} />
+          <Route path="/composition/new" element={<CompositionNew />} />
           <Route path="/load-group" element={<LoadGroup />} />
           <Route path="/calculation" element={<Calculation />} />
           <Route path="/report" element={<Report />} />

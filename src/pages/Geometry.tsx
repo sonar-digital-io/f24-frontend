@@ -14,9 +14,9 @@ import {
 import { MainNav } from '@/components/MainNav';
 import { Footer } from '@/components/Footer';
 import { Input } from '@/components/ui/input';
-import { BladeThumbnail } from '@/components/BladeThumbnail';
+import { GeometryCard } from '@/components/GeometryCard';
 import { NewGeometryModal, NewGeometryPayload } from '@/components/NewGeometryModal';
-import { GEOMETRIES, type Geometry as GeometryItem } from '@/data/geometries';
+import { GEOMETRIES } from '@/data/geometries';
 
 const PAGE_SIZE = 10;
 type ViewMode = 'list' | 'grid';
@@ -108,22 +108,6 @@ function Pagination({ page, totalPages, onChange }: PaginationProps) {
         <ChevronRight className="h-4 w-4" strokeWidth={2} />
       </button>
     </nav>
-  );
-}
-
-function GeometryCard({ geometry, onClick }: { geometry: GeometryItem; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white p-4 text-left shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] transition-colors hover:bg-[#f9fafb]"
-    >
-      <h3 className="text-[14px] font-semibold leading-5 text-[#0a0a0a]">{geometry.name}</h3>
-      <div className="aspect-[2/1] w-full overflow-hidden rounded-md bg-[#f8fafc]">
-        <BladeThumbnail />
-      </div>
-      <span className="text-[14px] leading-5 text-[#6b7280]">{geometry.lastUpdated}</span>
-    </button>
   );
 }
 

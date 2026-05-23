@@ -167,12 +167,14 @@ export function LayupBuilder() {
               <tr className="border-b border-[#e5e7eb]">
                 <th className="h-10 w-9 px-2" />
                 <th className="h-10 w-9 px-2" />
-                <th className="h-10 px-3 text-left font-medium text-[#6b7280]">Layer name</th>
+                <th className="h-10 w-[140px] px-3 text-left font-medium text-[#6b7280]">
+                  Layer name
+                </th>
                 <th className="h-10 px-3 text-left font-medium text-[#6b7280]">Material</th>
-                <th className="h-10 w-[110px] px-3 text-left font-medium text-[#6b7280]">
+                <th className="h-10 w-[120px] whitespace-nowrap px-3 text-left font-medium text-[#6b7280]">
                   Thickness (mm)
                 </th>
-                <th className="h-10 w-[120px] px-3 text-left font-medium text-[#6b7280]">
+                <th className="h-10 w-[140px] whitespace-nowrap px-3 text-left font-medium text-[#6b7280]">
                   Orientation (deg)
                 </th>
                 <th className="h-10 w-12 px-2" />

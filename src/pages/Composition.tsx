@@ -1,191 +1,249 @@
-import { useState } from 'react';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { ChevronRight, X } from 'lucide-react';
-import { BackgroundScene } from '@/components/BackgroundScene';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  ArrowDown,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  MoreHorizontal,
+  Search,
+} from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
+import { Footer } from '@/components/Footer';
+import { Input } from '@/components/ui/input';
+import { COMPOSITIONS } from '@/data/compositions';
 
-function TabsSection() {
+const PAGE_SIZE = 10;
+
+type SortKey = 'name' | 'lastUpdated';
+type SortDirection = 'asc' | 'desc';
+interface SortState {
+  key: SortKey;
+  direction: SortDirection;
+}
+
+interface SortableHeaderProps {
+  label: string;
+  sortKey: SortKey;
+  currentSort: SortState;
+  onClick: (key: SortKey) => void;
+}
+
+function SortableHeader({ label, sortKey, currentSort, onClick }: SortableHeaderProps) {
+  const isActive = currentSort.key === sortKey;
+  const Icon = !isActive ? ArrowUpDown : currentSort.direction === 'desc' ? ArrowDown : ChevronUp;
   return (
-    <div className="content-stretch flex flex-wrap items-center justify-between gap-4 px-[16px] py-[8px] relative shrink-0 w-full bg-transparent pointer-events-none">
-      <Tabs defaultValue="general" className="bg-[#f3f4f6] h-[36px] p-[3px] rounded-[10px] pointer-events-auto">
-        <TabsList className="h-full bg-transparent p-0 gap-0">
-          <TabsTrigger
-            value="general"
-            className="data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] px-[8px] py-[4px] rounded-[8px] h-full font-['Geist',sans-serif] font-medium text-[14px] text-[#0a0a0a]"
-          >
-            General
-          </TabsTrigger>
-          <TabsTrigger
-            value="geometry"
-            className="data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] px-[8px] py-[4px] rounded-[8px] h-full font-['Geist',sans-serif] font-medium text-[14px] text-[#0a0a0a] gap-[8px]"
-          >
-            Geometry
-            <Badge className="bg-[#dc2626] text-[#fef2f2] h-[20px] min-w-[20px] px-[4px] rounded-full shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] font-['Geist',sans-serif] font-semibold text-[12px] hover:bg-[#dc2626]">
-              !
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger
-            value="layup"
-            className="data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] px-[8px] py-[4px] rounded-[8px] h-full font-['Geist',sans-serif] font-medium text-[14px] text-[#0a0a0a]"
-          >
-            Layup mapping
-          </TabsTrigger>
-          <TabsTrigger
-            value="transversal"
-            className="data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] px-[8px] py-[4px] rounded-[8px] h-full font-['Geist',sans-serif] font-medium text-[14px] text-[#0a0a0a]"
-          >
-            Transversal mapping
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <div className="flex flex-col font-['Geist',sans-serif] font-semibold justify-center leading-[0] relative shrink-0 text-[18px] text-black whitespace-nowrap hidden lg:block pointer-events-auto">
-        <p className="leading-[28px]">New composition: Wind_turbine_2026</p>
-      </div>
-      <div className="content-stretch flex flex-col items-end relative shrink-0 pointer-events-auto">
-        <Button
-          variant="secondary"
-          size="sm"
-          className="bg-[#f1f5f9] h-[32px] px-[12px] py-[8px] rounded-[8px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] gap-[8px] font-['Geist',sans-serif] font-medium text-[12px] text-[#171717] hover:bg-[#e2e8f0]"
-        >
-          Exit edit mode
-          <X className="size-[16px] opacity-70" strokeWidth={1.33} />
-        </Button>
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={() => onClick(sortKey)}
+      className="inline-flex items-center gap-1 text-[14px] font-medium leading-5 text-[#6b7280] hover:text-[#0a0a0a]"
+    >
+      {label}
+      <Icon className="h-3.5 w-3.5" strokeWidth={2} />
+    </button>
   );
 }
 
-function FormSection() {
-  const [solidCore, setSolidCore] = useState(false);
-  return (
-    <div className="relative shrink-0 w-full py-4">
-      <div className="content-stretch flex flex-col items-start px-[16px] relative w-full">
-        <div className="bg-white content-stretch flex flex-col gap-[16px] items-start p-[24px] relative rounded-[14px] shrink-0 border border-[#e5e7eb] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] w-full max-w-[468px]">
-          <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full max-w-[420px]">
-            <Label className="font-['Geist',sans-serif] font-medium text-[14px] text-[#0a0a0a]">
-              Name*
-            </Label>
-            <Input
-              defaultValue="Wind_turbine_2026"
-              className="h-[36px] w-full bg-white rounded-[8px] border-[#e2e8f0] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] px-[12px] py-[4px] font-['Geist',sans-serif] font-normal text-[14px] text-[#0a0a0a]"
-            />
-          </div>
-          <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full max-w-[420px]">
-            <Label className="font-['Geist',sans-serif] font-medium text-[14px] text-[#0a0a0a]">
-              Description*
-            </Label>
-            <Textarea
-              placeholder="Placeholder"
-              className="h-[76px] min-h-[60px] w-full bg-white rounded-[8px] border-[#e2e8f0] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] px-[12px] py-[8px] font-['Geist',sans-serif] font-normal text-[14px] text-[#6b7280] resize-none"
-            />
-          </div>
-          <div className="content-stretch flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative shrink-0 w-full max-w-[420px]">
-            <div className="flex items-center gap-[8px]">
-              <Checkbox
-                id="solid-core"
-                checked={solidCore}
-                onCheckedChange={(checked) => setSolidCore(checked as boolean)}
-                className="size-[16px] rounded-[4px] border-[#e2e8f0] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
-              />
-              <Label
-                htmlFor="solid-core"
-                className="font-['Geist',sans-serif] font-medium text-[14px] text-[#0a0a0a] cursor-pointer"
-              >
-                Solid core
-              </Label>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled
-              className="h-[32px] bg-white px-[12px] py-[8px] rounded-[8px] border-[#e2e8f0] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] gap-[8px] opacity-50 font-['Geist',sans-serif] font-medium text-[12px] text-[#0a0a0a]"
-            >
-              Select material
-              <ChevronRight className="size-[16px]" strokeWidth={1.33} />
-            </Button>
-          </div>
-          <div className="content-stretch flex flex-col gap-[16px] items-start relative shrink-0 w-full max-w-[420px]">
-            <div className="content-stretch flex flex-col gap-[8px] items-start relative shrink-0 w-full">
-              <Label className="font-['Geist',sans-serif] font-medium text-[14px] text-[#0a0a0a]">
-                Target weight (kg)
-              </Label>
-              <Input
-                placeholder="Placeholder"
-                className="h-[36px] w-full bg-white rounded-[8px] border-[#e2e8f0] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] px-[12px] py-[4px] font-['Geist',sans-serif] font-normal text-[14px] text-[#6b7280]"
-              />
-            </div>
-            <div className="flex flex-col font-['Geist',sans-serif] font-normal justify-center leading-[0] min-w-full relative shrink-0 text-[#6b7280] text-[14px] w-[min-content]">
-              <p className="leading-[20px]">
-                Helper text: explain why is it important to add the target weight and what are the risks of a miscalculated weight
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+interface PaginationProps {
+  page: number;
+  totalPages: number;
+  onChange: (page: number) => void;
 }
 
-function ViewSwitch({ options, value, onChange }: { options: [string, string]; value: string; onChange: (v: string) => void }) {
+function Pagination({ page, totalPages, onChange }: PaginationProps) {
+  const pageNumbers = useMemo(() => {
+    if (totalPages <= 4) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const visible: (number | 'ellipsis')[] = [1, 2, 3];
+    if (totalPages > 4) visible.push('ellipsis');
+    return visible;
+  }, [totalPages]);
+
   return (
-    <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-[#e5e7eb] p-[3px] flex">
-      {options.map((opt) => (
-        <button
-          key={opt}
-          onClick={() => onChange(opt)}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors font-['Geist',sans-serif] ${
-            value === opt
-              ? 'bg-white shadow-sm text-[#0a0a0a]'
-              : 'text-[#6b7280] hover:text-[#0a0a0a]'
-          }`}
-        >
-          {opt}
-        </button>
-      ))}
-    </div>
+    <nav aria-label="Pagination" className="flex h-9 items-center justify-end gap-1">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(1, page - 1))}
+        disabled={page === 1}
+        className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-[14px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:opacity-50"
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+        Previous
+      </button>
+      {pageNumbers.map((p, idx) =>
+        p === 'ellipsis' ? (
+          <span
+            key={`ellipsis-${idx}`}
+            className="flex h-9 w-9 items-center justify-center text-[#6b7280]"
+          >
+            <MoreHorizontal className="h-4 w-4" strokeWidth={2} />
+          </span>
+        ) : (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(p)}
+            aria-current={p === page ? 'page' : undefined}
+            className={`flex h-9 w-9 items-center justify-center rounded-md text-[14px] font-medium ${
+              p === page
+                ? 'border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]'
+                : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
+            }`}
+          >
+            {p}
+          </button>
+        )
+      )}
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(totalPages, page + 1))}
+        disabled={page === totalPages}
+        className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-[14px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:opacity-50"
+      >
+        Next
+        <ChevronRight className="h-4 w-4" strokeWidth={2} />
+      </button>
+    </nav>
   );
 }
 
 export function Composition() {
-  const [viewMode, setViewMode] = useState('Perspective');
-  const [renderMode, setRenderMode] = useState('Material');
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<SortState>({ key: 'name', direction: 'asc' });
+  const [page, setPage] = useState(1);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return COMPOSITIONS;
+    return COMPOSITIONS.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)
+    );
+  }, [query]);
+
+  const sorted = useMemo(() => {
+    const copy = [...filtered];
+    copy.sort((a, b) => {
+      const aVal = a[sort.key].toLowerCase();
+      const bVal = b[sort.key].toLowerCase();
+      if (aVal === bVal) return 0;
+      const cmp = aVal < bVal ? -1 : 1;
+      return sort.direction === 'asc' ? cmp : -cmp;
+    });
+    return copy;
+  }, [filtered, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function handleSort(key: SortKey) {
+    setSort((prev) =>
+      prev.key === key
+        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'asc' }
+    );
+  }
 
   return (
-    <div className="bg-[#f8fafc] flex flex-col min-h-screen w-full">
+    <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
       <MainNav />
 
-      <div className="flex-1 relative overflow-hidden">
-        <BackgroundScene wireframe={renderMode === 'Wireframe'} />
+      <main className="flex-1 px-4 py-6 sm:px-8 lg:px-16">
+        <div className="mx-auto w-full max-w-[1400px]">
+          <div className="rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+            {/* Header */}
+            <div className="flex h-9 items-center justify-between">
+              <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Compositions</h2>
+              <Link
+                to="/composition/new"
+                className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
+              >
+                New composition
+              </Link>
+            </div>
 
-        <div className="absolute top-0 left-0 right-0 z-10">
-          <TabsSection />
-        </div>
+            {/* Search */}
+            <div className="mt-4 max-w-[384px]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
+                <Input
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search"
+                  className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
+                />
+              </div>
+            </div>
 
-        <div className="absolute inset-0 overflow-y-auto pointer-events-none pt-[60px]">
-          <div className="pointer-events-auto inline-block">
-            <FormSection />
+            {/* Table */}
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full table-fixed border-collapse">
+                <thead>
+                  <tr className="border-b border-[#e5e7eb]">
+                    <th className="h-10 w-[240px] px-3 text-left">
+                      <SortableHeader
+                        label="Name"
+                        sortKey="name"
+                        currentSort={sort}
+                        onClick={handleSort}
+                      />
+                    </th>
+                    <th className="h-10 px-3 text-left">
+                      <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
+                        Description
+                      </span>
+                    </th>
+                    <th className="h-10 w-[200px] whitespace-nowrap px-3 text-left">
+                      <SortableHeader
+                        label="Last updated"
+                        sortKey="lastUpdated"
+                        currentSort={sort}
+                        onClick={handleSort}
+                      />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((c) => (
+                    <tr
+                      key={c.id}
+                      onClick={() => navigate(`/composition/${c.id}`)}
+                      className="cursor-pointer border-b border-[#e5e7eb] bg-white hover:bg-[#f9fafb]"
+                    >
+                      <td className="px-3 py-4 text-[14px] font-medium leading-5 text-[#0a0a0a]">
+                        {c.name}
+                      </td>
+                      <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
+                        {c.description}
+                      </td>
+                      <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
+                        {c.lastUpdated}
+                      </td>
+                    </tr>
+                  ))}
+                  {pageRows.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                        No compositions match your search.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div className="mt-4">
+              <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+            </div>
           </div>
         </div>
+      </main>
 
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex gap-3 pointer-events-auto">
-          <ViewSwitch
-            options={['Perspective', 'Separate']}
-            value={viewMode}
-            onChange={setViewMode}
-          />
-          <ViewSwitch
-            options={['Material', 'Wireframe']}
-            value={renderMode}
-            onChange={setRenderMode}
-          />
-        </div>
-      </div>
+      <Footer />
     </div>
   );
 }

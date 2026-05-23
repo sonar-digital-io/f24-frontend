@@ -39,6 +39,9 @@ src/
 │   ├── AirfoilPreview.tsx       # 2D NACA airfoil SVG (paraméterezhető m / p / t)
 │   ├── LayupBuilder.tsx         # LayupNew "Layup building" tab — drag-and-drop ply table + PlyStackViz
 │   ├── PlyStackViz.tsx          # Izometrikus SVG ply-stack (parallelogramma + fiber lines)
+│   ├── GeometryCard.tsx         # Geometry kártya (Geometry list grid + CompositionNew picker)
+│   ├── LayupPickerDialog.tsx    # Layup chooser modal a Layup mapping táblázathoz
+│   ├── LayupMappingBezierDialog.tsx  # Bezier modal per layup-mapping row (longitudinal × transversal)
 │   ├── Layout.tsx               # Passthrough wrapper — minden page maga rendereli MainNav+Footer
 │   ├── BackgroundScene.tsx      # 3D háttér jelenet a Composition route-on
 │   ├── CadViewer.tsx            # Szélturbina 3D megjelenítő
@@ -60,7 +63,8 @@ src/
 │   ├── GeometryEdit.tsx         # /geometry/:id — Full-bleed Three.js + floating panel — Figma 596:22661
 │   ├── Layup.tsx                # /layup — Layup data table list — Figma 600:23689
 │   ├── LayupNew.tsx             # /layup/new — General + Layup building tabs — Figma 600:27124 / 600:24328
-│   ├── Composition.tsx          # /composition — régi 3D editor (BackgroundScene + form)
+│   ├── Composition.tsx          # /composition — Composition list page (table) — Figma 600:27699
+│   ├── CompositionNew.tsx       # /composition/new — General + Geometry + Layup mapping + Transversal mapping — Figma 600:27773 + 600:29097 + 600:28625 + 600:27811
 │   ├── LoadGroup.tsx            # /load-group — stub
 │   ├── Calculation.tsx          # /calculation — stub
 │   ├── Report.tsx               # /report — stub
@@ -72,7 +76,8 @@ src/
 │   ├── materialFormFields.ts    # MECHANICAL_SECTIONS + FATIGUE_SECTIONS — PropertyFormTab data
 │   ├── geometries.ts            # Geometry[] mock + típusok
 │   ├── profiles.ts              # Profile[] mock + PROFILE_TYPES — Profiles tab data
-│   └── layups.ts                # Layup[] mock — Layup list page data
+│   ├── layups.ts                # Layup[] mock — Layup list page data
+│   └── compositions.ts          # Composition[] mock — Composition list page data
 ├── lib/utils.ts                 # cn() segédfüggvény (clsx + tailwind-merge)
 ├── types/                       # TypeScript típusok
 ├── App.tsx                      # Router konfiguráció
@@ -92,7 +97,8 @@ src/
 | `/geometry?new=1` | `Geometry` | Lista + auto-nyíló New geometry modal (Home dashboard-ról jövő flow) |
 | `/layup` | `Layup` | Layup list page (table) — Figma 600:23689 |
 | `/layup/new` | `LayupNew` | New layup (General + Layup building) — Figma 600:27124 / 600:24328 |
-| `/composition` | `Composition` | 3D composition editor (régi Home-ról áthelyezve) |
+| `/composition` | `Composition` | Composition list page (table) — Figma 600:27699 |
+| `/composition/new` | `CompositionNew` | New composition (General + Geometry + Layup mapping + Transversal mapping) — Figma 600:27773 + 600:29097 + 600:28625 + 600:27811 |
 | `/load-group` | `LoadGroup` | Stub |
 | `/calculation` | `Calculation` | Stub |
 | `/report` | `Report` | Stub |
