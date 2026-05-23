@@ -173,6 +173,28 @@ Custom modal a "Project configuration" dialog-hoz.
 - Create gomb disabled amíg Blade type + Name nincs kitöltve
 - Belső `Select` komponens — custom dropdown (lásd Pattern-ek lent)
 
+### `LayupBuilder` + `PlyStackViz` (`src/components/LayupBuilder.tsx`, `PlyStackViz.tsx`)
+
+A LayupNew "Layup building" tab tartalma. Két oldalt: bal egy ply-tábla, jobb egy izometrikus SVG ply-stack.
+
+**`LayupBuilder`** — 812px wide table:
+- 7 oszlop: drag handle (GripVertical ikon) | color swatch (16×16 rounded) | Name (input) | Material (input) | Thickness (mm, number input) | Orientation (deg, number input) | Delete (kuka)
+- "Add layer" + gomb fent (primary kék 36×36)
+- "Unified visualization" checkbox alul
+- **HTML5 native drag-and-drop**: `draggable={true}` minden `<tr>`-en, `onDragStart` → `setData('text/plain', String(idx))`, `onDragOver` → preventDefault + drop target highlight, `onDrop` → tömb átrendezés `splice` + `splice`, `onDragEnd` → state cleanup
+- Drag állapot vizualizáció: drag source `opacity: 0.4`, drop target `bg-[#eef9ff]`
+- Color automatikusan szinkronizálódik az orientation-nel a `defaultColorForOrientation()` mapping szerint: 0°→`#0066cc` (kék), 45°→`#22c55e` (zöld), 90°→`#f59e0b` (sárga). Manually felülbírálható a state-ben
+
+**`PlyStackViz`** — 440px max-w, izometrikus SVG:
+- Minden ply 45°-os rhombus (parallelogramma) — top/right/bottom/left csúcsokkal
+- Y-offset `Y_STEP = 60px` minden ply között — egymás alatt sztack-elve
+- Fiber lines: orientation → screen angle mapping (0°→30°, 45°→90°, 90°→150°), ~14px szakaszközzel, clipPath-szal a rhombus alakzatra levágva
+- Fill: ply.color 18% opacity, stroke: ply.color 2.5px
+
+**Mindkét fél ugyanazt a `plies: Ply[]` arrayt használja** → sorrend és szín konzisztens marad automatikusan. Reorder a táblában → a viz azonnal frissíti a stack-et.
+
+Figma: `600:24328`
+
 ### `BezierEditor` (`src/components/BezierEditor.tsx`)
 
 Interaktív cubic Bézier görbe szerkesztő, 4 control point-tal, dragelhető pontokkal és viewBox-based zoom+pan-nel.
@@ -409,6 +431,64 @@ Ha egységes komponensbe extraktálni szeretnéd, `src/components/ui/select.tsx`
 
 Ha sok modal kell, érdemes shadcn `dialog` primitivre váltani (`npx shadcn add dialog`), ami Radix-on alapul (a11y + focus trap).
 
+### HTML5 native drag-and-drop reorder
+
+`LayupBuilder` mintája. Egy `<tr draggable>` + handlerek:
+
+```tsx
+<tr
+  draggable
+  onDragStart={(e) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+    setDraggingIdx(idx);
+  }}
+  onDragOver={(e) => {
+    e.preventDefault(); // CRITICAL — without this, drop won't fire
+    e.dataTransfer.dropEffect = 'move';
+    setDropOverIdx(idx);
+  }}
+  onDrop={(e) => {
+    e.preventDefault();
+    const fromIdx = Number(e.dataTransfer.getData('text/plain'));
+    setList(arr => {
+      const next = [...arr];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(idx, 0, moved);
+      return next;
+    });
+  }}
+  onDragEnd={() => { setDraggingIdx(null); setDropOverIdx(null); }}
+>
+```
+
+Vizuális visszacsatolás: drag source `opacity-40`, drop target `bg-[#eef9ff]`.
+
+**Mobile touch nem fires HTML5 DnD-t**. Ha touch support kell, swap-elhető `dnd-kit`-re (`@dnd-kit/core` + `@dnd-kit/sortable`) — modern, touch-friendly, accessible. Egyetlen 5 elemű kis listához most a HTML5 elég.
+
+### Color-from-property mapping (pl. orientation → color)
+
+`LayupBuilder` az orientation-ből származó default színt rendel a swatch-hoz és a viz-hez:
+
+```ts
+function defaultColorForOrientation(o: number): string {
+  if (o <= 22.5) return '#0066cc';   // 0° kék
+  if (o <= 67.5) return '#22c55e';   // 45° zöld
+  if (o <= 112.5) return '#f59e0b';  // 90° sárga
+  if (o <= 157.5) return '#22c55e';  // 135° zöld
+  return '#0066cc';                  // 180° kék
+}
+```
+
+Orientation változáskor a state-ben `color` mező automatikusan újra-eljárul:
+```ts
+if (key === 'orientation') {
+  next.color = defaultColorForOrientation(value as number);
+}
+```
+
+A táblázat color swatch + a `PlyStackViz` rhombus + fiber lines mind a `ply.color`-t használják → automatikus szinkron.
+
 ### Accordion card style (vertikális szekciólista)
 
 A `ProfileDistributionPanel` folded mode-ban és a `StackingPanel`-ben azonos minta:
@@ -537,6 +617,8 @@ Click a sidebar item-en → `window.scrollTo({ top: targetY - 100, behavior: 'sm
 | `/material/new` | `MaterialNew` | 3-tab edit (Figma 584:15600 / 596:2160 / 584:15789) |
 | `/geometry` | `Geometry` | List + grid view toggle (Figma 600:22786 / 600:22858) |
 | `/geometry/:id` | `GeometryEdit` | Full-bleed Three.js + floating panel. Tabs: Global properties / Profile distribution / Profiles / Stacking / Spars (Figma 596:22661 + 596:19816 + 596:19631 + 596:20399) |
+| `/layup` | `Layup` | Layup list page (table) — Figma 600:23689 |
+| `/layup/new` | `LayupNew` | New layup edit, 2 tabs (General + Layup building) — Figma 600:27124 + 600:24328 |
 | `/layup` | `Layup` | Stub |
 | `/composition` | `Composition` | 3D editor (régi Home tartalma) |
 | `/load-group` | `LoadGroup` | Stub |

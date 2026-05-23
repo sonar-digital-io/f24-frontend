@@ -91,6 +91,16 @@ Ha hozzáadnál egy `overflow-hidden`-t bármelyik szülőhöz (pl. animation pu
 
 **Kivétel:** `GeometryEdit` `<main>`-je SZÁNDÉKOSAN `overflow-hidden` — ott a Three.js canvas a fő terület, nem akarjuk hogy az túllógjon. A `MainNav` ezen kívül van (a parent flex-col-on), tehát továbbra is sticky.
 
+### HTML5 native drag-and-drop reorder gotchas
+
+A `LayupBuilder` sortable ply-listája natív DnD-vel. Pár klassikus buktató:
+
+1. **`onDragOver`-en kötelező a `preventDefault()`** — anélkül a `drop` event nem fires. A böngésző alapból "no drop allowed"-ot mond.
+2. **`dataTransfer.setData('text/plain', ...)` kötelező** — ha üres a payload, némely böngésző nem indítja el a drag-et. Firefox például szigorúbb.
+3. **A `dropEffect = 'move'`** az `onDragOver`-en kell, hogy a kurzor visszaadja a "move" jelet (különben default "copy").
+4. **Mobil touch NEM fires HTML5 DnD-t**. Egy 5 elemű kis listához OK most desktop-only, de production-ra `dnd-kit` (vagy `react-dnd` + touch backend) kell.
+5. **Drag source visual state**: a draggable elemen `opacity: 0.4` ha `draggingIdx === idx`. Drop target visual state: `bg-[#eef9ff]` ha `dropOverIdx === idx`. Mindkettő state-tartott, és `onDragEnd`-en cleared.
+
 ### Controlled input + reformat anti-pattern
 
 A táblázat input mezői és a bezier görbe két-irányú szinkronja: drag a chart-on → input frissül, gépelés az inputba → görbe frissül.
@@ -254,6 +264,27 @@ A `Layout` komponens passthrough lett. Lehetne globális, de:
 - A `GeometryEdit` és `Composition` szándékosan footer NÉLKÜL (edit mode)
 
 **Trade-off:** kicsit több ismétlődés (`<MainNav />` + `<Footer />` minden page elején/végén), cserébe nincs "page kivétel" logika a Layout-ban. Ha minden page biztosan MainNav-ot akar, a `PagePlaceholder` mintát kell követni — minden új page-be expliciten beilleszteni.
+
+### Két nézet egyetlen state-tel (sortable list + viz)
+
+A `LayupBuilder` táblázat és a `PlyStackViz` izometrikus rajz **ugyanazt a `plies: Ply[]` arrayt** kapja. Reorder a táblázatban → state frissül → mindkét komponens újra renderel. **Soha NE duplikáld a state-et két komponensbe**, mert nem fognak konzisztensen maradni.
+
+Plusz: a szín a `Ply.color` mezőben tárolva mindkettő ugyanazt használja. Ha az orientation megváltozik, a `defaultColorForOrientation()` mapping újra rendel színt — egy helyen frissítve, mindkettő automatikusan átvált.
+
+```tsx
+function updatePly(idx, key, value) {
+  setPlies(arr => arr.map((p, i) => {
+    if (i !== idx) return p;
+    const next = { ...p, [key]: value };
+    if (key === 'orientation') {
+      next.color = defaultColorForOrientation(value);
+    }
+    return next;
+  }));
+}
+```
+
+Ezzel a mintával "single source of truth" + automatikus szinkron a táblázat és viz között.
 
 ### Interaktív bezier editor: custom SVG > D3/visx
 

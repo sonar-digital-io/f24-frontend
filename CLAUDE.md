@@ -37,6 +37,8 @@ src/
 │   ├── ProfilesPanel.tsx        # GeometryEdit "Profiles" tab — profil lista + popover detail (NACA params)
 │   ├── StackingPanel.tsx        # GeometryEdit "Stacking" tab — Sweep + Dihedral bezier-szerkesztő
 │   ├── AirfoilPreview.tsx       # 2D NACA airfoil SVG (paraméterezhető m / p / t)
+│   ├── LayupBuilder.tsx         # LayupNew "Layup building" tab — drag-and-drop ply table + PlyStackViz
+│   ├── PlyStackViz.tsx          # Izometrikus SVG ply-stack (parallelogramma + fiber lines)
 │   ├── Layout.tsx               # Passthrough wrapper — minden page maga rendereli MainNav+Footer
 │   ├── BackgroundScene.tsx      # 3D háttér jelenet a Composition route-on
 │   ├── CadViewer.tsx            # Szélturbina 3D megjelenítő
@@ -56,7 +58,8 @@ src/
 │   ├── MaterialNew.tsx          # /material/new — 3 tab: General / Mechanical / Fatigue — Figma 584:15600 / 596:2160 / 584:15789
 │   ├── Geometry.tsx              # /geometry — List/Grid view toggle — Figma 600:22786 / 600:22858
 │   ├── GeometryEdit.tsx         # /geometry/:id — Full-bleed Three.js + floating panel — Figma 596:22661
-│   ├── Layup.tsx                # /layup — stub
+│   ├── Layup.tsx                # /layup — Layup data table list — Figma 600:23689
+│   ├── LayupNew.tsx             # /layup/new — General + Layup building tabs — Figma 600:27124 / 600:24328
 │   ├── Composition.tsx          # /composition — régi 3D editor (BackgroundScene + form)
 │   ├── LoadGroup.tsx            # /load-group — stub
 │   ├── Calculation.tsx          # /calculation — stub
@@ -68,7 +71,8 @@ src/
 │   ├── materials.ts             # Material[] mock + típusok (cseréld API hívásra)
 │   ├── materialFormFields.ts    # MECHANICAL_SECTIONS + FATIGUE_SECTIONS — PropertyFormTab data
 │   ├── geometries.ts            # Geometry[] mock + típusok
-│   └── profiles.ts              # Profile[] mock + PROFILE_TYPES — Profiles tab data
+│   ├── profiles.ts              # Profile[] mock + PROFILE_TYPES — Profiles tab data
+│   └── layups.ts                # Layup[] mock — Layup list page data
 ├── lib/utils.ts                 # cn() segédfüggvény (clsx + tailwind-merge)
 ├── types/                       # TypeScript típusok
 ├── App.tsx                      # Router konfiguráció
@@ -86,7 +90,8 @@ src/
 | `/geometry` | `Geometry` | Geometry list + grid view toggle — Figma 600:22786 / 600:22858 |
 | `/geometry/:id` | `GeometryEdit` | Geometry edit full-bleed Three.js canvas-szal. Sub-tabs: Global properties (596:22661), Profile distribution (596:19816), Profiles (596:19631), Stacking (596:20399), Spars (placeholder) |
 | `/geometry?new=1` | `Geometry` | Lista + auto-nyíló New geometry modal (Home dashboard-ról jövő flow) |
-| `/layup` | `Layup` | Stub |
+| `/layup` | `Layup` | Layup list page (table) — Figma 600:23689 |
+| `/layup/new` | `LayupNew` | New layup (General + Layup building) — Figma 600:27124 / 600:24328 |
 | `/composition` | `Composition` | 3D composition editor (régi Home-ról áthelyezve) |
 | `/load-group` | `LoadGroup` | Stub |
 | `/calculation` | `Calculation` | Stub |
