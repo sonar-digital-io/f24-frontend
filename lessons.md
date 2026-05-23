@@ -91,6 +91,24 @@ Ha hozzáadnál egy `overflow-hidden`-t bármelyik szülőhöz (pl. animation pu
 
 **Kivétel:** `GeometryEdit` `<main>`-je SZÁNDÉKOSAN `overflow-hidden` — ott a Three.js canvas a fő terület, nem akarjuk hogy az túllógjon. A `MainNav` ezen kívül van (a parent flex-col-on), tehát továbbra is sticky.
 
+### Custom Switch thumb pozicionálás
+
+A `<span>` thumb-ot ne dinamikus `translate-x-[18px]`-szel mozgasd a track-en belül, mert a `top-[2px]` + `translate-x-[N]` kombináció gyakran 1-2px-szel "kilóg" a track-ből. **Helyes minta**:
+
+```tsx
+<button className="relative h-5 w-9 rounded-full">
+  <span className={`absolute left-[2px] top-[2px] h-4 w-4 rounded-full bg-white transition-transform ${
+    checked ? 'translate-x-4' : 'translate-x-0'
+  }`} />
+</button>
+```
+
+- `left-[2px] top-[2px]` rögzített pozíció a track-en belül (2px szimmetrikus padding)
+- `translate-x-4` (16px = thumb szélesség) on-state-ben → thumb pontosan a jobb szélen, 2px padding marad
+- `translate-x-0` off-state-ben → thumb a bal szélen, 2px padding
+
+Tailwind preset (`translate-x-4`) megbízhatóbb mint custom arbitrary value (`translate-x-[18px]`), mert a böngészők renderelése konzisztensebb.
+
 ### `aria-current="page"` link active state-hez
 
 A nav active indicator-on használj `aria-current="page"`-t a `<Link>` aria attribútumon — könnyű inspectálni, screen reader-baráti, és nem keveredik a `:active` CSS pseudo-class-szal (ami csak a kattintás pillanatában igaz).
@@ -211,6 +229,18 @@ A `MaterialNew` és `NewGeometryModal` saját custom `Select` komponenst haszná
 `src/data/materials.ts`, `geometries.ts`, `materialFormFields.ts` típusos export-ok. Mikor API-ra váltunk, csak ezeket cseréljük le (vagy fetch-elünk + ugyanazt a típust visszaadunk). A page komponensek nem fognak változni.
 
 A `materialFormFields.ts` egy data-driven approach példája: ~40 mező + helper text egy `FormSection[]` struktúrában, a `PropertyFormTab` ezt rendereli ki egységesen. Új mezők hozzáadása csak data-szerkesztés.
+
+### Z-index hierarchia overlay layout-ban
+
+Geometry edit overlay-réteg sorrendje (lentről felfelé):
+- canvas (z-auto)
+- render toggle, gizmó (z-20)
+- properties panel, sub-toolbar (z-30)
+- MainNav (z-50, sticky)
+
+**A panel z-30** akkor fontos, ha **vízszintesen átfed** a render toggle-val. A Profile distribution tab-on a panel 924px wide és a render toggle a viewport közepén — egy ~1500px viewport-on biztosan átfednek. A 280px-es panelek nem fednek át (a render toggle 700px+ left-tel kezdődik). Mindkét esetben z-30 a panel megoldja az átfedéseket.
+
+A sub-toolbar és panel nem fednek vertikálisan (`top-0 + h-52` toolbar vs `top-[52px]` panel = perfectly adjacent), tehát ott a z-index nem számít.
 
 ### Full-bleed canvas: transparent sub-toolbar overlay
 

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ChevronDown, Settings, Check, X } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { BladeScene } from '@/components/BladeScene';
+import { ProfileDistributionPanel } from '@/components/ProfileDistributionPanel';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -156,8 +157,14 @@ export function GeometryEdit() {
           </div>
         </div>
 
-        {/* Floating properties panel (top-left, gap below toolbar matches gap above tab pill = 8px) */}
-        <aside className="absolute left-4 top-[52px] z-20 w-[280px]">
+        {/* Floating properties panel (top-left, gap below toolbar matches gap above tab pill = 8px).
+            Width depends on the active tab: Profile distribution panel is much wider (924px).
+            z-30 so it sits above the render toggle (z-20) when they overlap. */}
+        <aside
+          className={`absolute left-4 top-[52px] z-30 ${
+            activeTab === 'profile-distribution' ? 'w-[924px] max-w-[calc(100vw-2rem)]' : 'w-[280px]'
+          }`}
+        >
           {activeTab === 'global-properties' && (
             <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
               <FormField
@@ -183,7 +190,8 @@ export function GeometryEdit() {
               </p>
             </div>
           )}
-          {activeTab !== 'global-properties' && (
+          {activeTab === 'profile-distribution' && <ProfileDistributionPanel />}
+          {activeTab !== 'global-properties' && activeTab !== 'profile-distribution' && (
             <div className="flex flex-col items-center justify-center gap-2 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
               <p className="text-[14px] font-semibold text-[#0a0a0a]">
                 {activeTab.replace('-', ' ').replace(/^./, (c) => c.toUpperCase())}

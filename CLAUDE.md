@@ -32,6 +32,7 @@ src/
 │   ├── NewGeometryModal.tsx     # "Project configuration" modal a Geometry létrehozáshoz
 │   ├── BladeScene.tsx           # Three.js full-bleed 3D scene a GeometryEdit-en (tapered blade placeholder)
 │   ├── BladeThumbnail.tsx       # SVG szárny thumbnail a Geometry grid kártyákon
+│   ├── ProfileDistributionPanel.tsx  # GeometryEdit "Profile distribution" tab — bezier chart placeholder + table
 │   ├── Layout.tsx               # Passthrough wrapper — minden page maga rendereli MainNav+Footer
 │   ├── BackgroundScene.tsx      # 3D háttér jelenet a Composition route-on
 │   ├── CadViewer.tsx            # Szélturbina 3D megjelenítő

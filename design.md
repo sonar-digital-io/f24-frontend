@@ -173,6 +173,22 @@ Custom modal a "Project configuration" dialog-hoz.
 - Create gomb disabled amíg Blade type + Name nincs kitöltve
 - Belső `Select` komponens — custom dropdown (lásd Pattern-ek lent)
 
+### `ProfileDistributionPanel` (`src/components/ProfileDistributionPanel.tsx`)
+
+A Geometry edit "Profile distribution" tab panel-tartalma. 924px wide (a többi tab 280px-es panelhez képest).
+
+- **Top row** grid: Type custom Select (NACA 4 digit / 5 digit / Custom airfoil), Start position, End position, Profile count input-ok, "Fold profiles" gomb (primary kék, `FoldHorizontal` ikon)
+- **Sub-tabs**: Maximum camber / Maximum camber position / Thickness (TMC) — shadcn Tabs minta
+- **Undo / Redo** outline gombok (`Undo2`, `Redo2` ikonok)
+- **2 oszlopos grid** (lg+): bal `Distribution view` switch + `BezierChartPlaceholder` SVG, jobb `Table` switch + 3-oszlopos táblázat (Index / Relative radius / Max Cam %)
+- **Belső komponensek**: `Select`, `Switch`, `BezierChartPlaceholder`
+
+`Switch` — custom toggle, `role="switch"` + `aria-checked`. Track 36×20px (`bg-[#006496]` on, `#cbd5e1` off), thumb `absolute left-[2px] top-[2px] h-4 w-4` + `translate-x-4` (on) / `translate-x-0` (off). **NEM** dinamikus `translate-x-[18px]`-szel — az gyakran "kilóg" mert a `top-2` és `translate` keveredik. Helyette explicit `left-[2px]` rögzített pozíció + `translate-x-4` (16px) → kerek, megbízható pozicionálás.
+
+`BezierChartPlaceholder` — inline SVG, hardcoded path-okkal és control point-okkal. Pixel-pontosan a Figma referencia alapján. **Cserélendő** valódi interaktív görbe-szerkesztőre később (D3 / visx / custom canvas). Most read-only minta.
+
+Figma: `596:19816`
+
 ### `BladeScene` (`src/components/BladeScene.tsx`)
 
 Three.js 3D scene a Geometry edit page-en. Tapered blade placeholder a `BoxGeometry(12, 0.6, 2)` per-vertex skálázott vertikálisain.
@@ -258,9 +274,17 @@ Full-bleed 3D canvas + floating overlays. 5 tab: Global properties, Profile dist
   - Bal: Tabs pill (`bg-[#f3f4f6]/95 backdrop-blur-sm`)
   - **Közép**: `<h1>` cím `absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2` — viewport-szélesség közepén, függetlenül a bal/jobb elemek szélességétől, `pointer-events-none`
   - Jobb: Exit edit mode link (`bg-[#f1f5f9]/95 backdrop-blur-sm`)
-- Properties panel `absolute left-4 top-[52px] z-20 w-[280px]` — floating overlay, `bg-white/95 backdrop-blur-sm`
+- Properties panel `absolute left-4 top-[52px] z-30` — floating overlay, `bg-white/95 backdrop-blur-sm`. **Width tab-függő**: `w-[280px]` a legtöbb tab-on, `w-[924px] max-w-[calc(100vw-2rem)]` a Profile distribution tab-on. **z-30**: a render toggle (z-20) felett van, ha vízszintesen átfednek (a Profile distribution panel a viewport közepén túlnyúlik a render toggle alá)
 - Render toggle (Solid/Wireframe) `absolute left-1/2 -translate-x-1/2 top-[52px] z-20`
 - `CoordinateGizmo` SVG (lásd lent) `absolute bottom-4 left-4 z-20 pointer-events-none`
+
+**Z-index hierarchia** (Geometry edit):
+- 50: MainNav (sticky a page tetején)
+- 30: sub-toolbar overlay, properties panel
+- 20: render toggle, gizmó
+- 0: canvas (alap)
+
+A panel és sub-toolbar nem fednek át vertikálisan (`top-[52px]` panel vs `top-0 + h-[52px]` toolbar = perfectly adjacent). A panel és render toggle viszont **igen** átfedhetnek vízszintesen (Profile distribution-on), ezért panel z-30 > toggle z-20.
 
 **Vertikális spacing**: a tab pill `items-center` a 52px-es sub-toolbarban → 8px padding top + bottom. A panel és toggle `top-[52px]` → tab pill alja és card teteje között szintén 8px. **Szimmetrikus 8-8px gap**.
 
@@ -346,6 +370,24 @@ Ha egységes komponensbe extraktálni szeretnéd, `src/components/ui/select.tsx`
 - Click overlay → `onClose()`, click form → `stopPropagation()` (nem terjed)
 
 Ha sok modal kell, érdemes shadcn `dialog` primitivre váltani (`npx shadcn add dialog`), ami Radix-on alapul (a11y + focus trap).
+
+### Custom Switch toggle
+
+A `ProfileDistributionPanel`-ben használt minta. `role="switch"` + `aria-checked` button, track 36×20, thumb 16×16 `absolute left-[2px] top-[2px]` rögzített pozícióval, `translate-x-4` (on) / `translate-x-0` (off) — 16px csúsztatás, ami pontosan a thumb szélességével egyezik. Track padding mindkét oldalon szimmetrikus 2px.
+
+**Anti-pattern**: `translate-x-[18px]` (egyenlő 36 - 16 - 2-vel) **rendszerint kilóg**, mert a transform numerikus kalkulációja gyakran +/- 1-2px eltérést produkál a böngészők között. A `translate-x-4` Tailwind preset (`1rem` = 16px) megbízhatóbb.
+
+### Tab-függő panel width
+
+A `GeometryEdit` aside-ja `width` tab szerint változik:
+
+```tsx
+<aside className={`absolute left-4 top-[52px] z-30 ${
+  activeTab === 'profile-distribution' ? 'w-[924px] max-w-[calc(100vw-2rem)]' : 'w-[280px]'
+}`}>
+```
+
+A `max-w-[calc(100vw-2rem)]` garantálja, hogy a 924px-es panel ne lógjon ki kisebb viewporton (a `2rem` a `left-4 + right-4` padding-ra utal).
 
 ### Sortable headers
 
