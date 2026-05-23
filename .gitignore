@@ -44,3 +44,6 @@ Thumbs.db
 .claude/
 
 .vercel
+
+# OpenCascade WASM binary (too large for git)
+public/wasm/*.wasm
