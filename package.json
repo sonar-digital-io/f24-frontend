@@ -5,9 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
-    "copy-wasm": "mkdir -p public/wasm && cp node_modules/opencascade.js/dist/opencascade.wasm.wasm public/wasm/",
-    "postinstall": "npm run copy-wasm"
+    "preview": "vite preview"
   },
   "prettier": {
     "printWidth": 100,

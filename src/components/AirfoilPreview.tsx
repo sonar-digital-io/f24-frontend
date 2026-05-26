@@ -51,13 +51,13 @@ export function AirfoilPreview({
     return ((2 * m) / ((1 - p) * (1 - p))) * (p - x);
   }
 
-  function point(x: number, upper: boolean) {
+  function point(x: number, upper: boolean): [number, number] {
     const theta = Math.atan(dycDx(x));
     const ytx = yt(x);
     const ycx = yc(x);
     const px = upper ? x - ytx * Math.sin(theta) : x + ytx * Math.sin(theta);
     const py = upper ? ycx + ytx * Math.cos(theta) : ycx - ytx * Math.cos(theta);
-    return [px, py] as const;
+    return [px, py];
   }
 
   const upper: [number, number][] = [];

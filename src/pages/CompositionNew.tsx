@@ -22,6 +22,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GeometryCard } from '@/components/GeometryCard';
 import { LayupPickerDialog } from '@/components/LayupPickerDialog';
 import { LayupMappingBezierDialog } from '@/components/LayupMappingBezierDialog';
+import { TransversalMappingSection } from '@/components/TransversalMappingSection';
 import { GEOMETRIES } from '@/data/geometries';
 import { LAYUPS } from '@/data/layups';
 
@@ -570,17 +571,7 @@ export function CompositionNew() {
           </div>
         )}
 
-        {activeTab === 'transversal-mapping' && (
-          <div className="flex w-full max-w-[468px] flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white p-6 text-[14px] text-[#6b7280] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-            <h2 className="text-[16px] font-semibold leading-none text-[#0a0a0a]">
-              Transversal mapping
-            </h2>
-            <p>
-              Coming soon. Cross-section ply transitions (e.g. spar-cap edges, ply drop-off zones)
-              will be mapped here.
-            </p>
-          </div>
-        )}
+        {activeTab === 'transversal-mapping' && <TransversalMappingSection />}
       </main>
 
       <Footer />

@@ -5,7 +5,6 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    exclude: ['opencascade.js'],
     include: ['react-router-dom'],
   },
   build: {
