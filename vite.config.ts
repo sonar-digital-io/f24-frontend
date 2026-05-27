@@ -4,8 +4,10 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  assetsInclude: ['**/*.wasm'],
   optimizeDeps: {
     include: ['react-router-dom'],
+    exclude: ['opencascade.js'],
   },
   build: {
     target: 'esnext',

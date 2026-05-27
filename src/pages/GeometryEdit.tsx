@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronDown, Settings, Check, X } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
-import { BladeScene } from '@/components/BladeScene';
+import { OccViewer } from '@/components/OccViewer';
 import { ProfileDistributionPanel } from '@/components/ProfileDistributionPanel';
 import { ProfilesPanel } from '@/components/ProfilesPanel';
 import { StackingPanel } from '@/components/StackingPanel';
@@ -117,7 +117,7 @@ export function GeometryEdit() {
       {/* Body: full-bleed 3D scene with floating overlays (incl. sub-toolbar) */}
       <main className="relative flex-1 overflow-hidden">
         {/* Three.js canvas fills the whole body, including under the sub-toolbar */}
-        <BladeScene wireframe={renderMode === 'wireframe'} />
+        <OccViewer wireframe={renderMode === 'wireframe'} />
 
         {/* Floating sub-toolbar — transparent bg so the canvas shows through.
             Title is absolutely positioned at viewport center, independent of

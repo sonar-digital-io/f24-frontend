@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
-import { Footer } from '@/components/Footer';
+import { OccViewer } from '@/components/OccViewer';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -330,11 +330,16 @@ export function CompositionNew() {
   }
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
+    <div className="flex min-h-screen w-full flex-col">
       <MainNav />
 
-      {/* Sub-toolbar */}
-      <div className="sticky top-[69px] z-40 h-[52px] w-full border-b border-[#e5e7eb] bg-[#f8fafc]">
+      {/* Body: full-bleed OCC canvas + floating overlays */}
+      <main className="relative flex-1 overflow-hidden">
+        {/* OCC canvas fills the whole area */}
+        <OccViewer className="absolute inset-0 w-full h-full" />
+
+      {/* Sub-toolbar floating above the canvas */}
+      <div className="absolute inset-x-0 top-0 z-40 h-[52px] border-b border-[#e5e7eb]/70">
         <div className="absolute inset-y-0 left-4 flex items-center">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="h-9">
             <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
@@ -371,14 +376,15 @@ export function CompositionNew() {
         </div>
       </div>
 
-      <main className="flex-1 px-4 py-6 sm:px-8 lg:px-16">
+      {/* Scrollable tab content panels — floated over the canvas */}
+      <div className="absolute left-4 right-4 top-[60px] bottom-4 overflow-y-auto">
         {activeTab === 'general' && (
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleGeneralSubmit();
             }}
-            className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
+            className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm"
           >
             <div className="flex w-full flex-col gap-2">
               <Label htmlFor="comp-name" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
@@ -451,7 +457,7 @@ export function CompositionNew() {
         )}
 
         {activeTab === 'geometry' && (
-          <div className="rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+          <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Geometries</h2>
               <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
@@ -545,7 +551,7 @@ export function CompositionNew() {
         )}
 
         {activeTab === 'layup-mapping' && (
-          <div className="flex w-full max-w-[480px] flex-col gap-6 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+          <div className="flex w-full max-w-[480px] flex-col gap-6 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
             <button
               type="button"
               aria-label="Settings"
@@ -585,9 +591,8 @@ export function CompositionNew() {
         )}
 
         {activeTab === 'transversal-mapping' && <TransversalMappingSection />}
+      </div>
       </main>
-
-      <Footer />
 
       <LayupPickerDialog
         open={layupPicker !== null}
