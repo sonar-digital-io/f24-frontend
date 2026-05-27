@@ -470,6 +470,71 @@ A `h-[52px]` sub-toolbarban a tab pill `items-center` → 8px padding top + bott
 
 Ha 4px gap-et kértem volna, `top-[48px]`. Ha 16px-et: `top-[60px]`.
 
+### OrbitControls blokkolva full-bleed overlayval
+
+**Probléma:** A `CompositionNew` floating panel-jének wrapper div-je (`absolute left-4 right-4 top-[60px] bottom-4`) lefedi az egész canvas területet és blokkol minden pointer eventet → OrbitControls (rotate/pan/zoom) nem működik a canvas szabad részein sem.
+
+**Fix:** `pointer-events-none` a wrapper div-re + `pointer-events-auto` minden egyes panel kártyán. A panel kártyákon az `overflow-y-auto` + `max-h-[calc(100vh-145px)]` gondoskodik a belső görgethetőségről.
+
+```tsx
+{/* wrapper: pointer-events-none → canvas megkapja az orbit eventeket */}
+<div className="pointer-events-none absolute bottom-4 left-4 right-4 top-[60px]">
+  {activeTab === 'general' && (
+    <form className="pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto ...">
+    ...
+  )}
+</div>
+```
+
+**Minden tab panelre** kell a `pointer-events-auto` + `max-h` + `overflow-y-auto` — ha akár egy is kimarad, ott lefagy az OrbitControls.
+
+### IGES fájl betöltése opencascade.js v1.1.1-ben
+
+**API hívások (runtime tesztelve):**
+
+```typescript
+// 1. KÖTELEZŐ az első IGESControl_Reader előtt — regisztrálja a protokollt
+oc.IGESControl_Controller.Init();  // statikus metódus, suffix nélkül
+
+// 2. Reader példányosítás (konstruktor → _1 suffix)
+const reader = new oc.IGESControl_Reader_1();
+
+// 3. Fájl beírása az OCC Emscripten virtuális FS-be
+oc.FS.writeFile('/fan.igs', new Uint8Array(buffer));
+
+// 4. Fájl beolvasása — egy overload, suffix nélkül
+const status = reader.ReadFile('/fan.igs');
+// IFSelect_ReturnStatus: 1 = RetDone, 2 = RetError, 3 = RetFail
+
+// 5. Shapek átvitele — egy overload, nincs arg, suffix nélkül
+reader.TransferRoots();
+// (NEM TransferRoots_1, NEM Message_ProgressRange_1 — ez nem létezik v1.1.1-ben!)
+
+// 6. Compound shape lekérése
+const shape = reader.OneShape();  // TopAbs_COMPOUND (0)
+```
+
+**Nem létező API-k (v1.1.1-ben):**
+- `oc.Message_ProgressRange_1` — nincs, `TypeError: not a constructor`
+- `reader.TransferRoots_1(...)` — nincs (az OCC 7.5-ben nincs Message_ProgressRange paraméter)
+
+**⚠️ WASM virtuális FS path hossz limit:**
+
+Az `IGESControl_Reader.ReadFile()` **silently** `IFSelect_RetError` (2) státuszt ad vissza, ha a virtuális FS path teljes hossza **> 10 karakter**. Ez az opencascade.js v1.1.1 WASM belső buffer korlátozása.
+
+| Path | Hossz | Eredmény |
+|------|-------|---------|
+| `/fan.igs` | 8 | ✓ RetDone |
+| `/blade.igs` | 10 | ✓ RetDone |
+| `/model.igs` | 10 | ✓ RetDone |
+| `/fanobj.igs` | 11 | ✗ RetError |
+| `/import.igs` | 11 | ✗ RetError |
+| `/occ_fan.igs` | 12 | ✗ RetError |
+
+**Szabály:** `/<stem>.igs` ahol `stem` max 5 karakter (pl. `/fan.igs`, `/part.igs`, `/geom.igs`).
+
+**Init() nélküli tünet:** `ReadFile` szintén RetError (2) ad vissza és `NbRootsForTransfer()` = 0. Az `Init()` + rövid path együtt szükséges.
+
 ---
 
 ## Kis dolgok ami időt megspóroltak

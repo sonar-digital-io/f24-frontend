@@ -1,23 +1,32 @@
 /**
- * OccViewer — full-bleed Three.js canvas backed by real OpenCascade.js B-Rep geometry.
+ * OccViewer — full-bleed Three.js canvas backed by a real IGES file loaded
+ * through OpenCascade.js B-Rep → mesh tessellation.
  *
- * opencascade.js v1.1.1 API notes (all suffixed overloads discovered by runtime testing):
- *   BRepPrimAPI_MakeSphere_1(R)
- *   BRepPrimAPI_MakeTorus_1(R1, R2)
- *   BRepPrimAPI_MakeBox_2(gp_Pnt_3, dx, dy, dz)
- *   BRepMesh_IncrementalMesh_2(shape, linDefl, isRel, angDefl, inParallel)
- *   TopExp_Explorer_2(shape, TopAbs_ShapeEnum.TopAbs_FACE, TopAbs_ShapeEnum.TopAbs_SHAPE)
- *   TopoDS.Face_1(shape)
- *   TopLoc_Location_1()
- *   BRep_Tool.Triangulation(face, loc)     ← static, no suffix
- *   face.Orientation_1().value === TopAbs_Orientation.TopAbs_REVERSED.value
- *   gp_Pnt_3(x,y,z) · gp_Dir_4(x,y,z) · gp_Vec_4(x,y,z)
- *   gp_Ax1_2(pnt, dir) · gp_Trsf_1()
- *   trsf.SetRotation_1(ax1, angleRad) · trsf.SetTranslation_1(vec)
- *   BRepBuilderAPI_Transform_2(shape, trsf, copy)
+ * The IGES file is served from public/fan-object.igs and is fetched at
+ * runtime, written into the OCC Emscripten virtual filesystem, parsed with
+ * IGESControl_Reader, and tessellated into a Three.js BufferGeometry.
  *
- * Scene: hub sphere + rotor torus + 3 blade boxes at 0°/120°/240° around Z.
+ * opencascade.js v1.1.1 API notes (v1.1.1 = OCC 7.5 bindings):
+ *   Constructor overloads always use _N suffix (even if only one):
+ *     IGESControl_Reader_1()
+ *     Message_ProgressRange_1()        — default (no-arg) ctor
+ *     TopLoc_Location_1()
+ *   Method overloads only use _N when there are multiple overloads:
+ *     reader.ReadFile(path)            — single overload → no suffix
+ *     reader.TransferRoots()           — single overload, no args → no suffix
+ *     reader.OneShape()                — single overload → no suffix
+ *     IGESControl_Controller.Init()    — MUST be called before any IGESControl_Reader use!
+ *   Other known suffixes:
+ *     BRepMesh_IncrementalMesh_2(shape, linDefl, isRel, angDefl, inParallel)
+ *     TopExp_Explorer_2(shape, TopAbs_ShapeEnum.TopAbs_FACE, ...)
+ *     TopoDS.Face_1(shape)
+ *     BRep_Tool.Triangulation(face, loc)     ← static, no suffix
+ *     face.Orientation_1().value === TopAbs_Orientation.TopAbs_REVERSED.value
+ *
+ * Scene: IGES geometry with auto-fit camera + OrbitControls.
  * OrbitControls: left-drag = rotate, right-drag / middle = pan, scroll = zoom.
+ *
+ * Camera, grid, and shadow ground auto-fit to the loaded geometry's bounding box.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -28,46 +37,57 @@ import { getOcc } from '@/lib/occ-init';
 export interface OccViewerProps {
   wireframe?: boolean;
   className?: string;
+  /** URL of the IGES file to load (must be served from the same origin). */
+  igesUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
-// B-Rep construction (v1.1.1 API)
+// IGES loader — returns shape(s) ready for tessellation
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildShapes(oc: any): Array<{ shape: any; color: number; opacity: number }> {
-  const FACE  = oc.TopAbs_ShapeEnum.TopAbs_FACE;
-  const SHAPE = oc.TopAbs_ShapeEnum.TopAbs_SHAPE;
-  // Keep refs to avoid GC-ing constants we pass to constructors
-  void FACE; void SHAPE;
+async function loadIgesShapes(
+  oc: any,
+  url: string,
+): Promise<Array<{ shape: any; color: number; opacity: number }>> {
+  // 1. Fetch the IGES file
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`IGES fetch failed: HTTP ${response.status} — ${url}`);
+  }
+  const buffer = await response.arrayBuffer();
 
-  const hub   = new oc.BRepPrimAPI_MakeSphere_1(1.0);
-  const torus = new oc.BRepPrimAPI_MakeTorus_1(5.2, 0.35);
+  // 2. Write into the OCC Emscripten virtual filesystem.
+  //    ⚠️  opencascade.js v1.1.1 WASM bug: ReadFile silently fails (RetError)
+  //    for virtual-FS paths longer than 10 characters total (incl. slash + ext).
+  //    Stem must be ≤ 5 chars: "/fan.igs" (8) ✓  "/fanobj.igs" (11) ✗
+  const tmpPath = '/fan.igs';
+  oc.FS.writeFile(tmpPath, new Uint8Array(buffer));
 
-  // Blade: box from (0.9, -0.25, -0.4) sized 4.2 × 0.5 × 0.8
-  const bladeOp = new oc.BRepPrimAPI_MakeBox_2(
-    new oc.gp_Pnt_3(0.9, -0.25, -0.4),
-    4.2, 0.5, 0.8,
-  );
-  const bladeBase = bladeOp.Shape();
+  try {
+    // 3. IGES session must be initialised before any read (registers protocol)
+    oc.IGESControl_Controller.Init();
 
-  // Rotation axis: Z at origin
-  const zDir = new oc.gp_Dir_4(0, 0, 1);
-  const zPnt = new oc.gp_Pnt_3(0, 0, 0);
-  const zAx1 = new oc.gp_Ax1_2(zPnt, zDir);
+    // 4. Create reader and parse
+    const reader = new oc.IGESControl_Reader_1();
+    const retStatus = reader.ReadFile(tmpPath);
 
-  const bladeShapes = [0, 120, 240].map((deg) => {
-    if (deg === 0) return bladeBase;
-    const t = new oc.gp_Trsf_1();
-    t.SetRotation_1(zAx1, (deg * Math.PI) / 180);
-    return new oc.BRepBuilderAPI_Transform_2(bladeBase, t, true).Shape();
-  });
+    const RetDone = oc.IFSelect_ReturnStatus.IFSelect_RetDone;
+    if (retStatus.value !== RetDone.value) {
+      throw new Error(`IGESControl_Reader.ReadFile returned status ${retStatus.value}`);
+    }
 
-  return [
-    { shape: hub.Shape(),   color: 0x94a3b8, opacity: 1    },
-    { shape: torus.Shape(), color: 0x3b82f6, opacity: 0.9  },
-    ...bladeShapes.map((s) => ({ shape: s, color: 0x475569, opacity: 1 })),
-  ];
+    // 5. Transfer all root entities to B-Rep shapes
+    //    Single overload, no args → no suffix
+    reader.TransferRoots();
+
+    // 6. Compound all transferred shapes into one
+    const shape = reader.OneShape();
+
+    return [{ shape, color: 0x94a3b8, opacity: 1 }];
+  } finally {
+    try { oc.FS.unlink(tmpPath); } catch (_) { /* virtual-FS cleanup */ }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +100,7 @@ function tessellate(oc: any, shape: any, color: number, opacity: number): THREE.
   const TOPSHAPE = oc.TopAbs_ShapeEnum.TopAbs_SHAPE;
   const REVERSED = oc.TopAbs_Orientation.TopAbs_REVERSED;
 
-  new oc.BRepMesh_IncrementalMesh_2(shape, 0.1, false, 0.5, false);
+  new oc.BRepMesh_IncrementalMesh_2(shape, 0.05, false, 0.3, false);
 
   const vertices: number[] = [];
   const indices:  number[] = [];
@@ -94,9 +114,9 @@ function tessellate(oc: any, shape: any, color: number, opacity: number): THREE.
     const poly = oc.BRep_Tool.Triangulation(face, loc);
 
     if (!poly.IsNull()) {
-      const p   = poly.get();
-      const nb  = p.NbNodes();
-      const nt  = p.NbTriangles();
+      const p  = poly.get();
+      const nb = p.NbNodes();
+      const nt = p.NbTriangles();
 
       for (let i = 1; i <= nb; i++) {
         const pt = p.Node(i);
@@ -125,8 +145,8 @@ function tessellate(oc: any, shape: any, color: number, opacity: number): THREE.
 
   const mat = new THREE.MeshPhysicalMaterial({
     color,
-    metalness: 0.25,
-    roughness: 0.45,
+    metalness: 0.3,
+    roughness: 0.4,
     transparent: opacity < 1,
     opacity,
     side: THREE.DoubleSide,
@@ -145,6 +165,7 @@ function tessellate(oc: any, shape: any, color: number, opacity: number): THREE.
 export function OccViewer({
   wireframe = false,
   className = 'absolute inset-0 w-full h-full',
+  igesUrl   = '/fan-object.igs',
 }: OccViewerProps) {
   const containerRef  = useRef<HTMLDivElement>(null);
   const meshesRef     = useRef<THREE.Mesh[]>([]);
@@ -183,7 +204,7 @@ export function OccViewer({
     scene.background = new THREE.CanvasTexture(bgCanvas);
 
     // ── Camera ─────────────────────────────────────────────────────────────
-    const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 500);
+    const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 5000);
     camera.position.set(12, 7, 16);
 
     // ── Renderer ───────────────────────────────────────────────────────────
@@ -200,8 +221,8 @@ export function OccViewer({
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
-    controls.minDistance   = 3;
-    controls.maxDistance   = 80;
+    controls.minDistance   = 0.1;
+    controls.maxDistance   = 5000;
     controls.target.set(0, 0, 0);
 
     // ── Lights ─────────────────────────────────────────────────────────────
@@ -211,23 +232,24 @@ export function OccViewer({
     keyLight.position.set(12, 18, 10);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(2048, 2048);
-    keyLight.shadow.camera.left   = -12;
-    keyLight.shadow.camera.right  = 12;
-    keyLight.shadow.camera.top    = 12;
-    keyLight.shadow.camera.bottom = -12;
+    keyLight.shadow.camera.left   = -50;
+    keyLight.shadow.camera.right  = 50;
+    keyLight.shadow.camera.top    = 50;
+    keyLight.shadow.camera.bottom = -50;
     scene.add(keyLight);
+
     const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.35);
     fillLight.position.set(-8, 4, -8);
     scene.add(fillLight);
 
     // ── Grid + ground shadow ────────────────────────────────────────────────
-    const grid = new THREE.GridHelper(30, 30, 0xc0ccd8, 0xd4dde6);
+    const grid = new THREE.GridHelper(200, 40, 0xc0ccd8, 0xd4dde6);
     grid.position.y = -2;
     (grid.material as THREE.Material).opacity = 0.5;
     (grid.material as THREE.Material).transparent = true;
     scene.add(grid);
 
-    const groundGeo = new THREE.PlaneGeometry(60, 60);
+    const groundGeo = new THREE.PlaneGeometry(500, 500);
     const groundMat = new THREE.ShadowMaterial({ opacity: 0.08 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
@@ -263,25 +285,29 @@ export function OccViewer({
     ro.observe(container);
     window.addEventListener('resize', onResize);
 
-    // ── OCC async: build + tessellate B-Rep ─────────────────────────────────
+    // ── OCC async: load IGES + tessellate ───────────────────────────────────
     let disposed = false;
 
     getOcc()
-      .then((oc) => {
+      .then(async (oc) => {
         if (disposed) return;
 
-        let occShapes: Array<{ shape: any; color: number; opacity: number }>;
+        // Load IGES file
+        let occShapes: Array<{ shape: any; color: number; opacity: number }>;  // eslint-disable-line @typescript-eslint/no-explicit-any
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          occShapes = buildShapes(oc as any);
+          occShapes = await loadIgesShapes(oc as any, igesUrl);
         } catch (err) {
-          console.error('[OccViewer] B-Rep build failed:', err);
-          setStatus('error');
+          console.error('[OccViewer] IGES load failed:', err);
+          if (!disposed) setStatus('error');
           return;
         }
 
-        const newMeshes: THREE.Mesh[]          = [];
-        const newLines:  THREE.LineSegments[]  = [];
+        if (disposed) return;
+
+        // Tessellate shapes
+        const newMeshes: THREE.Mesh[]         = [];
+        const newLines:  THREE.LineSegments[] = [];
 
         for (const { shape, color, opacity } of occShapes) {
           try {
@@ -294,10 +320,10 @@ export function OccViewer({
             newMeshes.push(mesh);
 
             // Edge overlay for wireframe mode
-            const edgeGeo = new THREE.EdgesGeometry(mesh.geometry, 20);
+            const edgeGeo = new THREE.EdgesGeometry(mesh.geometry, 15);
             const edgeMat = new THREE.LineBasicMaterial({
               color: 0x475569,
-              opacity: 0.65,
+              opacity: 0.55,
               transparent: true,
             });
             const lines = new THREE.LineSegments(edgeGeo, edgeMat);
@@ -309,6 +335,41 @@ export function OccViewer({
           }
         }
 
+        // ── Auto-fit camera + grid to loaded geometry ───────────────────────
+        if (newMeshes.length > 0) {
+          const box = new THREE.Box3();
+          newMeshes.forEach((m) => box.expandByObject(m));
+
+          if (!box.isEmpty()) {
+            const center  = box.getCenter(new THREE.Vector3());
+            const size    = box.getSize(new THREE.Vector3());
+            const maxDim  = Math.max(size.x, size.y, size.z);
+            const fitDist = maxDim * 2.0;
+
+            camera.position.set(
+              center.x + fitDist * 0.55,
+              center.y + fitDist * 0.38,
+              center.z + fitDist,
+            );
+            camera.near = maxDim * 0.001;
+            camera.far  = maxDim * 100;
+            camera.updateProjectionMatrix();
+
+            controls.target.copy(center);
+            controls.minDistance = maxDim * 0.05;
+            controls.maxDistance = maxDim * 20;
+            controls.update();
+
+            // Snap grid + shadow ground to the bottom of the geometry
+            const groundY = box.min.y - maxDim * 0.015;
+            grid.position.y   = groundY;
+            ground.position.y = groundY;
+            // Scale grid to match geometry footprint
+            const footprint = Math.max(size.x, size.z) * 3;
+            grid.scale.setScalar(footprint / 200);
+          }
+        }
+
         meshesRef.current   = newMeshes;
         wireLineRef.current = newLines;
 
@@ -316,11 +377,13 @@ export function OccViewer({
         ringGeo.dispose();
         ringMat.dispose();
 
-        setStatus('ready');
+        if (!disposed) setStatus('ready');
       })
       .catch((err) => {
-        console.error('[OccViewer] OCC init failed:', err);
-        setStatus('error');
+        if (!disposed) {
+          console.error('[OccViewer] OCC init failed:', err);
+          setStatus('error');
+        }
       });
 
     // ── Cleanup ─────────────────────────────────────────────────────────────
@@ -340,21 +403,21 @@ export function OccViewer({
       wireLineRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [igesUrl]);
 
   return (
     <div ref={containerRef} className={className}>
       {status === 'loading' && (
         <div className="pointer-events-none absolute inset-0 flex items-end justify-start p-4">
           <span className="rounded-md bg-white/80 px-2.5 py-1 text-[12px] font-medium text-[#6b7280] backdrop-blur-sm">
-            Loading OpenCascade…
+            Loading geometry…
           </span>
         </div>
       )}
       {status === 'error' && (
         <div className="pointer-events-none absolute inset-0 flex items-end justify-start p-4">
           <span className="rounded-md bg-white/80 px-2.5 py-1 text-[12px] font-medium text-[#dc2626] backdrop-blur-sm">
-            OpenCascade init failed — check console
+            Geometry load failed — check console
           </span>
         </div>
       )}
