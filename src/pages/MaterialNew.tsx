@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Check, X } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { Footer } from '@/components/Footer';
@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MECHANICAL_SECTIONS, FATIGUE_SECTIONS } from '@/data/materialFormFields';
-import { MATERIALS, createMaterial } from '@/data/materials';
+import { MATERIALS, createMaterial, updateMaterial } from '@/data/materials';
 
 const MATERIAL_TYPES = [
   'UD ply',
@@ -123,12 +123,23 @@ export function MaterialNew() {
 
   function handleGeneralSubmit() {
     if (existing) {
+      updateMaterial(existing.id, { name, type, description });
       navigate('/material');
       return;
     }
     // Mock stand-in for a POST: append to the list, then open the new material.
     const material = createMaterial({ name, type, description });
     navigate(`/material/${material.id}`);
+  }
+
+  /** Save (create or update) then go back to the list — called by Exit edit mode. */
+  function handleExit() {
+    if (existing) {
+      updateMaterial(existing.id, { name, type, description });
+    } else if (name.trim()) {
+      createMaterial({ name, type, description });
+    }
+    navigate('/material');
   }
 
   return (
@@ -164,13 +175,14 @@ export function MaterialNew() {
           {titleText}
         </h1>
 
-        <Link
-          to="/material"
+        <button
+          type="button"
+          onClick={handleExit}
           className="inline-flex h-8 items-center gap-2 rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
         >
           Exit edit mode
           <X className="h-4 w-4 opacity-70" strokeWidth={1.33} />
-        </Link>
+        </button>
       </div>
 
       {/* Main content area */}

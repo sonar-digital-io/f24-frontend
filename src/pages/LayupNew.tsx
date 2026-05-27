@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { Footer } from '@/components/Footer';
@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LayupBuilder } from '@/components/LayupBuilder';
-import { LAYUPS, createLayup } from '@/data/layups';
+import { LAYUPS, createLayup, updateLayup } from '@/data/layups';
 
 type LaminateArchitecture = 'even-symmetrical' | 'odd-symmetrical' | 'asymmetrical';
 
@@ -68,12 +68,23 @@ export function LayupNew() {
 
   function handleGeneralSubmit() {
     if (existing) {
+      updateLayup(existing.id, { name, description });
       navigate('/layup');
       return;
     }
     // Mock stand-in for a POST: append to the list, then open the new layup in the editor.
     const layup = createLayup(name, description);
     navigate(`/layup/${layup.id}`);
+  }
+
+  /** Save (create or update) then go back to the list — called by Exit edit mode. */
+  function handleExit() {
+    if (existing) {
+      updateLayup(existing.id, { name, description });
+    } else if (name.trim()) {
+      createLayup(name, description);
+    }
+    navigate('/layup');
   }
 
   return (
@@ -106,13 +117,14 @@ export function LayupNew() {
         </h1>
 
         <div className="absolute inset-y-0 right-4 flex items-center">
-          <Link
-            to="/layup"
+          <button
+            type="button"
+            onClick={handleExit}
             className="inline-flex h-8 items-center gap-2 rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
           >
             Exit edit mode
             <X className="h-4 w-4 opacity-70" strokeWidth={1.33} />
-          </Link>
+          </button>
         </div>
       </div>
 

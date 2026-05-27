@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GEOMETRIES, createGeometry } from '@/data/geometries';
+import { GEOMETRIES, createGeometry, updateGeometry } from '@/data/geometries';
 
 const BLADE_TYPES = ['Wind turbine blade', 'Gas turbine blade', 'Aero blade', 'Hydraulic blade'];
 const MANUFACTURING_TECHNOLOGIES = [
@@ -204,6 +204,14 @@ export function GeometryEdit() {
     navigate(`/geometry/${geom.id}`, { replace: true });
   }
 
+  function handleExit() {
+    if (!isNew && geometry) {
+      // Touch lastUpdated to signal it was worked on (physics props aren't in the data model yet)
+      updateGeometry(geometry.id, {});
+    }
+    navigate('/geometry');
+  }
+
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
       <MainNav />
@@ -262,13 +270,14 @@ export function GeometryEdit() {
                 <Redo2 className="h-3.5 w-3.5" strokeWidth={2} />
               </button>
             </div>
-            <Link
-              to="/geometry"
+            <button
+              type="button"
+              onClick={handleExit}
               className="inline-flex h-8 items-center gap-2 rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
             >
               Exit edit mode
               <X className="h-4 w-4 opacity-70" strokeWidth={1.33} />
-            </Link>
+            </button>
           </div>
         </div>
 

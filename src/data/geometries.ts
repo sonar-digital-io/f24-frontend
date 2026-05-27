@@ -70,6 +70,16 @@ export const GEOMETRIES: Geometry[] = [
   },
 ];
 
+/** Update an existing geometry in-place. Mock stand-in for a PATCH. */
+export function updateGeometry(
+  id: string,
+  changes: Partial<Pick<Geometry, 'name' | 'description'>>
+): void {
+  const idx = GEOMETRIES.findIndex((g) => g.id === id);
+  if (idx === -1) return;
+  GEOMETRIES[idx] = { ...GEOMETRIES[idx], ...changes, lastUpdated: todayISO() };
+}
+
 /** Create a geometry from a name + description, prepend it to the list, return it.
  *  Mock stand-in for a POST → the new item then shows up in the list and opens in the editor. */
 export function createGeometry(name: string, description = ''): Geometry {

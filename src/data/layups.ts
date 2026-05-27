@@ -80,6 +80,16 @@ export const LAYUPS: Layup[] = [
   },
 ];
 
+/** Update an existing layup in-place. Mock stand-in for a PATCH. */
+export function updateLayup(
+  id: string,
+  changes: Partial<Pick<Layup, 'name' | 'description'>>
+): void {
+  const idx = LAYUPS.findIndex((l) => l.id === id);
+  if (idx === -1) return;
+  LAYUPS[idx] = { ...LAYUPS[idx], ...changes, lastUpdated: todayISO() };
+}
+
 /** Create a layup, prepend it to the list, return it. Mock stand-in for a POST. */
 export function createLayup(name: string, description = ''): Layup {
   const id = uniqueId(slugify(name), (candidate) => LAYUPS.some((l) => l.id === candidate));

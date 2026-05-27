@@ -173,12 +173,144 @@ export const MATERIALS: Material[] = [
       tdsRef: 'Issue 08.2024',
     },
   },
+
+  // --- randomly generated own-source materials ---
+  {
+    id: 'st-woven-gfrp-200',
+    name: 'ST-Woven-GFRP-200',
+    type: 'Biaxial Ply (±45°)',
+    description: 'In-house woven ±45° glass fiber. 200 gsm areal weight. Validated for skin paneling.',
+    lastUpdated: '2025-09-14',
+    source: 'own',
+    details: {
+      reinforcement: 'Woven E-Glass',
+      matrix: 'Epoxy',
+      modulusTensile: '14.5 GPa',
+      density: '1.88 g/cm³',
+      tdsRef: 'Internal — Lab 07.2025',
+    },
+  },
+  {
+    id: 'ep-cf-ud-300',
+    name: 'EP-CF-UD-300',
+    type: 'UD Ply',
+    description: 'Experimental 300 gsm UD carbon prepreg. Optimized fiber areal weight for thin spar caps.',
+    lastUpdated: '2025-09-02',
+    source: 'own',
+    details: {
+      reinforcement: 'T800 Carbon',
+      matrix: 'Epoxy',
+      modulusTensile: '155.0 GPa',
+      density: '1.58 g/cm³',
+      tdsRef: 'Internal — Exp 09.2025',
+    },
+  },
+  {
+    id: 'pu-core-60',
+    name: 'ST-PU-Core-60',
+    type: 'Core (PET Foam)',
+    description: 'Polyurethane structural foam, 60 kg/m³. In-house characterized shear modulus.',
+    lastUpdated: '2025-08-21',
+    source: 'own',
+    details: {
+      reinforcement: '—',
+      matrix: 'PU Foam',
+      modulusTensile: '0.060 GPa',
+      density: '0.060 g/cm³',
+      tdsRef: 'Internal — Lab 06.2025',
+    },
+  },
+  {
+    id: 'triax-ncf-450',
+    name: 'ST-Triax-NCF-450',
+    type: 'Random Mat Ply',
+    description: '0/±45° triaxial NCF, 450 gsm. Custom stitch angle for root section integration.',
+    lastUpdated: '2025-08-05',
+    source: 'own',
+    details: {
+      reinforcement: 'Triaxial E-Glass NCF',
+      matrix: 'Epoxy',
+      modulusTensile: '19.0 GPa',
+      density: '1.90 g/cm³',
+      tdsRef: 'Internal — Lab 05.2025',
+    },
+  },
+  {
+    id: 'st-surface-veil',
+    name: 'ST-Surface-Veil-25',
+    type: 'Surface Ply',
+    description: 'Carbon veil surface ply, 25 gsm. Lightning strike protection + cosmetic finish.',
+    lastUpdated: '2025-07-30',
+    source: 'own',
+    details: {
+      reinforcement: 'Carbon Veil',
+      matrix: 'Epoxy',
+      modulusTensile: '8.0 GPa',
+      density: '1.30 g/cm³',
+      tdsRef: 'Internal — Lab 04.2025',
+    },
+  },
+  {
+    id: 'hybrid-cf-gf-v2',
+    name: 'ST-Hybrid-CF-GF-v2',
+    type: 'Hybrid Ply',
+    description: 'Revised carbon/glass hybrid. Improved interlaminar toughness over v1. Validated via ILSS.',
+    lastUpdated: '2025-07-12',
+    source: 'own',
+    details: {
+      reinforcement: 'Carbon/Glass 3x3',
+      matrix: 'Epoxy',
+      modulusTensile: '55.0 GPa',
+      density: '1.68 g/cm³',
+      tdsRef: 'Internal — Lab 03.2025',
+    },
+  },
+  {
+    id: 'cf-prepreg-hm-150',
+    name: 'CF-Prepreg-HM-150',
+    type: 'UD Carbon Ply',
+    description: 'High-modulus UD prepreg, 150 gsm. Developed for tip spar caps — minimizes aeroelastic twist.',
+    lastUpdated: '2025-06-28',
+    source: 'own',
+    details: {
+      reinforcement: 'HM Carbon 150gsm',
+      matrix: 'Epoxy (OOA)',
+      modulusTensile: '230.0 GPa',
+      density: '1.62 g/cm³',
+      tdsRef: 'Internal — Lab 01.2025',
+    },
+  },
+  {
+    id: 'ep-balsa-alt-120',
+    name: 'EP-Balsa-Alt-120',
+    type: 'Core (Balsa)',
+    description: 'Alternative balsa grade, 120 kg/m³. Sourced from certified plantation; higher shear stiffness.',
+    lastUpdated: '2025-06-10',
+    source: 'own',
+    details: {
+      reinforcement: '—',
+      matrix: 'Balsa wood (120)',
+      modulusTensile: '5.2 GPa',
+      density: '0.120 g/cm³',
+      tdsRef: 'Internal — Lab 12.2024',
+    },
+  },
 ];
 
 /** "Last updated" stamp for new materials, matching the existing vYYYY/MM style. */
 function materialStamp(): string {
   const now = new Date();
   return `v${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Update an existing material in-place. Mock stand-in for a PATCH. */
+export function updateMaterial(
+  id: string,
+  changes: Partial<Pick<Material, 'name' | 'type' | 'description'>>
+): void {
+  const idx = MATERIALS.findIndex((m) => m.id === id);
+  if (idx === -1) return;
+  MATERIALS[idx] = { ...MATERIALS[idx], ...changes, lastUpdated: materialStamp() };
 }
 
 /** Create a material, prepend it to the list, return it. Mock stand-in for a POST. */

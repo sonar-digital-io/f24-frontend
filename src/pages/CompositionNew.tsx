@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Check,
   ChevronDown,
@@ -30,7 +30,7 @@ import { LayupMappingBezierDialog } from '@/components/LayupMappingBezierDialog'
 import { TransversalMappingSection } from '@/components/TransversalMappingSection';
 import { GEOMETRIES } from '@/data/geometries';
 import { LAYUPS } from '@/data/layups';
-import { COMPOSITIONS, createComposition } from '@/data/compositions';
+import { COMPOSITIONS, createComposition, updateComposition } from '@/data/compositions';
 
 type RenderMode = 'solid' | 'wireframe';
 
@@ -330,12 +330,23 @@ export function CompositionNew() {
 
   function handleGeneralSubmit() {
     if (existing) {
+      updateComposition(existing.id, { name, description });
       navigate('/composition');
       return;
     }
     // Mock stand-in for a POST: append to the list, then open the new composition.
     const composition = createComposition(name, description);
     navigate(`/composition/${composition.id}`);
+  }
+
+  /** Save (create or update) then go back to the list — called by Exit edit mode. */
+  function handleExit() {
+    if (existing) {
+      updateComposition(existing.id, { name, description });
+    } else if (name.trim()) {
+      createComposition(name, description);
+    }
+    navigate('/composition');
   }
 
   const filteredGeometries = GEOMETRIES.filter(
@@ -426,13 +437,14 @@ export function CompositionNew() {
               <Redo2 className="h-3.5 w-3.5" strokeWidth={2} />
             </button>
           </div>
-          <Link
-            to="/composition"
+          <button
+            type="button"
+            onClick={handleExit}
             className="inline-flex h-8 items-center gap-2 rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
           >
             Exit edit mode
             <X className="h-4 w-4 opacity-70" strokeWidth={1.33} />
-          </Link>
+          </button>
         </div>
       </div>
 

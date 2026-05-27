@@ -30,7 +30,7 @@ interface SortableHeaderProps {
   onClick: (key: SortKey) => void;
 }
 
-type SortKey = 'name' | 'type' | 'lastUpdated';
+type SortKey = 'name' | 'type' | 'source' | 'lastUpdated';
 type SortDirection = 'asc' | 'desc';
 interface SortState {
   key: SortKey;
@@ -354,9 +354,12 @@ export function Material() {
                       />
                     </th>
                     <th className="h-10 w-[110px] px-3 text-left">
-                      <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
-                        Source
-                      </span>
+                      <SortableHeader
+                        label="Source"
+                        sortKey="source"
+                        currentSort={sort}
+                        onClick={handleSort}
+                      />
                     </th>
                     <th className="h-10 px-3 text-left">
                       <span className="text-[14px] font-medium leading-5 text-[#6b7280]">

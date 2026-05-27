@@ -80,6 +80,16 @@ export const COMPOSITIONS: Composition[] = [
   },
 ];
 
+/** Update an existing composition in-place. Mock stand-in for a PATCH. */
+export function updateComposition(
+  id: string,
+  changes: Partial<Pick<Composition, 'name' | 'description'>>
+): void {
+  const idx = COMPOSITIONS.findIndex((c) => c.id === id);
+  if (idx === -1) return;
+  COMPOSITIONS[idx] = { ...COMPOSITIONS[idx], ...changes, lastUpdated: todayISO() };
+}
+
 /** Create a composition, prepend it to the list, return it. Mock stand-in for a POST. */
 export function createComposition(name: string, description = ''): Composition {
   const id = uniqueId(slugify(name), (candidate) => COMPOSITIONS.some((c) => c.id === candidate));
