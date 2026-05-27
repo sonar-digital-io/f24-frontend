@@ -1,3 +1,5 @@
+import { slugify, todayISO, uniqueId } from '@/lib/utils';
+
 export interface Composition {
   id: string;
   name: string;
@@ -77,3 +79,16 @@ export const COMPOSITIONS: Composition[] = [
     lastUpdated: '2026-01-20',
   },
 ];
+
+/** Create a composition, prepend it to the list, return it. Mock stand-in for a POST. */
+export function createComposition(name: string, description = ''): Composition {
+  const id = uniqueId(slugify(name), (candidate) => COMPOSITIONS.some((c) => c.id === candidate));
+  const composition: Composition = {
+    id,
+    name: name.trim() || 'Untitled composition',
+    description: description.trim(),
+    lastUpdated: todayISO(),
+  };
+  COMPOSITIONS.unshift(composition);
+  return composition;
+}

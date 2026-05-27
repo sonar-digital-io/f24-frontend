@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Check, X } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { Footer } from '@/components/Footer';
@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MECHANICAL_SECTIONS, FATIGUE_SECTIONS } from '@/data/materialFormFields';
+import { MATERIALS, createMaterial } from '@/data/materials';
 
 const MATERIAL_TYPES = [
   'UD ply',
@@ -100,17 +101,35 @@ function Select({ value, onChange, options, placeholder = 'Select…' }: SelectP
 
 export function MaterialNew() {
   const navigate = useNavigate();
-  const [name, setName] = useState('ST-UD-C600-EP');
-  const [type, setType] = useState('UD ply');
+  const { id } = useParams<{ id: string }>();
+  const existing = id ? MATERIALS.find((m) => m.id === id) : undefined;
+
+  const [name, setName] = useState(existing?.name ?? 'ST-UD-C600-EP');
+  const [type, setType] = useState(existing?.type ?? 'UD ply');
   const [description, setDescription] = useState(
-    'Carbon/Epoxy UD lamina. Fiber: Toray T700 (600gsm). Matrix: ST-Epoxy-Standard. Characterized via ASTM D3039 tensile tests'
+    existing?.description ??
+      'Carbon/Epoxy UD lamina. Fiber: Toray T700 (600gsm). Matrix: ST-Epoxy-Standard. Characterized via ASTM D3039 tensile tests'
   );
   const [activeTab, setActiveTab] = useState('general');
   const [mechValues, setMechValues] = useState<Record<string, string>>({});
   const [fatigueValues, setFatigueValues] = useState<Record<string, string>>({});
 
-  // Title in the sub-toolbar: "New material" on General, the actual name on Mechanical/Fatigue (Figma)
-  const titleText = activeTab === 'general' ? 'New material' : name || 'New material';
+  // Title: editing shows the material name everywhere; creating shows "New material" on General.
+  const titleText = existing
+    ? name || existing.name
+    : activeTab === 'general'
+      ? 'New material'
+      : name || 'New material';
+
+  function handleGeneralSubmit() {
+    if (existing) {
+      navigate('/material');
+      return;
+    }
+    // Mock stand-in for a POST: append to the list, then open the new material.
+    const material = createMaterial({ name, type, description });
+    navigate(`/material/${material.id}`);
+  }
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
@@ -160,8 +179,7 @@ export function MaterialNew() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              // TODO: persist + navigate back. For now just go back to the list.
-              navigate('/material');
+              handleGeneralSubmit();
             }}
             className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
           >

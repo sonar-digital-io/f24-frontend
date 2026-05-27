@@ -1,3 +1,5 @@
+import { slugify, uniqueId } from '@/lib/utils';
+
 export interface MaterialDetails {
   reinforcement: string;
   matrix: string;
@@ -161,3 +163,36 @@ export const MATERIALS: Material[] = [
     },
   },
 ];
+
+/** "Last updated" stamp for new materials, matching the existing vYYYY/MM style. */
+function materialStamp(): string {
+  const now = new Date();
+  return `v${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Create a material, prepend it to the list, return it. Mock stand-in for a POST. */
+export function createMaterial(input: {
+  name: string;
+  type: string;
+  description: string;
+}): Material {
+  const id = uniqueId(slugify(input.name), (candidate) =>
+    MATERIALS.some((m) => m.id === candidate)
+  );
+  const material: Material = {
+    id,
+    name: input.name.trim() || 'Untitled material',
+    type: input.type,
+    description: input.description.trim(),
+    lastUpdated: materialStamp(),
+    details: {
+      reinforcement: '—',
+      matrix: '—',
+      modulusTensile: '—',
+      density: '—',
+      tdsRef: '—',
+    },
+  };
+  MATERIALS.unshift(material);
+  return material;
+}

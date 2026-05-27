@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronRight,
   Copy,
@@ -25,6 +25,7 @@ import { LayupMappingBezierDialog } from '@/components/LayupMappingBezierDialog'
 import { TransversalMappingSection } from '@/components/TransversalMappingSection';
 import { GEOMETRIES } from '@/data/geometries';
 import { LAYUPS } from '@/data/layups';
+import { COMPOSITIONS, createComposition } from '@/data/compositions';
 
 interface LayupMapping {
   id: string;
@@ -207,13 +208,15 @@ function LayupMappingTable({
 
 export function CompositionNew() {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const existing = id ? COMPOSITIONS.find((c) => c.id === id) : undefined;
   const [activeTab, setActiveTab] = useState<
     'general' | 'geometry' | 'layup-mapping' | 'transversal-mapping'
   >('general');
 
   // General
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [name, setName] = useState(existing?.name ?? '');
+  const [description, setDescription] = useState(existing?.description ?? '');
   const [solidCore, setSolidCore] = useState(false);
   const [targetWeight, setTargetWeight] = useState('');
 
@@ -280,7 +283,17 @@ export function CompositionNew() {
     });
   }
 
-  const titleText = name.trim() || 'New composition';
+  const titleText = name.trim() || existing?.name || 'New composition';
+
+  function handleGeneralSubmit() {
+    if (existing) {
+      navigate('/composition');
+      return;
+    }
+    // Mock stand-in for a POST: append to the list, then open the new composition.
+    const composition = createComposition(name, description);
+    navigate(`/composition/${composition.id}`);
+  }
 
   const filteredGeometries = GEOMETRIES.filter(
     (g) =>
@@ -363,7 +376,7 @@ export function CompositionNew() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              navigate('/composition');
+              handleGeneralSubmit();
             }}
             className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
           >

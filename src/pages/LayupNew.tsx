@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { Footer } from '@/components/Footer';
@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LayupBuilder } from '@/components/LayupBuilder';
+import { LAYUPS, createLayup } from '@/data/layups';
 
 type LaminateArchitecture = 'even-symmetrical' | 'odd-symmetrical' | 'asymmetrical';
 
@@ -53,13 +54,27 @@ function RadioGroup({ value, onChange }: RadioGroupProps) {
 
 export function LayupNew() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('general');
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const { id } = useParams<{ id: string }>();
+  const existing = id ? LAYUPS.find((l) => l.id === id) : undefined;
+
+  // Editing an existing layup opens straight on the building view; creating starts on General.
+  const [activeTab, setActiveTab] = useState(existing ? 'layup-building' : 'general');
+  const [name, setName] = useState(existing?.name ?? '');
+  const [description, setDescription] = useState(existing?.description ?? '');
   const [laminateArchitecture, setLaminateArchitecture] = useState<LaminateArchitecture | ''>('');
 
-  // Sub-toolbar title: name when set, otherwise "New layup"
-  const titleText = name.trim() || 'New layup';
+  // Sub-toolbar title: current name when set, else the existing layup name, else "New layup"
+  const titleText = name.trim() || existing?.name || 'New layup';
+
+  function handleGeneralSubmit() {
+    if (existing) {
+      navigate('/layup');
+      return;
+    }
+    // Mock stand-in for a POST: append to the list, then open the new layup in the editor.
+    const layup = createLayup(name, description);
+    navigate(`/layup/${layup.id}`);
+  }
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
@@ -106,8 +121,7 @@ export function LayupNew() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              // TODO: persist + navigate. For now, return to the list.
-              navigate('/layup');
+              handleGeneralSubmit();
             }}
             className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
           >

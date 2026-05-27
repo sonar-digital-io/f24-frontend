@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowDown,
   ArrowUpDown,
@@ -70,20 +70,25 @@ interface MaterialRowProps {
   material: MaterialItem;
   expanded: boolean;
   onToggle: () => void;
+  onOpen: () => void;
 }
 
-function MaterialRow({ material, expanded, onToggle }: MaterialRowProps) {
+function MaterialRow({ material, expanded, onToggle, onOpen }: MaterialRowProps) {
   return (
     <>
       <tr
-        className={`border-b border-[#e5e7eb] transition-colors ${
+        onClick={onOpen}
+        className={`cursor-pointer border-b border-[#e5e7eb] transition-colors ${
           expanded ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'
         }`}
       >
         <td className="w-[52px] px-3 py-4 align-top">
           <button
             type="button"
-            onClick={onToggle}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
             aria-expanded={expanded}
             aria-controls={`material-detail-${material.id}`}
             className="flex h-7 w-7 items-center justify-center rounded text-[#0a0a0a] hover:bg-[#e5e7eb]"
@@ -116,6 +121,7 @@ function MaterialRow({ material, expanded, onToggle }: MaterialRowProps) {
             <button
               type="button"
               aria-label="Copy material"
+              onClick={(e) => e.stopPropagation()}
               className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
             >
               <FileText className="h-4 w-4" strokeWidth={2} />
@@ -123,6 +129,7 @@ function MaterialRow({ material, expanded, onToggle }: MaterialRowProps) {
             <button
               type="button"
               aria-label="Duplicate material"
+              onClick={(e) => e.stopPropagation()}
               className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
             >
               <Copy className="h-4 w-4" strokeWidth={2} />
@@ -235,6 +242,7 @@ function Pagination({ page, totalPages, onChange }: PaginationProps) {
 }
 
 export function Material() {
+  const navigate = useNavigate();
   const [expandedId, setExpandedId] = useState<string | null>('envalior-tepex-101');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortState>({ key: 'lastUpdated', direction: 'desc' });
@@ -357,6 +365,7 @@ export function Material() {
                       material={material}
                       expanded={expandedId === material.id}
                       onToggle={() => toggleExpand(material.id)}
+                      onOpen={() => navigate(`/material/${material.id}`)}
                     />
                   ))}
                   {pageRows.length === 0 && (

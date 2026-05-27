@@ -23,12 +23,15 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/material" element={<Material />} />
           <Route path="/material/new" element={<MaterialNew />} />
+          <Route path="/material/:id" element={<MaterialNew />} />
           <Route path="/geometry" element={<Geometry />} />
           <Route path="/geometry/:id" element={<GeometryEdit />} />
           <Route path="/layup" element={<Layup />} />
           <Route path="/layup/new" element={<LayupNew />} />
+          <Route path="/layup/:id" element={<LayupNew />} />
           <Route path="/composition" element={<Composition />} />
           <Route path="/composition/new" element={<CompositionNew />} />
+          <Route path="/composition/:id" element={<CompositionNew />} />
           <Route path="/load-group" element={<LoadGroup />} />
           <Route path="/calculation" element={<Calculation />} />
           <Route path="/report" element={<Report />} />

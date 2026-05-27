@@ -99,24 +99,24 @@ export function PlyStackViz({ plies, className }: PlyStackVizProps) {
         const lines = fiberLines(yOffset, ply.orientation);
         return (
           <g key={ply.id}>
-            {/* Filled rhombus */}
+            {/* Solid (opaque) rhombus so stacked plies don't show through each other */}
             <path
               d={rhombusPath(yOffset)}
               fill={ply.color}
-              fillOpacity="0.18"
-              stroke={ply.color}
-              strokeWidth="2.5"
+              stroke="#0f172a"
+              strokeOpacity="0.35"
+              strokeWidth="2"
             />
-            {/* Fiber lines clipped to the rhombus */}
+            {/* Fiber lines clipped to the rhombus — drawn as a light sheen over the solid fill */}
             <g clipPath={`url(#ply-clip-${ply.id})`}>
               {lines.map((d, i) => (
                 <path
                   key={i}
                   d={d}
-                  stroke={ply.color}
+                  stroke="#ffffff"
                   strokeWidth="1.5"
                   fill="none"
-                  opacity="0.85"
+                  opacity="0.4"
                 />
               ))}
             </g>

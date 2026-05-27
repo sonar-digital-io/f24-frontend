@@ -1,3 +1,5 @@
+import { slugify, todayISO, uniqueId } from '@/lib/utils';
+
 export interface Geometry {
   id: string;
   name: string;
@@ -67,3 +69,17 @@ export const GEOMETRIES: Geometry[] = [
     lastUpdated: '2025-12-10',
   },
 ];
+
+/** Create a geometry from a name + description, prepend it to the list, return it.
+ *  Mock stand-in for a POST → the new item then shows up in the list and opens in the editor. */
+export function createGeometry(name: string, description = ''): Geometry {
+  const id = uniqueId(slugify(name), (candidate) => GEOMETRIES.some((g) => g.id === candidate));
+  const geometry: Geometry = {
+    id,
+    name: name.trim() || 'Untitled geometry',
+    description: description.trim(),
+    lastUpdated: todayISO(),
+  };
+  GEOMETRIES.unshift(geometry);
+  return geometry;
+}

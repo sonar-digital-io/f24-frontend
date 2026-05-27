@@ -1,3 +1,5 @@
+import { slugify, todayISO, uniqueId } from '@/lib/utils';
+
 export interface Layup {
   id: string;
   name: string;
@@ -77,3 +79,16 @@ export const LAYUPS: Layup[] = [
     lastUpdated: '2026-02-10',
   },
 ];
+
+/** Create a layup, prepend it to the list, return it. Mock stand-in for a POST. */
+export function createLayup(name: string, description = ''): Layup {
+  const id = uniqueId(slugify(name), (candidate) => LAYUPS.some((l) => l.id === candidate));
+  const layup: Layup = {
+    id,
+    name: name.trim() || 'Untitled layup',
+    description: description.trim(),
+    lastUpdated: todayISO(),
+  };
+  LAYUPS.unshift(layup);
+  return layup;
+}

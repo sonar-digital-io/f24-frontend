@@ -390,3 +390,219 @@ Ha 4px gap-et kértem volna, `top-[48px]`. Ha 16px-et: `top-[60px]`.
 - A Geist font CDN-ről jön (lásd `index.html`). Ha új Tailwind utility kell hozzá (`font-medium`, `font-semibold`, stb.), nem kell semmit hozzáadni — alapból megy.
 - A Three.js scene a `useEffect(() => {...}, [])` empty deps-ben épül fel. Material/edge color változás `useRef`-fel megy re-mount nélkül. Lásd `BackgroundScene.tsx` és `BladeScene.tsx`.
 - A `BoxGeometry(W, H, D, segW, segH, segD)` segment-jeit lehet per-vertex módosítani: `geo.attributes.position.setY(i, ...)` + `geo.computeVertexNormals()`. Így könnyű tapered szárny-szerű alakzatokat építeni placeholderként, valódi B-Rep nélkül.
+
+---
+
+## OpenCascade.js / B-Rep gotchák
+
+> Ezek a tanulságok a **f24-brep POC** munkából származnak (IGES import + B-Rep szerkesztés OCC.js-szel). A `f24-frontend` jelenleg **nem** importál opencascade.js-t (a régi `copy-wasm` postinstall scriptet eltávolítottuk — lásd lentebb), de ha a `/nurbs` vagy egy jövőbeli B-Rep route újra OCC-t használ, ezeket nézd át először.
+
+### 1. OpenCascade.js verzió probléma — API lefedettség
+
+**Probléma:** Az `opencascade.js` **v1.1.1** NEM tartalmazza a szükséges API-kat. `IGESControl_Reader`, `BRepMesh_IncrementalMesh`, `TopExp_Explorer`, `BRep_Tool`, `Poly_Triangulation` — mind "unsupported" (piros) a `Supported APIs.md`-ben.
+
+**Megoldás:** Upgrade **v2.0.0-beta.b5ff984**-re. Ez tartalmaz mindent + TypeScript definíciókat.
+
+**Tanulság:** Az OCC npm package verziói között HATALMAS különbség van az API lefedettségben. Mindig ellenőrizd a `Supported APIs.md`-t.
+
+### 2. Vite 8 WASM ESM import
+
+**Probléma:** A Vite 8 blokkolta a WASM fájl ESM importját (`import x from "file.wasm"` → *"ESM integration proposal for Wasm is not supported"*).
+
+**Kipróbált megoldások:**
+- `vite-plugin-wasm` + `vite-plugin-top-level-await` — nem működött (rollup dependency hiányzott)
+- `optimizeDeps.exclude: ['opencascade.js']` — nem elég
+
+**Működő megoldás:** NE importáld az npm package-et közvetlenül. Helyette:
+- JS glue + WASM fájlok másolása `public/wasm/`-ba
+- `occ-init.ts`: fetch-eli a JS glue-t szövegként, blob URL-ként importálja
+- `locateFile`-lal irányítja a WASM-ra
+
+**Tanulság:** Nagy WASM könyvtáraknál a legbiztosabb út a `public/` mappán keresztüli kiszolgálás.
+
+> ⚠️ **f24-frontend kontextus:** ez a `public/wasm/` + postinstall `copy-wasm` minta korábban itt is megvolt, de mivel egyetlen forrásfájl sem importálja már az OCC-t, eltávolítottuk — a `copy-wasm` a hiányzó `.wasm` path miatt bukatta a Vercel deploy-t. Ha újra OCC kell, ezt a mintát kell visszahozni.
+
+### 3. `TransferRoots` argumentum szám
+
+**Probléma:** A `.d.ts` alapján `TransferRoots(onlyvisible, theProgress)` 2 argumentumot vár, de futáskor "expected 1 args".
+
+**Ok:** A 2.x beta buildben az Emscripten bind nem exportálja az override-okat.
+
+**Megoldás:** `reader.TransferRoots(new oc.Message_ProgressRange_1())` — 1 argumentummal.
+
+**Tanulság:** Az OCC TypeScript definíciók NEM mindig egyeznek a runtime bindingekkel. Mindig futásidőben tesztelni.
+
+### 4. Face orientáció és normális invertálás
+
+**Probléma:** Az IGES import után a modell "foltos" volt — egyes háromszögek befelé néztek.
+
+**Ok:** `TopoDS_Face` orientációja lehet `TopAbs_REVERSED`.
+
+**Megoldás:** `face.Orientation_1() === TopAbs_REVERSED` → index swap + normal sign flip.
+
+### 5. Renderelési foltosság (z-fighting és vertex color)
+
+**Probléma:** A modell "foltos" volt — a tesszelláció mintázata átlátszott.
+
+| Kipróbált megoldás | Eredmény |
+|---|---|
+| Per-face külön `THREE.Mesh` | Foltos (z-fighting) |
+| `polygonOffset` | Nem segített |
+| `logarithmicDepthBuffer` | Nem segített |
+| `computeVertexNormals()` | Foltos (éles éleknél rossz átlagolás) |
+| `vertexColors: true` + color attrib | EZ AZ OK — kikapcsolva foltmentes |
+| `MeshStandardMaterial` vertexColors nélkül | FOLTMENTES ✅ |
+
+**Gyökér ok:** `vertexColors: true` láthatóvá teszi a tesszelláció mintázatát görbült felületeken.
+
+**Tanulság:** Soha ne használj `vertexColors`-t finom színkülönbségekre görbült felületeken.
+
+### 6. `TopExp_Explorer` vs `TopTools_IndexedMapOfShape`
+
+**Probléma:** `TopExp_Explorer` duplikált face-eket adhat.
+
+**Megoldás:** `TopTools_IndexedMapOfShape` + `TopExp.MapShapes_1()` — garantáltan egyedi.
+
+### 7. OCC 2.x API argumentum számok
+
+**Probléma:** Sok OCC 2.x API metódus TÖBB argumentumot vár, mint amit a dokumentáció vagy az intuíció sugall. Az Emscripten binding "expected N args" hibát dob.
+
+| Metódus | Elvárt hívás | Valódi szignatúra |
+|---|---|---|
+| `TransferRoots` | `TransferRoots(bool, ProgressRange)` | `TransferRoots(ProgressRange)` — 1 arg |
+| `BRepTools.Clean` | `BRepTools.Clean(shape)` | `BRepTools.Clean(shape, true)` — 2 arg |
+| `BRepTools_ReShape.Apply` | `Apply(shape)` | `Apply(shape, ProgressRange)` — 2 arg |
+| `BRepMesh.Perform_1` | `Perform_1()` | `Perform_1(ProgressRange)` — 1 arg |
+
+**Tanulság:** OCC.js 2.x-ben MINDIG próbáld ki a hívást try/catch-csel, és olvasd el a hibaüzenetet: *"called with N arguments, expected M args"* pontosan megmondja hány kell.
+
+**Debugging technika:** Ha egy metódus "expected N args" hibát dob, próbáld meg:
+- `Message_ProgressRange_1()` hozzáadásával (sok helyen ez a plusz arg)
+- `true`/`false` bool flag-gel
+- `TopLoc_Location_1()` location argumentummal
+
+### 8. `BRepAdaptor` visszaad másolatot, nem referenciát (KRITIKUS!)
+
+**Probléma:** A geometria szerkesztés NEM propagál vissza a shape-be.
+
+**Kontextus:** Az OCC-ben a geometria (`Geom_BSplineCurve`, `Geom_BSplineSurface`) az edge-ek és face-ek TShape-jében van tárolva. A módosításhoz ezt a tényleges objektumot kell elérni.
+
+**`BRepAdaptor` viselkedése:**
+- `BRepAdaptor_Curve_2(edge).BSpline()` → **MÁSOLATOT** ad vissza, nem az eredeti görbét
+- `BRepAdaptor_Surface_2(face).BSpline()` → **MÁSOLATOT** ad vissza, nem az eredeti felületet
+- `SetPole()` a másolaton → NEM változtatja meg a shape-ben tárolt geometriát
+
+**Ezt jelenti:** Ha `adaptor.BSpline().get()` → `SetPole()` → `Clean()` → `Remesh()`, a mesh UGYANAZ marad, mert a shape-ben lévő görbe/felület változatlan.
+
+**Működő megoldás edge-ekre (`BRepBuilderAPI_MakeEdge` + ReShape):**
+1. `BRepAdaptor` → BSpline copy → `SetPole` a másolaton
+2. `Handle_Geom_BSplineCurve_2(modified_copy)` → handle
+3. `BRepBuilderAPI_MakeEdge_24(handle)` → új `TopoDS_Edge`
+4. `BRepTools_ReShape().Replace(oldEdge, newEdge)`
+5. `reshape.Apply(shape, ProgressRange)` → ÚJ SHAPE
+6. `BRepTools.Clean(newShape, true)` + `BRepMesh` → re-tessellate
+
+**NEM működő megoldás:**
+- `BRep_Tool.Surface(face)` → elméletileg az "igazi" `Handle<Geom_Surface>`-t adja, de a gyakorlatban nem sikerült a módosítást propagáltatni
+- `BRep_Builder.UpdateFace()` → tesztelés alatt, a felületi geometria cseréjéhez
+
+**Nyitott kérdés:** Hogyan módosítsuk a FACE felületi geometriát? A ReShape az edge-re működik, de a szomszédos face-ek felülete (`Geom_BSplineSurface`) NEM változik automatikusan, mert B-Rep-ben az edge curve és a face surface különálló.
+
+**Tanulság:** Az OCC-ben a `BRepAdaptor` soha nem ad direkt hozzáférést a shape belső geometriájához. Mindig `BRep_Tool` statikus metódusokat vagy `BRep_Builder`-t kell használni a módosításhoz, és ÚJ SHAPE-et kell létrehozni (ReShape vagy Builder pattern).
+
+### 9. GPU picking: face + edge unified entity ID
+
+**Probléma:** Eredetileg csak face-ek voltak kiválaszthatók GPU pickingel. Edge kiválasztáshoz bővíteni kellett.
+
+**Megoldás:** Unified entity ID space a pick scene-ben:
+- Entity ID `0` = háttér (fekete)
+- Entity ID `1..N` = face-ek (per-face `MeshBasicMaterial` egyedi színnel)
+- Entity ID `N+1..N+M` = edge-ek (`LineMaterial` linewidth=10, egyedi szín)
+
+A `colorToEntityId()` visszafejtés után `decodePickResult(id, numFaces)` → `{ type: 'face'|'edge', index }`.
+
+**Edge pick trükk:** Az edge pick mesh `linewidth: 10` (10 pixel vastag) a pick scene-ben, hogy könnyen kattintható legyen, miközben a vizuális edge csak 1-3px.
+
+**Tanulság:** A GPU picking skálázható — bármennyi entitás típus hozzáadható az ID space bővítésével.
+
+### 10. React: "Cannot update component while rendering" hiba
+
+**Probléma:** *Cannot update a component (BRep) while rendering a different component (EdgeEditor).*
+
+**Ok:** Az `EdgeEditor` `useEffect`-jében és a setState callback-ekben közvetlenül hívtuk a parent `onPointSelect()` callback-et, ami setState-et triggerelt a parent-ben renderelés közben.
+
+**Megoldás:** `queueMicrotask(() => onPointSelect(...))` — a parent setState-et a következő microtask-ba halasztjuk.
+
+Másik probléma: a `setEditedPoles` updater function-ön belül NE hívj parent callback-et:
+
+```ts
+// ROSSZ:
+setEditedPoles(prev => {
+  const next = ...;
+  onPointSelect(next.find(...)); // setState renderelés közben!
+  return next;
+});
+// JÓ:
+setEditedPoles(prev => prev.map(...));
+queueMicrotask(() => onPointSelect(updatedPole)); // setState a microtaskban
+```
+
+**Tanulság:** React strict mode-ban a setState updater function-ökön belül soha ne hívj más komponens setState-jét. Használj `queueMicrotask` vagy `useEffect` a hatás kiváltásához.
+
+### 11. 2D Edge Curve Editor: síkba vetítés
+
+**Probléma:** Hogyan jelenítsünk meg egy 3D BSpline görbét 2D-ben, szerkeszthetően?
+
+**Megoldás:** Best-fit sík számítás a kontrollpontokból:
+- **U tengely** = `normalize(utolsó pole - első pole)` — a görbe "hossziránya"
+- **V tengely** = a maximális eltérés iránya az U tengelytől — a "görbületi irány"
+- **N tengely** = `U × V` — a sík normálisa
+- Minden pont vetítése: `u = dot(p - origin, axisU)`, `v = dot(p - origin, axisV)`
+- Visszavetítés: `p3d = origin + u*axisU + v*axisV + n_component*axisN` (az N komponens megmarad)
+
+**Görbületi approximáció:** Chaikin corner-cutting 4 iterációval — nem pontos BSpline, de vizuálisan megfelelő a szerkesztő panelhez.
+
+**Drag viselkedés:** Az egér mozgatás a síkban történik (U,V), a sík-normális irányú komponens (`n_component`) megmarad az eredeti értéken — így nem veszítünk 3D információt.
+
+### 12. Edge-to-face adjacency mapping
+
+**Probléma:** Az edge kiválasztáskor tudni kell, melyik face-ek szomszédosak.
+
+**Megoldás:**
+- Minden face-hez `TopExp_Explorer(face, TopAbs_EDGE)` iteráció
+- Minden talált edge → `edgeMap.FindIndex(edgeShape)` → 0-based index
+- `Map<edgeIndex, faceIndex[]>` adjacency térkép
+
+**Ismert probléma:** Néhány edge-nél az adjacency üres (`[]`). Lehetséges ok: az explorer által visszaadott edge shape-ek orientációja különbözhet a globális `edgeMap`-ben tároltaktól, és `FindIndex` 0-t ad vissza.
+
+**Lehetséges javítás:** `TopExp.MapShapesAndAncestors()` használata, ami natívan kezeli az orientáció különbségeket.
+
+### 13. Vite HMR cache: módosított modul nem frissül
+
+**Probléma:** A `src/lib/edge-edit.ts` módosítása után a régi verzió futott a böngészőben. A `console.log('[EdgeEdit] START')` az első sorban volt, mégsem jelent meg.
+
+**Ok:** A Vite HMR nem mindig frissíti az összes importált modult, különösen ha az importáló modul (`BRep.tsx`) nem változott.
+
+**Megoldás:** Az egész OCC edit logikát közvetlenül a `BRep.tsx` `handleEdgeApply` callback-jébe tettük (inline), így a Vite HMR biztosan frissíti.
+
+**Tanulság:** Ha egy importált modul változásai nem jelennek meg futásidőben:
+- Ellenőrizd, hogy az importáló modul is változott-e (HMR trigger)
+- Próbáld inline-olni a logikát debug célra
+- Hard refresh (Ctrl+Shift+R) a böngészőben
+- Vite dev server újraindítása (ha semmi más nem segít)
+
+### 14. `BRepBuilderAPI_MakeEdge` konstruktor variánsok
+
+**Probléma:** 65 db `BRepBuilderAPI_MakeEdge_*` konstruktor van az OCC.js buildben. Melyik működik?
+
+**Tesztelés:** Végigpróbáltuk az összeset különböző handle típusokkal.
+
+**Működő kombináció:**
+- `Handle_Geom_BSplineCurve_2(bspline)` + `BRepBuilderAPI_MakeEdge_24(handle)` → MŰKÖDIK
+- `Handle_Geom_Curve_2(bspline)` is működik handle-ként
+
+**Nem működő:**
+- `BRepBuilderAPI_MakeEdge_9(handle, u0, u1)` — megbízhatatlan
+- Direkten bspline objektum (handle nélkül) — nem működik
+
+**Tanulság:** Az OCC.js-ben a konstruktor variánsok számozása a C++ overload sorrendjéből ered. Nincs dokumentáció — végig kell próbálni őket.

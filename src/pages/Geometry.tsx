@@ -16,7 +16,7 @@ import { Footer } from '@/components/Footer';
 import { Input } from '@/components/ui/input';
 import { GeometryCard } from '@/components/GeometryCard';
 import { NewGeometryModal, NewGeometryPayload } from '@/components/NewGeometryModal';
-import { GEOMETRIES } from '@/data/geometries';
+import { GEOMETRIES, createGeometry } from '@/data/geometries';
 
 const PAGE_SIZE = 10;
 type ViewMode = 'list' | 'grid';
@@ -163,14 +163,10 @@ export function Geometry() {
   }
 
   function handleCreate(payload: NewGeometryPayload) {
-    // For now: fabricate an id from the name, close modal, navigate to edit screen.
-    // Real impl: POST to API, get id back, navigate.
-    const id = payload.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+    // Mock stand-in for a POST: append to the list, then open the new item in the editor.
+    const geometry = createGeometry(payload.name, payload.description);
     setModalOpen(false);
-    navigate(`/geometry/${id || 'new'}`);
+    navigate(`/geometry/${geometry.id}`);
   }
 
   return (
