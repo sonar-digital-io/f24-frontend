@@ -376,15 +376,16 @@ export function CompositionNew() {
         </div>
       </div>
 
-      {/* Scrollable tab content panels — floated over the canvas */}
-      <div className="absolute left-4 right-4 top-[60px] bottom-4 overflow-y-auto">
+      {/* Tab content panels — pointer-events-none on wrapper so the canvas
+           behind receives orbit/zoom events; each panel restores pointer-events */}
+      <div className="pointer-events-none absolute bottom-4 left-4 right-4 top-[60px]">
         {activeTab === 'general' && (
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleGeneralSubmit();
             }}
-            className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm"
+            className="pointer-events-auto flex w-full max-w-[468px] flex-col gap-4 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm [max-height:calc(100vh-145px)]"
           >
             <div className="flex w-full flex-col gap-2">
               <Label htmlFor="comp-name" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
@@ -457,7 +458,7 @@ export function CompositionNew() {
         )}
 
         {activeTab === 'geometry' && (
-          <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+          <div className="pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Geometries</h2>
               <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
@@ -551,7 +552,7 @@ export function CompositionNew() {
         )}
 
         {activeTab === 'layup-mapping' && (
-          <div className="flex w-full max-w-[480px] flex-col gap-6 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+          <div className="pointer-events-auto flex max-h-[calc(100vh-145px)] w-full max-w-[480px] flex-col gap-6 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
             <button
               type="button"
               aria-label="Settings"
@@ -590,7 +591,11 @@ export function CompositionNew() {
           </div>
         )}
 
-        {activeTab === 'transversal-mapping' && <TransversalMappingSection />}
+        {activeTab === 'transversal-mapping' && (
+          <div className="pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto">
+            <TransversalMappingSection />
+          </div>
+        )}
       </div>
       </main>
 
