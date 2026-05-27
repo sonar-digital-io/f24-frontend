@@ -179,7 +179,7 @@ export function GeometryEdit() {
   const geometry = isNew ? undefined : GEOMETRIES.find((g) => g.id === id);
   const name = isNew ? 'New geometry' : (geometry?.name ?? id ?? 'New geometry');
 
-  const [activeTab, setActiveTab] = useState('global-properties');
+  const [activeTab, setActiveTab] = useState(isNew ? 'create' : 'global-properties');
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
   const [profileFolded, setProfileFolded] = useState(false);
   const [props, setProps] = useState<GlobalProperties>({
@@ -229,6 +229,7 @@ export function GeometryEdit() {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-9">
               <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6]/95 p-[3px] backdrop-blur-sm">
                 {[
+                  ...(isNew ? [{ value: 'create', label: 'Create geometry' }] : []),
                   { value: 'global-properties', label: 'Global properties' },
                   { value: 'profile-distribution', label: 'Profile distribution' },
                   { value: 'profiles', label: 'Profiles' },
@@ -238,7 +239,7 @@ export function GeometryEdit() {
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    disabled={isNew && tab.value !== 'global-properties'}
+                    disabled={isNew && tab.value !== 'create'}
                     className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] disabled:pointer-events-none disabled:opacity-40"
                   >
                     {tab.label}
@@ -285,19 +286,21 @@ export function GeometryEdit() {
             Width depends on the active tab. z-30 so it sits above the render toggle (z-20). */}
         <aside
           className={`absolute left-4 top-[52px] z-30 ${
-            activeTab === 'profile-distribution'
-              ? profileFolded
-                ? 'w-[516px] max-w-[calc(100vw-2rem)]'
-                : 'w-[924px] max-w-[calc(100vw-2rem)]'
-              : activeTab === 'profiles'
-                ? 'w-[404px] max-w-[calc(100vw-2rem)]'
-                : activeTab === 'stacking'
+            activeTab === 'create'
+              ? 'w-[468px] max-w-[calc(100vw-2rem)]'
+              : activeTab === 'profile-distribution'
+                ? profileFolded
                   ? 'w-[516px] max-w-[calc(100vw-2rem)]'
-                  : 'w-[280px]'
+                  : 'w-[924px] max-w-[calc(100vw-2rem)]'
+                : activeTab === 'profiles'
+                  ? 'w-[404px] max-w-[calc(100vw-2rem)]'
+                  : activeTab === 'stacking'
+                    ? 'w-[516px] max-w-[calc(100vw-2rem)]'
+                    : 'w-[280px]'
           }`}
         >
-          {activeTab === 'global-properties' && isNew && (
-            <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+          {activeTab === 'create' && (
+            <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
               <div className="flex flex-col gap-1">
                 <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">
                   Project configuration
