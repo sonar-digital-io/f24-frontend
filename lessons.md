@@ -361,6 +361,96 @@ Geometry edit overlay-réteg sorrendje (lentről felfelé):
 - properties panel, sub-toolbar (z-30)
 - MainNav (z-50, sticky)
 
+---
+
+## OpenCascade.js + Three.js gotchák
+
+### Three.js r.182: `Object3D.position` read-only — `Object.assign` dob TypeErrort
+
+Three.js r.182-ben a `Object3D.position` (és más Vector3 property-k, pl. `scale`, `up`) **non-writable** lett strict mode-ban. Az `Object.assign` által végrehajtott `target.position = …` strict mode-ban `TypeError: Cannot assign to read only property 'position'`-t dob.
+
+**Hibás (crashes react renderben):**
+```tsx
+scene.add(Object.assign(new THREE.DirectionalLight(0xc8d8e8, 0.35), {
+  position: new THREE.Vector3(-8, 4, -8),  // ← TypeError!
+}));
+```
+
+**Helyes (Vector3-t mutálni kell, nem lecserélni):**
+```tsx
+const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.35);
+fillLight.position.set(-8, 4, -8);  // ← .set() mutálja a meglévő Vector3-t
+scene.add(fillLight);
+```
+
+**Miért crashi Reactet?** A Three.js setup `useEffect`-ben fut, de a strict mode double-invoke + Vite HMR interakció miatt a hiba szinkron renderbe kerül, React error boundary elkapja, és az egész root DOM kiürül (`<div id="root"></div>` marad).
+
+**Debug trace:** A React "The above error occurred in the \<OccViewer\> component" message mindig megelőzi az igazi hibát — a tényleges hibát egy Error Boundary `componentDidCatch` callbackkel lehet megfogni (lásd `mcp__Claude_Preview__preview_eval` + EB wrapper pattern).
+
+### opencascade.js v1.1.1 — minden C++ constructor/overload `_N` suffix-et kap
+
+A v1.1.1 Emscripten-compiled API nem exportál base class neveket (`BRepPrimAPI_MakeSphere`), csak indexed overloadokat. A megfelelő suffix-et **runtime teszteléssel** kell megállapítani (a JSDoc sem tartalmazza).
+
+Felderített suffix map:
+
+| Hívás | Suffix |
+|-------|--------|
+| `BRepPrimAPI_MakeSphere(R)` | `_1` |
+| `BRepPrimAPI_MakeTorus(R1, R2)` | `_1` |
+| `BRepPrimAPI_MakeBox(pnt, dx, dy, dz)` | `_2` — 1. arg kötelezően `gp_Pnt_3` (nem `(dx,dy,dz)`) |
+| `BRepMesh_IncrementalMesh(shape, lin, isRel, ang, par)` | `_2` |
+| `TopExp_Explorer(shape, FACE, SHAPE)` | `_2` — mind 3 arg kötelező |
+| `TopoDS.Face(shape)` | `Face_1` |
+| `TopLoc_Location()` | `_1` |
+| `BRep_Tool.Triangulation(face, loc)` | statikus, suffix nélkül |
+| `face.Orientation()` | `Orientation_1()` — `.value` property-t ad vissza |
+| `gp_Pnt(x,y,z)` | `_3` |
+| `gp_Dir(x,y,z)` | `_4` — nem `_3` |
+| `gp_Vec(x,y,z)` | `_4` |
+| `gp_Ax1(pnt, dir)` | `_2` |
+| `gp_Trsf()` | `_1` |
+| `trsf.SetRotation(ax1, angle)` | `SetRotation_1` |
+| `BRepBuilderAPI_Transform(shape, trsf, copy)` | `_2` |
+
+**Enum access:** `oc.TopAbs_ShapeEnum.TopAbs_FACE`, **NEM** `oc.TopAbs_FACE`. Orientation compare: `.value === oc.TopAbs_Orientation.TopAbs_REVERSED.value`.
+
+### Vite 7.x WASM konfiguráció opencascade.js-hez
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  assetsInclude: ['**/*.wasm'],   // WASM → statikus asset URL
+  optimizeDeps: {
+    exclude: ['opencascade.js'],   // ne próbálja pre-bundle-olni a 63MB-ot
+  },
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',  // SharedArrayBuffer-hez kell
+    },
+  },
+});
+```
+
+Anélkül a WASM letöltés CORS hibával vagy `SharedArrayBuffer is not defined` hibával bukik.
+
+### Vite dev server portkonfliktus: preview tool stale servert nyit
+
+Ha a `preview_start` tool egy porton indul, majd `npm run dev` manuálisan is fut (pl. újraindítás miatt), Vite fallback portra vált (pl. 5124→5126). A preview tool a régi stale porton `5124` marad — és az ott futó OLD kód-build-et tálal.
+
+**Tünetek:** page betölt de React root üres / HMR látszólag működik de a hibák nem javulnak.
+
+**Fix:**
+1. `preview_stop` az aktív servert
+2. `Stop-Process -Id <PID> -Force` az ütköző folyamatokra (netstat + PID)
+3. `preview_start` újra — most Vite megkapja a kívánt portot
+
+### WebGL canvas `preserveDrawingBuffer: false` — `toDataURL()` üres képet ad
+
+A Three.js `WebGLRenderer` default-ja `preserveDrawingBuffer: false`, ami azt jelenti, hogy a rajzolt frame a GPU-ba presentálás után törlődik. Ha `canvas.toDataURL()` vagy `ctx.drawImage(canvas, …)` hívódik frame-en kívül, üres/egyszínű képet kapunk.
+
+**Megkerülés:** ellenőrizd a `status` state-et (`'ready'` → tessellation OK) ahelyett, hogy a canvas pixeleit olvasnád. Vagy: kérj `preserveDrawingBuffer: true`-t a rendererbe (teljesítmény-cost van).
+
 **A panel z-30** akkor fontos, ha **vízszintesen átfed** a render toggle-val. A Profile distribution tab-on a panel 924px wide és a render toggle a viewport közepén — egy ~1500px viewport-on biztosan átfednek. A 280px-es panelek nem fednek át (a render toggle 700px+ left-tel kezdődik). Mindkét esetben z-30 a panel megoldja az átfedéseket.
 
 A sub-toolbar és panel nem fednek vertikálisan (`top-0 + h-52` toolbar vs `top-[52px]` panel = perfectly adjacent), tehát ott a z-index nem számít.
