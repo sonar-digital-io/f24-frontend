@@ -1,15 +1,20 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
+  Check,
+  ChevronDown,
   ChevronRight,
   Copy,
   GripVertical,
   LayoutGrid,
   List as ListIcon,
   Plus,
+  Redo2,
   Search,
+  Settings,
   SquareArrowOutUpRight,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
@@ -26,6 +31,43 @@ import { TransversalMappingSection } from '@/components/TransversalMappingSectio
 import { GEOMETRIES } from '@/data/geometries';
 import { LAYUPS } from '@/data/layups';
 import { COMPOSITIONS, createComposition } from '@/data/compositions';
+
+type RenderMode = 'solid' | 'wireframe';
+
+interface RenderToggleProps {
+  value: RenderMode;
+  onChange: (v: RenderMode) => void;
+}
+
+function RenderToggle({ value, onChange }: RenderToggleProps) {
+  return (
+    <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white/95 p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm">
+      {(['solid', 'wireframe'] as const).map((mode) => {
+        const active = value === mode;
+        return (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onChange(mode)}
+            className={`inline-flex h-6 items-center gap-1 rounded px-2 text-[12px] font-medium capitalize ${
+              active ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#6b7280] hover:bg-[#f1f5f9]'
+            }`}
+          >
+            {active && <Check className="h-3 w-3" strokeWidth={2.5} />}
+            {mode}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        aria-label="Render mode menu"
+        className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9]"
+      >
+        <ChevronDown className="h-3 w-3" strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
 
 interface LayupMapping {
   id: string;
@@ -213,6 +255,7 @@ export function CompositionNew() {
   const [activeTab, setActiveTab] = useState<
     'general' | 'geometry' | 'layup-mapping' | 'transversal-mapping'
   >('general');
+  const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
 
   // General
   const [name, setName] = useState(existing?.name ?? '');
@@ -336,7 +379,7 @@ export function CompositionNew() {
       {/* Body: full-bleed OCC canvas + floating overlays */}
       <main className="relative flex-1 overflow-hidden">
         {/* OCC canvas fills the whole area */}
-        <OccViewer className="absolute inset-0 w-full h-full" />
+        <OccViewer wireframe={renderMode === 'wireframe'} className="absolute inset-0 w-full h-full" />
 
       {/* Sub-toolbar floating above the canvas */}
       <div className="absolute inset-x-0 top-0 z-40 h-[52px] border-b border-[#e5e7eb]/70">
@@ -365,7 +408,24 @@ export function CompositionNew() {
           {titleText}
         </h1>
 
-        <div className="absolute inset-y-0 right-4 flex items-center">
+        <div className="absolute inset-y-0 right-4 flex items-center gap-2">
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white/95 p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm">
+            <button
+              type="button"
+              aria-label="Undo"
+              className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
+            >
+              <Undo2 className="h-3.5 w-3.5" strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              aria-label="Redo"
+              className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
+            >
+              <Redo2 className="h-3.5 w-3.5" strokeWidth={2} />
+            </button>
+          </div>
           <Link
             to="/composition"
             className="inline-flex h-8 items-center gap-2 rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
@@ -374,6 +434,18 @@ export function CompositionNew() {
             <X className="h-4 w-4 opacity-70" strokeWidth={1.33} />
           </Link>
         </div>
+      </div>
+
+      {/* Render toggle + settings (top-center, below sub-toolbar) */}
+      <div className="absolute left-1/2 top-[60px] z-20 flex -translate-x-1/2 items-center gap-2 pt-2">
+        <RenderToggle value={renderMode} onChange={setRenderMode} />
+        <button
+          type="button"
+          aria-label="Viewer settings"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white/95 text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#f1f5f9]"
+        >
+          <Settings className="h-4 w-4" strokeWidth={2} />
+        </button>
       </div>
 
       {/* Tab content panels — pointer-events-none on wrapper so the canvas

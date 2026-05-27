@@ -15,8 +15,7 @@ import { MainNav } from '@/components/MainNav';
 import { Footer } from '@/components/Footer';
 import { Input } from '@/components/ui/input';
 import { GeometryCard } from '@/components/GeometryCard';
-import { NewGeometryModal, NewGeometryPayload } from '@/components/NewGeometryModal';
-import { GEOMETRIES, createGeometry } from '@/data/geometries';
+import { GEOMETRIES } from '@/data/geometries';
 
 const PAGE_SIZE = 10;
 type ViewMode = 'list' | 'grid';
@@ -118,15 +117,12 @@ export function Geometry() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortState>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
-  const [modalOpen, setModalOpen] = useState(false);
 
-  // Open modal automatically when arriving with ?new=1 (from Home dashboard)
+  // Navigate to inline creation flow when arriving with ?new=1 (from Home dashboard)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('new') === '1') {
-      setModalOpen(true);
-      // Clean the query param so subsequent navigations don't reopen the modal
-      navigate('/geometry', { replace: true });
+      navigate('/geometry/new', { replace: true });
     }
   }, [location.search, navigate]);
 
@@ -162,13 +158,6 @@ export function Geometry() {
     );
   }
 
-  function handleCreate(payload: NewGeometryPayload) {
-    // Mock stand-in for a POST: append to the list, then open the new item in the editor.
-    const geometry = createGeometry(payload.name, payload.description);
-    setModalOpen(false);
-    navigate(`/geometry/${geometry.id}`);
-  }
-
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
       <MainNav />
@@ -181,7 +170,7 @@ export function Geometry() {
               <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Geometries</h2>
               <button
                 type="button"
-                onClick={() => setModalOpen(true)}
+                onClick={() => navigate('/geometry/new')}
                 className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
               >
                 New geometry
@@ -318,12 +307,6 @@ export function Geometry() {
       </main>
 
       <Footer />
-
-      <NewGeometryModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onCreate={handleCreate}
-      />
     </div>
   );
 }

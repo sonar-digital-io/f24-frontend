@@ -15,6 +15,7 @@ export interface Material {
   description: string;
   lastUpdated: string;
   details: MaterialDetails;
+  source: 'library' | 'own';
 }
 
 export const MATERIALS: Material[] = [
@@ -24,6 +25,7 @@ export const MATERIALS: Material[] = [
     type: 'Consolidated Ply',
     description: 'Continuous glass fiber reinforced PA6 matrix. High impact resistance; Vf =~ 47%',
     lastUpdated: 'v2026/01',
+    source: 'library',
     details: {
       reinforcement: 'Continuous E-Glass',
       matrix: 'PA 6',
@@ -39,6 +41,7 @@ export const MATERIALS: Material[] = [
     description:
       'Carbon fiber reinforced PA6 matrix. Optimized for high stiffness-to-weight ratio and thermoforming.',
     lastUpdated: 'v2026/01',
+    source: 'library',
     details: {
       reinforcement: 'Continuous Carbon',
       matrix: 'PA 6',
@@ -53,6 +56,7 @@ export const MATERIALS: Material[] = [
     type: 'UD Carbon Ply',
     description: 'High-strength UD prepreg; Vf =~ 60%. Standard spar cap reinforcement.',
     lastUpdated: 'v2025/12',
+    source: 'library',
     details: {
       reinforcement: 'T700S Carbon',
       matrix: 'Epoxy',
@@ -67,6 +71,7 @@ export const MATERIALS: Material[] = [
     type: 'Biaxial Ply (±45°)',
     description: 'Non-crimp fabric (NCF); optimized for shear web and skin torsion stiffness.',
     lastUpdated: 'v2025/12',
+    source: 'library',
     details: {
       reinforcement: 'E-Glass NCF',
       matrix: 'Epoxy',
@@ -81,6 +86,7 @@ export const MATERIALS: Material[] = [
     type: 'UD Ply',
     description: 'In-house characterized high-modulus UD. Post-cured at 80°C. Validated fatigue data.',
     lastUpdated: '2025-12-10',
+    source: 'own',
     details: {
       reinforcement: 'HM Carbon',
       matrix: 'Epoxy',
@@ -95,6 +101,7 @@ export const MATERIALS: Material[] = [
     type: 'Core (PET Foam)',
     description: 'Closed-cell thermoplastic foam; 80 kg/m³ density. Shear-critical applications.',
     lastUpdated: 'v2025/11',
+    source: 'library',
     details: {
       reinforcement: '—',
       matrix: 'PET Foam',
@@ -110,6 +117,7 @@ export const MATERIALS: Material[] = [
     description:
       'E-Glass chopped strand mat (450gsm) with epoxy matrix. Isotropic in-plane behavior for non-structural fill.',
     lastUpdated: '2025-11-19',
+    source: 'own',
     details: {
       reinforcement: 'E-Glass CSM',
       matrix: 'Epoxy',
@@ -124,6 +132,7 @@ export const MATERIALS: Material[] = [
     type: 'Core (Balsa)',
     description: 'End-grain balsa; high compressive strength-to-weight ratio for shell sandwich.',
     lastUpdated: 'v2025/10',
+    source: 'library',
     details: {
       reinforcement: '—',
       matrix: 'Balsa wood',
@@ -139,6 +148,7 @@ export const MATERIALS: Material[] = [
     description:
       'In-house 2x2 twill (Carbon/Glass hybrid). Balanced weave for transition zones. Vf =~ 52%',
     lastUpdated: '2025-10-22',
+    source: 'own',
     details: {
       reinforcement: 'Carbon/Glass 2x2',
       matrix: 'Epoxy',
@@ -154,6 +164,7 @@ export const MATERIALS: Material[] = [
     description:
       'Leading Edge Protection (LEP); high erosion resistance, validated for 15m/s rain impact.',
     lastUpdated: '2025-10-20',
+    source: 'own',
     details: {
       reinforcement: 'PU Elastomer',
       matrix: 'PU Elastomer',
@@ -185,6 +196,7 @@ export function createMaterial(input: {
     type: input.type,
     description: input.description.trim(),
     lastUpdated: materialStamp(),
+    source: 'own',
     details: {
       reinforcement: '—',
       matrix: '—',

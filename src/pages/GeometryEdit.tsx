@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ChevronDown, Settings, Check, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ChevronDown, Settings, Check, X, Undo2, Redo2 } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { OccViewer } from '@/components/OccViewer';
 import { ProfileDistributionPanel } from '@/components/ProfileDistributionPanel';
@@ -8,8 +8,18 @@ import { ProfilesPanel } from '@/components/ProfilesPanel';
 import { StackingPanel } from '@/components/StackingPanel';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GEOMETRIES } from '@/data/geometries';
+import { GEOMETRIES, createGeometry } from '@/data/geometries';
+
+const BLADE_TYPES = ['Wind turbine blade', 'Gas turbine blade', 'Aero blade', 'Hydraulic blade'];
+const MANUFACTURING_TECHNOLOGIES = [
+  'To be determined',
+  'Vacuum infusion',
+  'Prepreg autoclave',
+  'Filament winding',
+  'Resin transfer moulding',
+];
 
 type RenderMode = 'solid' | 'wireframe';
 
@@ -17,6 +27,76 @@ interface GlobalProperties {
   nominalRadius: string;
   rootRadius: string;
   stackingReference: string;
+}
+
+interface SelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+}
+
+function Select({ value, onChange, options, placeholder = 'Select' }: SelectProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex h-9 w-full items-center justify-between rounded-md border border-[#e2e8f0] bg-white px-3 py-1 text-left text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f9fafb] focus:outline-none"
+      >
+        <span className={value ? 'text-[#0a0a0a]' : 'text-[#6b7280]'}>{value || placeholder}</span>
+        <ChevronDown
+          className={`h-4 w-4 text-[#6b7280] transition-transform ${open ? 'rotate-180' : ''}`}
+          strokeWidth={2}
+        />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-64 overflow-y-auto rounded-md border border-[#e5e7eb] bg-white py-1 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"
+        >
+          {options.map((opt) => {
+            const selected = opt === value;
+            return (
+              <li key={opt} role="option" aria-selected={selected}>
+                <button
+                  type="button"
+                  onClick={() => { onChange(opt); setOpen(false); }}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-[14px] leading-5 ${
+                    selected ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
+                  }`}
+                >
+                  <span>{opt}</span>
+                  {selected && <Check className="h-4 w-4" strokeWidth={2} />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function CoordinateGizmo() {
@@ -94,8 +174,10 @@ function FormField({ label, value, onChange }: FormFieldProps) {
 
 export function GeometryEdit() {
   const { id } = useParams<{ id: string }>();
-  const geometry = GEOMETRIES.find((g) => g.id === id);
-  const name = geometry?.name ?? id ?? 'New geometry';
+  const navigate = useNavigate();
+  const isNew = id === 'new';
+  const geometry = isNew ? undefined : GEOMETRIES.find((g) => g.id === id);
+  const name = isNew ? 'New geometry' : (geometry?.name ?? id ?? 'New geometry');
 
   const [activeTab, setActiveTab] = useState('global-properties');
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
@@ -106,8 +188,20 @@ export function GeometryEdit() {
     stackingReference: '0.3',
   });
 
-  function updateField(name: keyof GlobalProperties, value: string) {
-    setProps((p) => ({ ...p, [name]: value }));
+  // New geometry project config state
+  const [newBladeType, setNewBladeType] = useState('');
+  const [newManufacturing, setNewManufacturing] = useState('To be determined');
+  const [newName, setNewName] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+
+  function updateField(key: keyof GlobalProperties, value: string) {
+    setProps((p) => ({ ...p, [key]: value }));
+  }
+
+  function handleCreate() {
+    if (!newBladeType || !newName.trim()) return;
+    const geom = createGeometry(newName.trim(), newDescription.trim());
+    navigate(`/geometry/${geom.id}`, { replace: true });
   }
 
   return (
@@ -136,7 +230,8 @@ export function GeometryEdit() {
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
+                    disabled={isNew && tab.value !== 'global-properties'}
+                    className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] disabled:pointer-events-none disabled:opacity-40"
                   >
                     {tab.label}
                   </TabsTrigger>
@@ -149,7 +244,24 @@ export function GeometryEdit() {
             {name}
           </h1>
 
-          <div className="absolute inset-y-0 right-4 flex items-center">
+          <div className="absolute inset-y-0 right-4 flex items-center gap-2">
+            {/* Undo / Redo */}
+            <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white/95 p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm">
+              <button
+                type="button"
+                aria-label="Undo"
+                className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
+              >
+                <Undo2 className="h-3.5 w-3.5" strokeWidth={2} />
+              </button>
+              <button
+                type="button"
+                aria-label="Redo"
+                className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
+              >
+                <Redo2 className="h-3.5 w-3.5" strokeWidth={2} />
+              </button>
+            </div>
             <Link
               to="/geometry"
               className="inline-flex h-8 items-center gap-2 rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
@@ -175,7 +287,70 @@ export function GeometryEdit() {
                   : 'w-[280px]'
           }`}
         >
-          {activeTab === 'global-properties' && (
+          {activeTab === 'global-properties' && isNew && (
+            <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+              <div className="flex flex-col gap-1">
+                <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">
+                  Project configuration
+                </p>
+                <p className="text-[13px] leading-5 text-[#6b7280]">
+                  Your selection defines the starting geometry, which can be fully customized in the next steps.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Blade type</Label>
+                <Select value={newBladeType} onChange={setNewBladeType} options={BLADE_TYPES} />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+                  Manufacturing technology
+                </Label>
+                <Select value={newManufacturing} onChange={setNewManufacturing} options={MANUFACTURING_TECHNOLOGIES} />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Name</Label>
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Geometry name"
+                  className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Description</Label>
+                <Textarea
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  placeholder="Optional description"
+                  rows={2}
+                  className="min-h-[60px] rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <Link
+                  to="/geometry"
+                  className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+                >
+                  Cancel
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  disabled={!newBladeType || !newName.trim()}
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'global-properties' && !isNew && (
             <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
               <FormField
                 label="Nominal radius (m)"

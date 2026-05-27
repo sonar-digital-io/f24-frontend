@@ -106,6 +106,17 @@ function MaterialRow({ material, expanded, onToggle, onOpen }: MaterialRowProps)
         <td className="w-[240px] px-3 py-4 align-top text-[14px] leading-5 text-[#0a0a0a]">
           {material.type}
         </td>
+        <td className="w-[110px] px-3 py-4 align-top">
+          {material.source === 'library' ? (
+            <span className="inline-flex items-center rounded-full bg-[#dbeafe] px-2 py-0.5 text-[12px] font-medium leading-none text-[#1d4ed8]">
+              Library
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full bg-[#dcfce7] px-2 py-0.5 text-[12px] font-medium leading-none text-[#15803d]">
+              Own
+            </span>
+          )}
+        </td>
         <td className="px-3 py-4 align-top text-[14px] leading-5 text-[#0a0a0a]">
           {material.description}
         </td>
@@ -143,7 +154,7 @@ function MaterialRow({ material, expanded, onToggle, onOpen }: MaterialRowProps)
           className="border-b border-[#e5e7eb] bg-white"
         >
           <td className="w-[52px]" />
-          <td colSpan={5} className="px-3 pb-5 pt-1">
+          <td colSpan={6} className="px-3 pb-5 pt-1">
             <MaterialDetailGrid details={material.details} />
           </td>
         </tr>
@@ -342,6 +353,11 @@ export function Material() {
                         onClick={handleSort}
                       />
                     </th>
+                    <th className="h-10 w-[110px] px-3 text-left">
+                      <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
+                        Source
+                      </span>
+                    </th>
                     <th className="h-10 px-3 text-left">
                       <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
                         Description
@@ -370,7 +386,7 @@ export function Material() {
                   ))}
                   {pageRows.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                      <td colSpan={7} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
                         No materials match your search.
                       </td>
                     </tr>
