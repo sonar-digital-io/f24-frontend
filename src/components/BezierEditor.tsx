@@ -2,62 +2,43 @@ import { useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 
 /**
- * Interactive cubic Bézier editor with 4 control points.
+ * Interactive Catmull-Rom spline editor with N control points.
  *
- * - State lives in DATA space (x: 0..1, y: 0..yMax). Pixel coordinates are
- *   computed on every render — so resizing / zoom is a no-op for the state.
- * - Drag uses Pointer Events + setPointerCapture for unified touch + mouse +
- *   pen behaviour. `touch-action: none` on draggable elements prevents the
- *   page from scrolling while dragging on mobile.
- * - Two-way sync: parent owns the points state and passes onChange. The same
- *   array is rendered by the chart AND by the table input rows in
- *   ProfileDistributionPanel, so editing either updates the other.
- * - Constraints: P0.x = 0 (root) and P3.x = 1 (tip) are fixed; inner control
- *   points must stay monotone in x (P0.x ≤ P1.x ≤ P2.x ≤ P3.x).
+ * All points are "on-curve" anchors — the smooth curve passes through each
+ * one. This makes adding intermediate knots intuitive.
  *
- * Zoom / pan:
- * - viewBox-based zoom. We don't transform individual nodes — instead the
- *   SVG viewBox shrinks around a focal point (chart center for buttons,
- *   cursor for scroll-wheel). This means drag math via getScreenCTM() picks
- *   up the new transform automatically — no manual zoom-adjustment in the
- *   control-point drag handler.
- * - Pan only active when zoom > 1 (no reason to pan when the whole chart fits).
- * - Double-click on the background resets zoom + pan.
+ * Interactions:
+ * - Click on background  → insert a new anchor at that position
+ * - Drag anchor          → move it (endpoints locked to xMin / xMax)
+ * - Double-click anchor  → remove it (not available for the two endpoints)
+ * - +/- buttons          → zoom in / out
+ * - Drag background      → pan (only when zoomed in)
+ * - Double-click bg      → reset zoom & pan
  *
- * Bundle cost: 0 — only React + Pointer Events. If we ever need brushing,
- * multi-curve overlay, or rich axis controls, swap to visx
- * (@visx/curve + @visx/drag + @visx/zoom) or D3 (d3-drag + d3-zoom + d3-shape).
+ * Ghost curve:
+ * - While dragging an anchor, the green dashed curve shows where the curve
+ *   was BEFORE the drag started. It vanishes the moment you release.
  */
 
 export interface ControlPoint {
-  x: number; // 0..1
-  y: number; // 0..yMax
+  x: number; // data units
+  y: number; // data units
 }
 
 export interface BezierEditorProps {
-  points: ControlPoint[]; // length 4 for cubic Bézier
+  points: ControlPoint[];
   onChange: (points: ControlPoint[]) => void;
-  /** Y axis upper bound (data units). Default 24 — matches Figma camber %. */
   yMax?: number;
-  /** Y axis lower bound (data units). Default 0. Set to a negative number for
-   *  curves that go below zero (e.g. Sweep / Dihedral in Stacking tab). */
   yMin?: number;
-  /** Y axis step for grid + labels. Default 2. */
   yStep?: number;
-  /** X axis lower bound (data units). Default 0. */
   xMin?: number;
-  /** X axis upper bound (data units). Default 1. Set to e.g. 55 for layup
-   *  mapping bezier (longitudinal distance along blade in metres). */
   xMax?: number;
-  /** X axis step for grid + labels. Default 0.1. */
   xStep?: number;
-  /** Previous curve for reference (read-only). */
+  /** Kept for API compatibility — no longer rendered statically. */
   previousPoints?: ControlPoint[];
-  /** Position of the root indicator (orange vertical line) in data x. */
   rootX?: number;
 }
 
-// Chart layout in SVG viewport coordinates (base, before zoom).
 const VB_WIDTH = 460;
 const VB_HEIGHT = 260;
 const PAD_LEFT = 40;
@@ -67,8 +48,7 @@ const PAD_BOTTOM = 26;
 
 const ZOOM_MIN = 1;
 const ZOOM_MAX = 8;
-const ZOOM_STEP_BUTTON = 1.25; // each click multiplies zoom by this
-const ZOOM_STEP_WHEEL = 1.1; // each wheel notch
+const ZOOM_STEP = 1.25;
 
 function dataToPx(
   p: ControlPoint,
@@ -79,11 +59,9 @@ function dataToPx(
 ) {
   const w = VB_WIDTH - PAD_LEFT - PAD_RIGHT;
   const h = VB_HEIGHT - PAD_TOP - PAD_BOTTOM;
-  const xRange = xMax - xMin;
-  const yRange = yMax - yMin;
   return {
-    cx: PAD_LEFT + ((p.x - xMin) / xRange) * w,
-    cy: PAD_TOP + (1 - (p.y - yMin) / yRange) * h,
+    cx: PAD_LEFT + ((p.x - xMin) / (xMax - xMin)) * w,
+    cy: PAD_TOP + (1 - (p.y - yMin) / (yMax - yMin)) * h,
   };
 }
 
@@ -97,16 +75,53 @@ function pxToData(
 ): ControlPoint {
   const w = VB_WIDTH - PAD_LEFT - PAD_RIGHT;
   const h = VB_HEIGHT - PAD_TOP - PAD_BOTTOM;
-  const xRange = xMax - xMin;
-  const yRange = yMax - yMin;
   return {
-    x: xMin + xRange * ((cx - PAD_LEFT) / w),
-    y: yMin + yRange * (1 - (cy - PAD_TOP) / h),
+    x: xMin + (xMax - xMin) * ((cx - PAD_LEFT) / w),
+    y: yMin + (yMax - yMin) * (1 - (cy - PAD_TOP) / h),
   };
 }
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+/**
+ * Catmull-Rom → cubic Bézier approximation.
+ * Tension = 1/6 (standard uniform Catmull-Rom).
+ * Phantom endpoints are reflected so the curve reaches both ends cleanly.
+ */
+function catmullRomPath(
+  pts: ControlPoint[],
+  xMin: number,
+  xMax: number,
+  yMin: number,
+  yMax: number,
+): string {
+  if (pts.length < 2) return '';
+  const px = pts.map((p) => dataToPx(p, xMin, xMax, yMin, yMax));
+  let d = `M ${px[0].cx.toFixed(1)},${px[0].cy.toFixed(1)}`;
+  for (let i = 0; i < px.length - 1; i++) {
+    const p0 =
+      i > 0
+        ? px[i - 1]
+        : { cx: 2 * px[0].cx - px[1].cx, cy: 2 * px[0].cy - px[1].cy };
+    const p1 = px[i];
+    const p2 = px[i + 1];
+    const p3 =
+      i + 2 < px.length
+        ? px[i + 2]
+        : {
+            cx: 2 * px[px.length - 1].cx - px[px.length - 2].cx,
+            cy: 2 * px[px.length - 1].cy - px[px.length - 2].cy,
+          };
+    const t = 1 / 6;
+    const cp1x = p1.cx + (p2.cx - p0.cx) * t;
+    const cp1y = p1.cy + (p2.cy - p0.cy) * t;
+    const cp2x = p2.cx - (p3.cx - p1.cx) * t;
+    const cp2y = p2.cy - (p3.cy - p1.cy) * t;
+    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.cx.toFixed(1)},${p2.cy.toFixed(1)}`;
+  }
+  return d;
 }
 
 export function BezierEditor({
@@ -118,38 +133,40 @@ export function BezierEditor({
   xMin = 0,
   xMax = 1,
   xStep = 0.1,
-  previousPoints,
   rootX = 0.05,
 }: BezierEditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
-  // Zoom + pan state. panX/panY are offsets to the viewBox top-left in
-  // viewBox units (base coords).
+  // Ghost curve: snapshot of control points at the moment a drag starts.
+  // Rendered in green while dragging, cleared (via draggingIndex→null) on release.
+  const preEditPointsRef = useRef<ControlPoint[] | null>(null);
+
+  // Zoom + pan
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [panningPointerId, setPanningPointerId] = useState<number | null>(null);
-  const panStartRef = useRef<{ pointerX: number; pointerY: number; panX: number; panY: number } | null>(null);
+  const panStartRef = useRef<{
+    pointerX: number;
+    pointerY: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
 
-  // Computed viewBox. When zoom == 1 this equals the base box.
-  // viewW = VB_WIDTH / zoom; viewBox top-left is shifted by pan and by the
-  // amount needed to keep the chart centered.
+  // Track whether a background pointer-down resulted in actual panning so we
+  // can distinguish a plain click (→ add point) from a drag-end.
+  const hasPannedRef = useRef(false);
+
   const viewW = VB_WIDTH / zoom;
   const viewH = VB_HEIGHT / zoom;
-  // Centered offset before pan
   const centerOffsetX = (VB_WIDTH - viewW) / 2;
   const centerOffsetY = (VB_HEIGHT - viewH) / 2;
-  // Clamp pan so we don't scroll past the chart edges
-  const maxPanX = centerOffsetX;
-  const maxPanY = centerOffsetY;
-  const clampedPanX = clamp(panX, -maxPanX, maxPanX);
-  const clampedPanY = clamp(panY, -maxPanY, maxPanY);
+  const clampedPanX = clamp(panX, -centerOffsetX, centerOffsetX);
+  const clampedPanY = clamp(panY, -centerOffsetY, centerOffsetY);
   const viewX = centerOffsetX + clampedPanX;
   const viewY = centerOffsetY + clampedPanY;
 
-  // Convert mouse/touch screen coords -> SVG viewBox coords using the SVG CTM.
-  // This handles container scaling + viewBox zoom without us having to track them manually.
   function screenToViewBox(clientX: number, clientY: number) {
     const svg = svgRef.current;
     if (!svg) return null;
@@ -158,16 +175,16 @@ export function BezierEditor({
     pt.y = clientY;
     const ctm = svg.getScreenCTM();
     if (!ctm) return null;
-    const inv = ctm.inverse();
-    const local = pt.matrixTransform(inv);
-    return { x: local.x, y: local.y };
+    return pt.matrixTransform(ctm.inverse());
   }
 
-  // --- Control point drag ---
+  // ── Control-point drag ───────────────────────────────────────────────────
   function handlePointerDown(idx: number, e: React.PointerEvent<SVGCircleElement>) {
     e.preventDefault();
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
+    // Snapshot before edit — shown as green ghost while dragging
+    preEditPointsRef.current = points.map((p) => ({ ...p }));
     setDraggingIndex(idx);
   }
 
@@ -175,23 +192,16 @@ export function BezierEditor({
     if (draggingIndex !== idx) return;
     const local = screenToViewBox(e.clientX, e.clientY);
     if (!local) return;
-
     let { x, y } = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
     y = clamp(y, yMin, yMax);
-
-    // x epsilon scales with the x range so the monotone constraint feels the
-    // same whether the chart spans 0..1 or 5..55.
     const xEps = (xMax - xMin) * 0.001;
     if (idx === 0) {
       x = xMin;
     } else if (idx === points.length - 1) {
       x = xMax;
     } else {
-      const minX = points[idx - 1].x + xEps;
-      const maxX = points[idx + 1].x - xEps;
-      x = clamp(x, minX, maxX);
+      x = clamp(x, points[idx - 1].x + xEps, points[idx + 1].x - xEps);
     }
-
     onChange(points.map((p, i) => (i === idx ? { x, y } : p)));
   }
 
@@ -199,61 +209,31 @@ export function BezierEditor({
     if (draggingIndex !== idx) return;
     try {
       (e.target as Element).releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore — capture may have ended already
-    }
+    } catch { /* ignore */ }
+    // Setting draggingIndex → null causes the ghost to disappear on next render
     setDraggingIndex(null);
   }
 
-  // --- Zoom ---
-  function zoomBy(factor: number, focalScreenX?: number, focalScreenY?: number) {
-    const nextZoom = clamp(zoom * factor, ZOOM_MIN, ZOOM_MAX);
-    if (nextZoom === zoom) return;
-
-    // If a focal point is given (cursor), keep the data point under it stable.
-    // Otherwise zoom around the chart center (pan/center unchanged in viewBox coords).
-    if (focalScreenX !== undefined && focalScreenY !== undefined) {
-      const local = screenToViewBox(focalScreenX, focalScreenY);
-      if (local) {
-        const nextViewW = VB_WIDTH / nextZoom;
-        const nextViewH = VB_HEIGHT / nextZoom;
-        // We want: local.x = nextViewX + (focal_ratio_x) * nextViewW
-        //          where focal_ratio_x = (local.x - viewX) / viewW
-        const ratioX = (local.x - viewX) / viewW;
-        const ratioY = (local.y - viewY) / viewH;
-        const nextViewX = local.x - ratioX * nextViewW;
-        const nextViewY = local.y - ratioY * nextViewH;
-        const nextCenterOffsetX = (VB_WIDTH - nextViewW) / 2;
-        const nextCenterOffsetY = (VB_HEIGHT - nextViewH) / 2;
-        setPanX(clamp(nextViewX - nextCenterOffsetX, -nextCenterOffsetX, nextCenterOffsetX));
-        setPanY(clamp(nextViewY - nextCenterOffsetY, -nextCenterOffsetY, nextCenterOffsetY));
-      }
-    } else {
-      // Centered zoom — keep pan relative to center
-      if (nextZoom <= 1) {
-        setPanX(0);
-        setPanY(0);
-      }
-    }
-    setZoom(nextZoom);
+  // Double-click a middle anchor to remove it
+  function handlePointDoubleClick(idx: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (idx === 0 || idx === points.length - 1) return; // keep endpoints
+    if (points.length <= 3) return; // keep minimum 3 points
+    onChange(points.filter((_, i) => i !== idx));
   }
 
-  function handleZoomInClick() {
-    zoomBy(ZOOM_STEP_BUTTON);
-  }
-  function handleZoomOutClick() {
-    zoomBy(1 / ZOOM_STEP_BUTTON);
-  }
-  function handleWheel(e: React.WheelEvent<SVGSVGElement>) {
-    if (e.deltaY === 0) return;
-    e.preventDefault();
-    const factor = e.deltaY < 0 ? ZOOM_STEP_WHEEL : 1 / ZOOM_STEP_WHEEL;
-    zoomBy(factor, e.clientX, e.clientY);
+  // ── Zoom (buttons only — no scroll wheel) ────────────────────────────────
+  function zoomBy(factor: number) {
+    const next = clamp(zoom * factor, ZOOM_MIN, ZOOM_MAX);
+    if (next === zoom) return;
+    if (next <= 1) { setPanX(0); setPanY(0); }
+    setZoom(next);
   }
 
-  // --- Pan (background drag) ---
+  // ── Background: pan + add point ──────────────────────────────────────────
   function handleBgPointerDown(e: React.PointerEvent<SVGRectElement>) {
-    if (zoom <= 1) return; // no pan when fully zoomed out
+    hasPannedRef.current = false;
+    if (zoom <= 1) return;
     e.preventDefault();
     (e.target as Element).setPointerCapture(e.pointerId);
     setPanningPointerId(e.pointerId);
@@ -267,28 +247,40 @@ export function BezierEditor({
 
   function handleBgPointerMove(e: React.PointerEvent<SVGRectElement>) {
     if (panningPointerId === null || !panStartRef.current) return;
+    const dx = e.clientX - panStartRef.current.pointerX;
+    const dy = e.clientY - panStartRef.current.pointerY;
+    if (dx * dx + dy * dy > 16) hasPannedRef.current = true; // 4 px threshold
     const svg = svgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
-    // Convert pointer delta from screen pixels to viewBox units
-    const screenDx = e.clientX - panStartRef.current.pointerX;
-    const screenDy = e.clientY - panStartRef.current.pointerY;
-    const vbDx = (screenDx / rect.width) * viewW;
-    const vbDy = (screenDy / rect.height) * viewH;
-    // Dragging right should reveal content from the left — so pan moves in the opposite direction
+    const vbDx = (dx / rect.width) * viewW;
+    const vbDy = (dy / rect.height) * viewH;
     setPanX(panStartRef.current.panX - vbDx);
     setPanY(panStartRef.current.panY - vbDy);
   }
 
   function handleBgPointerUp(e: React.PointerEvent<SVGRectElement>) {
     if (panningPointerId === null) return;
-    try {
-      (e.target as Element).releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
+    try { (e.target as Element).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
     setPanningPointerId(null);
     panStartRef.current = null;
+  }
+
+  /** Click on background → insert a new anchor at that data position. */
+  function handleBgClick(e: React.MouseEvent<SVGRectElement>) {
+    if (hasPannedRef.current) return; // ignore drag-end clicks
+    const local = screenToViewBox(e.clientX, e.clientY);
+    if (!local) return;
+    let { x, y } = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
+    const margin = (xMax - xMin) * 0.02;
+    x = clamp(x, xMin + margin, xMax - margin); // stay away from fixed endpoints
+    y = clamp(y, yMin, yMax);
+    // Skip if too close to an existing anchor
+    if (points.some((p) => Math.abs(p.x - x) < (xMax - xMin) * 0.03)) return;
+    // Insert in x-sorted order (always before the last fixed endpoint)
+    const insertIdx = points.findIndex((p, i) => i > 0 && p.x >= x);
+    const idx = insertIdx === -1 ? points.length - 1 : insertIdx;
+    onChange([...points.slice(0, idx), { x, y }, ...points.slice(idx)]);
   }
 
   function handleBgDoubleClick() {
@@ -297,31 +289,10 @@ export function BezierEditor({
     setPanY(0);
   }
 
-  // --- Path building ---
-  function curvePath(pts: ControlPoint[]) {
-    if (pts.length < 2) return '';
-    const m = dataToPx(pts[0], xMin, xMax, yMin, yMax);
-    let d = `M ${m.cx},${m.cy}`;
-    if (pts.length === 4) {
-      const c1 = dataToPx(pts[1], xMin, xMax, yMin, yMax);
-      const c2 = dataToPx(pts[2], xMin, xMax, yMin, yMax);
-      const c3 = dataToPx(pts[3], xMin, xMax, yMin, yMax);
-      d += ` C ${c1.cx},${c1.cy} ${c2.cx},${c2.cy} ${c3.cx},${c3.cy}`;
-    } else {
-      for (let i = 1; i < pts.length; i++) {
-        const p = dataToPx(pts[i], xMin, xMax, yMin, yMax);
-        d += ` L ${p.cx},${p.cy}`;
-      }
-    }
-    return d;
-  }
-
+  // ── Ticks ────────────────────────────────────────────────────────────────
   const yTicks: number[] = [];
-  // Generate ticks across [yMin, yMax]. Start from a multiple of yStep at or
-  // below yMin so labels line up at round values (e.g. -0.3, -0.2, ...).
-  const firstTick = Math.ceil(yMin / yStep) * yStep;
-  for (let v = firstTick; v <= yMax + 1e-9; v += yStep) {
-    // Round to mitigate float drift like 0.30000000000000004
+  const firstYTick = Math.ceil(yMin / yStep) * yStep;
+  for (let v = firstYTick; v <= yMax + 1e-9; v += yStep) {
     yTicks.push(Math.round(v / yStep) * yStep);
   }
   const xTicks: number[] = [];
@@ -329,12 +300,9 @@ export function BezierEditor({
   for (let v = firstXTick; v <= xMax + 1e-9; v += xStep) {
     xTicks.push(Math.round(v / xStep) * xStep);
   }
+  const yDecimals = yStep >= 1 ? 0 : Math.max(0, -Math.floor(Math.log10(yStep)));
   const xDecimals = xStep >= 1 ? 0 : Math.max(0, -Math.floor(Math.log10(xStep)));
   const rootPx = dataToPx({ x: rootX, y: 0 }, xMin, xMax, yMin, yMax).cx;
-
-  // vector-effect="non-scaling-stroke" keeps line widths the same when zoomed.
-  // For text we'd need to counter-scale, but the viewBox scale we use is mild
-  // enough that text remains readable at ZOOM_MAX = 8x.
 
   return (
     <div className="relative h-[260px] w-full rounded-md bg-white">
@@ -343,7 +311,7 @@ export function BezierEditor({
         <button
           type="button"
           aria-label="Zoom in"
-          onClick={handleZoomInClick}
+          onClick={() => zoomBy(ZOOM_STEP)}
           disabled={zoom >= ZOOM_MAX}
           className="flex h-6 w-6 items-center justify-center text-[#6b7280] hover:bg-[#f1f5f9] disabled:opacity-40"
         >
@@ -352,7 +320,7 @@ export function BezierEditor({
         <button
           type="button"
           aria-label="Zoom out"
-          onClick={handleZoomOutClick}
+          onClick={() => zoomBy(1 / ZOOM_STEP)}
           disabled={zoom <= ZOOM_MIN}
           className="flex h-6 w-6 items-center justify-center border-t border-[#e5e7eb] text-[#6b7280] hover:bg-[#f1f5f9] disabled:opacity-40"
         >
@@ -364,22 +332,30 @@ export function BezierEditor({
         ref={svgRef}
         viewBox={`${viewX} ${viewY} ${viewW} ${viewH}`}
         className="h-full w-full"
-        aria-label="Camber distribution chart"
+        aria-label="Distribution chart"
         style={{ touchAction: 'none' }}
-        onWheel={handleWheel}
+        /* No onWheel — scroll zoom deliberately disabled */
       >
-        {/* Background — receives pan drag + double-click reset */}
+        {/* Background: catches pan + click-to-add-point + dbl-click zoom reset */}
         <rect
           x={viewX}
           y={viewY}
           width={viewW}
           height={viewH}
           fill="transparent"
-          style={{ cursor: zoom > 1 ? (panningPointerId !== null ? 'grabbing' : 'grab') : 'default' }}
+          style={{
+            cursor:
+              zoom > 1
+                ? panningPointerId !== null
+                  ? 'grabbing'
+                  : 'grab'
+                : 'crosshair',
+          }}
           onPointerDown={handleBgPointerDown}
           onPointerMove={handleBgPointerMove}
           onPointerUp={handleBgPointerUp}
           onPointerCancel={handleBgPointerUp}
+          onClick={handleBgClick}
           onDoubleClick={handleBgDoubleClick}
         />
 
@@ -390,13 +366,10 @@ export function BezierEditor({
         {/* Y grid + labels */}
         {yTicks.map((v) => {
           const { cy } = dataToPx({ x: xMin, y: v }, xMin, xMax, yMin, yMax);
-          // Format: integer if yStep >= 1, otherwise enough decimals for yStep
-          const decimals = yStep >= 1 ? 0 : Math.max(0, -Math.floor(Math.log10(yStep)));
-          const label = v.toFixed(decimals);
           return (
             <g key={`y${v}`}>
               <text x="22" y={cy + 4} fontSize="9" fill="#6b7280">
-                {label}
+                {v.toFixed(yDecimals)}
               </text>
               <line
                 x1={PAD_LEFT}
@@ -414,9 +387,8 @@ export function BezierEditor({
         {/* X grid + labels */}
         {xTicks.map((v) => {
           const { cx } = dataToPx({ x: v, y: yMin }, xMin, xMax, yMin, yMax);
-          const label = v.toFixed(xDecimals);
           return (
-            <g key={`x${label}`}>
+            <g key={`x${v}`}>
               <line
                 x1={cx}
                 y1={PAD_TOP}
@@ -426,8 +398,13 @@ export function BezierEditor({
                 strokeWidth="1"
                 vectorEffect="non-scaling-stroke"
               />
-              <text x={cx - 9} y={VB_HEIGHT - PAD_BOTTOM + 14} fontSize="9" fill="#6b7280">
-                {label}
+              <text
+                x={cx - 9}
+                y={VB_HEIGHT - PAD_BOTTOM + 14}
+                fontSize="9"
+                fill="#6b7280"
+              >
+                {v.toFixed(xDecimals)}
               </text>
             </g>
           );
@@ -445,75 +422,53 @@ export function BezierEditor({
           vectorEffect="non-scaling-stroke"
         />
 
-        {/* Previous curve (read-only) */}
-        {previousPoints && previousPoints.length === points.length && (
+        {/* Ghost curve — pre-drag snapshot, shown only while a point is being dragged */}
+        {draggingIndex !== null && preEditPointsRef.current && (
           <path
-            d={curvePath(previousPoints)}
+            d={catmullRomPath(preEditPointsRef.current, xMin, xMax, yMin, yMax)}
             fill="none"
             stroke="#22c55e"
             strokeWidth="1.5"
-            opacity="0.8"
+            strokeDasharray="4 3"
+            opacity="0.85"
             vectorEffect="non-scaling-stroke"
           />
         )}
 
-        {/* Tangent dashed lines */}
-        {points.length === 4 && (
-          <>
-            <line
-              {...lineProps(points[0], points[1], xMin, xMax, yMin, yMax)}
-              stroke="#0066cc"
-              strokeWidth="1"
-              strokeDasharray="3 3"
-              opacity="0.55"
-              vectorEffect="non-scaling-stroke"
-            />
-            <line
-              {...lineProps(points[1], points[2], xMin, xMax, yMin, yMax)}
-              stroke="#0066cc"
-              strokeWidth="1"
-              strokeDasharray="3 3"
-              opacity="0.55"
-              vectorEffect="non-scaling-stroke"
-            />
-            <line
-              {...lineProps(points[2], points[3], xMin, xMax, yMin, yMax)}
-              stroke="#0066cc"
-              strokeWidth="1"
-              strokeDasharray="3 3"
-              opacity="0.55"
-              vectorEffect="non-scaling-stroke"
-            />
-          </>
-        )}
-
         {/* Active curve */}
         <path
-          d={curvePath(points)}
+          d={catmullRomPath(points, xMin, xMax, yMin, yMax)}
           fill="none"
           stroke="#0066cc"
           strokeWidth="2.5"
           vectorEffect="non-scaling-stroke"
         />
 
-        {/* Draggable control points (rendered LAST so they sit on top) */}
+        {/* Draggable anchors */}
         {points.map((p, idx) => {
           const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
           const isDragging = draggingIndex === idx;
+          const isEndpoint = idx === 0 || idx === points.length - 1;
           return (
             <g key={idx}>
-              {/* Invisible larger hit target for easier grabbing on touch screens */}
+              {/* Invisible hit area (larger than visible dot for easier grab) */}
               <circle
                 cx={cx}
                 cy={cy}
                 r="14"
                 fill="transparent"
-                style={{ cursor: 'grab', touchAction: 'none' }}
+                style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
                 onPointerDown={(e) => handlePointerDown(idx, e)}
                 onPointerMove={(e) => handlePointerMove(idx, e)}
                 onPointerUp={(e) => handlePointerUp(idx, e)}
                 onPointerCancel={(e) => handlePointerUp(idx, e)}
-              />
+                onDoubleClick={(e) => handlePointDoubleClick(idx, e)}
+              >
+                {!isEndpoint && (
+                  <title>Drag to move · Double-click to remove</title>
+                )}
+              </circle>
+              {/* Visible dot */}
               <circle
                 cx={cx}
                 cy={cy}
@@ -534,17 +489,4 @@ export function BezierEditor({
       </svg>
     </div>
   );
-}
-
-function lineProps(
-  a: ControlPoint,
-  b: ControlPoint,
-  xMin: number,
-  xMax: number,
-  yMin: number,
-  yMax: number,
-) {
-  const A = dataToPx(a, xMin, xMax, yMin, yMax);
-  const B = dataToPx(b, xMin, xMax, yMin, yMax);
-  return { x1: A.cx, y1: A.cy, x2: B.cx, y2: B.cy };
 }

@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronUp,
   FoldHorizontal,
+  Plus,
   Redo2,
   Undo2,
 } from 'lucide-react';
@@ -225,6 +226,19 @@ export function ProfileDistributionPanel({
     setSectionPoints((current) => ({ ...current, [key]: next }));
   }
 
+  function addPoint(key: SectionKey) {
+    setSectionPoints((current) => {
+      const pts = current[key];
+      // Insert a new point between the last two existing points
+      const secondLast = pts[pts.length - 2];
+      const last = pts[pts.length - 1];
+      const newX = (secondLast.x + last.x) / 2;
+      const newY = (secondLast.y + last.y) / 2;
+      const next = [...pts.slice(0, pts.length - 1), { x: newX, y: newY }, last];
+      return { ...current, [key]: next };
+    });
+  }
+
   // Local editing buffer for the table inputs. Keyed by "<sectionKey>-<rowIdx>-<x|y>"
   // so multiple folded sections can be edited without interfering with each other.
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
@@ -357,6 +371,14 @@ export function ProfileDistributionPanel({
                     })}
                   </tbody>
                 </table>
+                <button
+                  type="button"
+                  onClick={() => addPoint(key)}
+                  className="flex w-full items-center justify-center gap-1.5 border-t border-[#e5e7eb] py-2 text-[13px] font-medium text-[#006496] hover:bg-[#f0f9ff]"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  Add point
+                </button>
               </div>
             )}
           </div>

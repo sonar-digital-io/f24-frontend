@@ -1,34 +1,64 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Redo2, Undo2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, Redo2, Undo2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BezierEditor, type ControlPoint } from '@/components/BezierEditor';
 
-/** Stacking tab — two bezier-edited curves stacked vertically: Sweep + Dihedral.
+/** Stacking tab — four bezier-edited curves stacked vertically:
+ *  Sweep, Dihedral, Twist, Chord.
  *
- *  Unlike Profile distribution this panel has no Type/Start/End/Profile-count
- *  top row — just Undo/Redo plus the two sections. Each section's curve can
- *  go negative (e.g. the tip can sweep back past the root line), so the
- *  bezier editor uses yMin=-0.3, yMax=0.3.
+ *  Each section uses per-section Y axis bounds. The "+ Add point" button at
+ *  the bottom of each table matches the pattern from ProfileDistributionPanel.
  */
 
-type SectionKey = 'sweep' | 'dihedral';
+type SectionKey = 'sweep' | 'dihedral' | 'twist' | 'chord';
 
-const SECTION_KEYS: SectionKey[] = ['sweep', 'dihedral'];
+const SECTION_KEYS: SectionKey[] = ['sweep', 'dihedral', 'twist', 'chord'];
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   sweep: 'Sweep',
   dihedral: 'Dihedral',
+  twist: 'Twist',
+  chord: 'Chord',
 };
 
 const SECTION_TABLE_HEADING: Record<SectionKey, string> = {
   sweep: 'Sweep (m)',
   dihedral: 'Dihedral (m)',
+  twist: 'Twist (°)',
+  chord: 'Chord (m)',
 };
 
-const Y_MIN = -0.3;
-const Y_MAX = 0.3;
-const Y_STEP = 0.1;
+/** Per-section Y axis bounds for the BezierEditor and table clamp. */
+const SECTION_Y_MIN: Record<SectionKey, number> = {
+  sweep: -0.3,
+  dihedral: -0.3,
+  twist: -5,
+  chord: 0,
+};
+
+const SECTION_Y_MAX: Record<SectionKey, number> = {
+  sweep: 0.3,
+  dihedral: 0.3,
+  twist: 20,
+  chord: 6,
+};
+
+/** Grid step shown on the BezierEditor Y axis. */
+const SECTION_Y_STEP: Record<SectionKey, number> = {
+  sweep: 0.1,
+  dihedral: 0.1,
+  twist: 5,
+  chord: 1,
+};
+
+/** Step for the table numeric inputs. */
+const SECTION_TABLE_STEP: Record<SectionKey, string> = {
+  sweep: '0.00001',
+  dihedral: '0.00001',
+  twist: '0.01',
+  chord: '0.001',
+};
 
 const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
   sweep: [
@@ -42,6 +72,18 @@ const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
     { x: 0.3, y: 0.05 },
     { x: 0.7, y: 0.18 },
     { x: 1, y: 0.05 },
+  ],
+  twist: [
+    { x: 0, y: 14.0 },
+    { x: 0.25, y: 10.5 },
+    { x: 0.65, y: 3.2 },
+    { x: 1, y: 0.0 },
+  ],
+  chord: [
+    { x: 0, y: 1.8 },
+    { x: 0.28, y: 4.6 },
+    { x: 0.65, y: 2.8 },
+    { x: 1, y: 0.9 },
   ],
 };
 
@@ -57,6 +99,18 @@ const PREVIOUS_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
     { x: 0.35, y: 0.04 },
     { x: 0.7, y: 0.14 },
     { x: 1, y: 0.04 },
+  ],
+  twist: [
+    { x: 0, y: 13.0 },
+    { x: 0.3, y: 9.0 },
+    { x: 0.7, y: 2.5 },
+    { x: 1, y: 0.0 },
+  ],
+  chord: [
+    { x: 0, y: 1.6 },
+    { x: 0.3, y: 4.2 },
+    { x: 0.7, y: 2.5 },
+    { x: 1, y: 0.8 },
   ],
 };
 
@@ -79,12 +133,26 @@ export function StackingPanel() {
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     sweep: true,
     dihedral: true,
+    twist: true,
+    chord: true,
   });
 
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
 
   function setPointsForSection(key: SectionKey, next: ControlPoint[]) {
     setSectionPoints((current) => ({ ...current, [key]: next }));
+  }
+
+  function addPoint(key: SectionKey) {
+    setSectionPoints((current) => {
+      const pts = current[key];
+      const secondLast = pts[pts.length - 2];
+      const last = pts[pts.length - 1];
+      const newX = (secondLast.x + last.x) / 2;
+      const newY = (secondLast.y + last.y) / 2;
+      const next = [...pts.slice(0, pts.length - 1), { x: newX, y: newY }, last];
+      return { ...current, [key]: next };
+    });
   }
 
   function toggleSection(key: SectionKey) {
@@ -111,7 +179,7 @@ export function StackingPanel() {
       const nextList = list.map((p, i) => {
         if (i !== idx) return p;
         if (field === 'x') return { ...p, x: applyXConstraints(list, idx, parsed) };
-        return { ...p, y: clamp(parsed, Y_MIN, Y_MAX) };
+        return { ...p, y: clamp(parsed, SECTION_Y_MIN[section], SECTION_Y_MAX[section]) };
       });
       return { ...current, [section]: nextList };
     });
@@ -158,6 +226,7 @@ export function StackingPanel() {
                 key={key}
                 className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white"
               >
+                {/* Accordion header */}
                 <button
                   type="button"
                   onClick={() => toggleSection(key)}
@@ -176,18 +245,18 @@ export function StackingPanel() {
 
                 {open && (
                   <div className="flex flex-col gap-4 border-t border-[#e5e7eb] p-4">
-                    {/* Distribution view (always shown when section open) */}
+                    {/* Bezier editor */}
                     <BezierEditor
                       points={points}
                       onChange={(next) => setPointsForSection(key, next)}
                       previousPoints={PREVIOUS_SECTION_POINTS[key]}
-                      yMin={Y_MIN}
-                      yMax={Y_MAX}
-                      yStep={Y_STEP}
+                      yMin={SECTION_Y_MIN[key]}
+                      yMax={SECTION_Y_MAX[key]}
+                      yStep={SECTION_Y_STEP[key]}
                       rootX={0.05}
                     />
 
-                    {/* Table */}
+                    {/* Table with + Add point button */}
                     <div className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
                       <table className="w-full border-collapse text-[14px]">
                         <thead>
@@ -238,9 +307,9 @@ export function StackingPanel() {
                                   <Input
                                     id={`${key}-${idx}-y`}
                                     type="number"
-                                    step="0.00001"
-                                    min={Y_MIN}
-                                    max={Y_MAX}
+                                    step={SECTION_TABLE_STEP[key]}
+                                    min={SECTION_Y_MIN[key]}
+                                    max={SECTION_Y_MAX[key]}
                                     value={getInputValue(key, idx, 'y')}
                                     onChange={(e) =>
                                       handleInputChange(key, idx, 'y', e.target.value)
@@ -254,6 +323,15 @@ export function StackingPanel() {
                           })}
                         </tbody>
                       </table>
+                      {/* Add point button — same design as ProfileDistributionPanel */}
+                      <button
+                        type="button"
+                        onClick={() => addPoint(key)}
+                        className="flex w-full items-center justify-center gap-1.5 border-t border-[#e5e7eb] py-2 text-[13px] font-medium text-[#006496] hover:bg-[#f0f9ff]"
+                      >
+                        <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                        Add point
+                      </button>
                     </div>
                   </div>
                 )}

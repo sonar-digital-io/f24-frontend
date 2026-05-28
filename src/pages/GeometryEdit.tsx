@@ -395,7 +395,8 @@ export function GeometryEdit() {
           )}
           {activeTab === 'profiles' && <ProfilesPanel />}
           {activeTab === 'stacking' && <StackingPanel />}
-          {activeTab !== 'global-properties' &&
+          {activeTab !== 'create' &&
+            activeTab !== 'global-properties' &&
             activeTab !== 'profile-distribution' &&
             activeTab !== 'profiles' &&
             activeTab !== 'stacking' && (
