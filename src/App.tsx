@@ -13,6 +13,7 @@ import { LayupNew } from '@/pages/LayupNew';
 import { LoadGroup } from '@/pages/LoadGroup';
 import { LoadGroupNew } from '@/pages/LoadGroupNew';
 import { Calculation } from '@/pages/Calculation';
+import { CalculationNew } from '@/pages/CalculationNew';
 import { Report } from '@/pages/Report';
 import { Settings } from '@/pages/Settings';
 
@@ -37,6 +38,8 @@ function App() {
           <Route path="/load-group/new" element={<LoadGroupNew />} />
           <Route path="/load-group/:id" element={<LoadGroupNew />} />
           <Route path="/calculation" element={<Calculation />} />
+          <Route path="/calculation/new" element={<CalculationNew />} />
+          <Route path="/calculation/:id" element={<CalculationNew />} />
           <Route path="/report" element={<Report />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/nurbs" element={<Nurbs />} />
