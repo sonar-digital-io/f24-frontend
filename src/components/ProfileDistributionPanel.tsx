@@ -4,9 +4,8 @@ import {
   ChevronDown,
   ChevronUp,
   FoldHorizontal,
+  Info,
   Plus,
-  Redo2,
-  Undo2,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -244,8 +243,9 @@ export function ProfileDistributionPanel({
   }
 
   function handleInputChange(section: SectionKey, idx: number, field: 'x' | 'y', raw: string) {
-    setEditingValues((v) => ({ ...v, [fieldKey(section, idx, field)]: raw }));
-    const parsed = parseFloat(raw);
+    const normalized = raw.replace(',', '.');
+    setEditingValues((v) => ({ ...v, [fieldKey(section, idx, field)]: normalized }));
+    const parsed = parseFloat(normalized);
     if (!Number.isFinite(parsed)) return;
     setSectionPoints((current) => {
       const list = current[section];
@@ -335,10 +335,8 @@ export function ProfileDistributionPanel({
                           <td className="px-3 py-2 text-[#0a0a0a]">{idx}</td>
                           <td className="px-2 py-2">
                             <Input
-                              type="number"
-                              step="0.0001"
-                              min={0}
-                              max={1}
+                              type="text"
+                              inputMode="decimal"
                               value={getInputValue(key, idx, 'x')}
                               disabled={xLocked}
                               onChange={(e) => handleInputChange(key, idx, 'x', e.target.value)}
@@ -348,10 +346,8 @@ export function ProfileDistributionPanel({
                           </td>
                           <td className="px-2 py-2">
                             <Input
-                              type="number"
-                              step="0.01"
-                              min={0}
-                              max={Y_MAX}
+                              type="text"
+                              inputMode="decimal"
                               value={getInputValue(key, idx, 'y')}
                               onChange={(e) => handleInputChange(key, idx, 'y', e.target.value)}
                               onBlur={() => handleInputBlur(key, idx, 'y')}
@@ -383,108 +379,105 @@ export function ProfileDistributionPanel({
   // otherwise dropdown options like "Custom airfoil" get clipped. Expanded
   // mode has plenty of horizontal space, so equal columns are fine.
   const topRowGrid = folded
-    ? 'grid grid-cols-[minmax(160px,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3'
-    : 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4';
+    ? 'grid grid-cols-[minmax(160px,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-end gap-3'
+    : 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-end gap-4';
 
   return (
     <div
       className={`flex w-full ${folded ? 'max-w-[516px]' : 'max-w-[924px]'} max-h-[calc(100vh-128px)] flex-col rounded-[14px] border border-[#e5e7eb] bg-white/95 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm transition-[max-width] duration-150`}
     >
-      {/* Sticky top region: top row + sub-tabs + undo/redo */}
+      {/* Sticky top region: section title + top row + distribution curves title + sub-tabs */}
       <div className="flex flex-col gap-4 p-6 pb-4">
-      <div className={topRowGrid}>
-        <div className="flex flex-col gap-2">
-          <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Type</Label>
-          <Select value={type} onChange={setType} options={PROFILE_TYPES} />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label
-            htmlFor="profile-start-pos"
-            className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+        <div className="flex items-center justify-between">
+          <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">
+            Airfoil generation settings
+          </p>
+          <button
+            type="button"
+            onClick={onFoldToggle}
+            aria-pressed={folded}
+            aria-label={folded ? 'Show all sections at once (currently folded)' : 'Show sections one at a time (fold)'}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
           >
-            Start position
-          </Label>
-          <Input
-            id="profile-start-pos"
-            value={startPos}
-            onChange={(e) => setStartPos(e.target.value)}
-            className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-          />
+            <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
+          </button>
         </div>
-        <div className="flex flex-col gap-2">
-          <Label
-            htmlFor="profile-end-pos"
-            className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-          >
-            End position
-          </Label>
-          <Input
-            id="profile-end-pos"
-            value={endPos}
-            onChange={(e) => setEndPos(e.target.value)}
-            className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label
-            htmlFor="profile-count"
-            className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-          >
-            Profile count
-          </Label>
-          <Input
-            id="profile-count"
-            value={profileCount}
-            onChange={(e) => setProfileCount(e.target.value)}
-            className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={onFoldToggle}
-          aria-pressed={folded}
-          aria-label={folded ? 'Show all sections at once (currently folded)' : 'Show sections one at a time (fold)'}
-          className="mt-[22px] inline-flex h-9 w-9 items-center justify-center self-start rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
-        >
-          <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
-        </button>
-      </div>
 
-      {/* Sub-tabs — only when expanded; folded mode stacks all sections instead. */}
-      {!folded && (
-        <Tabs value={subTab} onValueChange={(v) => setSubTab(v as SectionKey)}>
-          <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
-            {SECTION_KEYS.map((key) => (
-              <TabsTrigger
-                key={key}
-                value={key}
-                className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
+        <div className={topRowGrid}>
+          <div className="flex flex-col gap-2">
+            <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Type</Label>
+            <Select value={type} onChange={setType} options={PROFILE_TYPES} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="group/tip relative flex items-center gap-1.5">
+              <Label
+                htmlFor="profile-count"
+                className="text-[14px] font-medium leading-none text-[#0a0a0a]"
               >
-                {SECTION_LABELS[key]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      )}
+                Profile count
+              </Label>
+              <Info className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={2} />
+              <div className="pointer-events-none absolute left-0 top-full z-50 mt-2 w-[280px] rounded-md bg-[#171717] px-3 py-2 text-[13px] leading-5 text-white opacity-0 shadow-md transition-opacity group-hover/tip:opacity-100">
+                Sets the initial number of generated profiles. You can add, delete, or modify individual profiles in the &apos;Profiles&apos; step.
+              </div>
+            </div>
+            <Input
+              id="profile-count"
+              value={profileCount}
+              onChange={(e) => setProfileCount(e.target.value)}
+              className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label
+              htmlFor="profile-start-pos"
+              className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+            >
+              Start position
+            </Label>
+            <Input
+              id="profile-start-pos"
+              value={startPos}
+              onChange={(e) => setStartPos(e.target.value)}
+              className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label
+              htmlFor="profile-end-pos"
+              className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+            >
+              End position
+            </Label>
+            <Input
+              id="profile-end-pos"
+              value={endPos}
+              onChange={(e) => setEndPos(e.target.value)}
+              className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+            />
+          </div>
+        </div>
 
-      {/* Undo / Redo */}
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-label="Undo"
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-        >
-          <Undo2 className="h-4 w-4" strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          aria-label="Redo"
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-        >
-          <Redo2 className="h-4 w-4" strokeWidth={2} />
-        </button>
-      </div>
+        <p className="pt-2 text-[16px] font-semibold leading-none text-[#0a0a0a]">
+          Distribution curves
+        </p>
 
+        {/* Sub-tabs — only when expanded; folded mode stacks all sections instead. */}
+        {!folded && (
+          <Tabs value={subTab} onValueChange={(v) => setSubTab(v as SectionKey)}>
+            <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
+              {SECTION_KEYS.map((key) => (
+                <TabsTrigger
+                  key={key}
+                  value={key}
+                  className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
+                >
+                  {SECTION_LABELS[key]}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        )}
       </div>
 
       {/* Scrollable section area */}

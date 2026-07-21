@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { Copy, Download, Pencil, Search, Trash2 } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { Footer } from '@/components/Footer';
 import {
@@ -16,6 +16,17 @@ import { LAYUPS } from '@/data/layups';
 const PAGE_SIZE = 10;
 
 type SortKey = 'name' | 'lastUpdated';
+
+function Tip({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="group/tip relative">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100">
+        {label}
+      </span>
+    </div>
+  );
+}
 
 export function Layup() {
   const navigate = useNavigate();
@@ -108,6 +119,7 @@ export function Layup() {
                       onClick={handleSort}
                       className="w-[200px]"
                     />
+                    <th className="h-10 w-[208px] px-3 text-left" />
                   </tr>
                 </thead>
                 <tbody>
@@ -115,7 +127,7 @@ export function Layup() {
                     <tr
                       key={l.id}
                       {...rowInteractionProps(() => navigate(`/layup/${l.id}`))}
-                      className="cursor-pointer border-b border-[#e5e7eb] bg-white hover:bg-[#f9fafb]"
+                      className="group cursor-pointer border-b border-[#e5e7eb] bg-white hover:bg-[#f9fafb]"
                     >
                       <td className="px-3 py-4 text-[14px] font-medium leading-5 text-[#0a0a0a]">
                         {l.name}
@@ -126,11 +138,52 @@ export function Layup() {
                       <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
                         {l.lastUpdated}
                       </td>
+                      <td className="px-3 py-4">
+                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <Tip label="Edit">
+                            <button
+                              type="button"
+                              aria-label="Edit layup"
+                              onClick={() => navigate(`/layup/${l.id}`)}
+                              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+                            >
+                              <Pencil className="h-4 w-4" strokeWidth={2} />
+                            </button>
+                          </Tip>
+                          <Tip label="Export">
+                            <button
+                              type="button"
+                              aria-label="Export layup"
+                              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+                            >
+                              <Download className="h-4 w-4" strokeWidth={2} />
+                            </button>
+                          </Tip>
+                          <Tip label="Duplicate">
+                            <button
+                              type="button"
+                              aria-label="Duplicate layup"
+                              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+                            >
+                              <Copy className="h-4 w-4" strokeWidth={2} />
+                            </button>
+                          </Tip>
+                          <Tip label="Delete">
+                            <button
+                              type="button"
+                              aria-label="Delete layup"
+                              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#fee2e2] hover:text-[#dc2626]"
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={2} />
+                            </button>
+                          </Tip>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   {pageRows.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                      <td colSpan={4} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
                         No layups match your search.
                       </td>
                     </tr>

@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Copy,
   GripVertical,
+  Info,
   Plus,
   Redo2,
   Search,
@@ -14,7 +17,6 @@ import {
   X,
 } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
-import { Footer } from '@/components/Footer';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,13 +24,14 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BezierEditor, type ControlPoint } from '@/components/BezierEditor';
 import { BufferedNumberInput } from '@/components/BufferedNumberInput';
 import { LOAD_GROUPS, createLoadGroup, updateLoadGroup } from '@/data/loadGroups';
+import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type Tab = 'general' | 'load-cases' | 'limits' | 'fatigue-profiles';
 type LimitsSubTab = 'thrust' | 'torque' | 'power';
 type PitchRpmFlag = 'Range' | 'Fixed';
-type TargetType = 'power' | 'thrust';
+type TargetType = 'torque' | 'thrust' | 'power';
 
 interface LoadCase {
   id: string;
@@ -53,8 +56,8 @@ interface FatigueCase {
   loadCase: string;
   minScale: number;
   maxScale: number;
-  mode: 'time' | 'cycles';
-  duration: number;
+  time: number | null;
+  cycles: number | null;
 }
 
 interface FatigueProfile {
@@ -70,33 +73,81 @@ function makeId() {
   return Math.random().toString(36).slice(2, 8);
 }
 
-const INITIAL_LOAD_CASES: LoadCase[] = [
+const EXISTING_LOAD_CASES: LoadCase[] = [
+  {
+    id: makeId(),
+    name: 'Start up',
+    pitchFlag: 'Range',
+    pitchMin: 0,
+    pitchMax: 15,
+    rpmFlag: 'Range',
+    rpmMin: 0,
+    rpmMax: 7,
+    altitude: 80,
+    disa: 0,
+    inflowVelocity: 8,
+    inflowAngle: 0,
+    targetType: 'power',
+    targetValue: 1500,
+  },
   {
     id: makeId(),
     name: 'Normal power production',
     pitchFlag: 'Range',
-    pitchMin: 0,
-    pitchMax: 25,
+    pitchMin: 2,
+    pitchMax: 20,
     rpmFlag: 'Range',
-    rpmMin: 5,
+    rpmMin: 6,
     rpmMax: 12,
-    altitude: 120,
-    disa: -10,
+    altitude: 80,
+    disa: 0,
     inflowVelocity: 12,
-    inflowAngle: 10,
+    inflowAngle: 3,
     targetType: 'power',
     targetValue: 8000,
   },
   {
     id: makeId(),
-    name: 'Extreme turbulence model',
+    name: 'Normal wind gust',
+    pitchFlag: 'Range',
+    pitchMin: 5,
+    pitchMax: 45,
+    rpmFlag: 'Range',
+    rpmMin: 4,
+    rpmMax: 13,
+    altitude: 80,
+    disa: 5,
+    inflowVelocity: 18,
+    inflowAngle: 8,
+    targetType: 'thrust',
+    targetValue: 950,
+  },
+  {
+    id: makeId(),
+    name: 'Normal shutdown',
+    pitchFlag: 'Range',
+    pitchMin: 20,
+    pitchMax: 90,
+    rpmFlag: 'Range',
+    rpmMin: 0,
+    rpmMax: 12,
+    altitude: 80,
+    disa: 0,
+    inflowVelocity: 10,
+    inflowAngle: 0,
+    targetType: 'power',
+    targetValue: 0,
+  },
+  {
+    id: makeId(),
+    name: 'Extreme turbulence',
     pitchFlag: 'Range',
     pitchMin: 5,
     pitchMax: 90,
     rpmFlag: 'Range',
     rpmMin: 2,
     rpmMax: 15,
-    altitude: 120,
+    altitude: 80,
     disa: 15,
     inflowVelocity: 25,
     inflowAngle: 15,
@@ -104,6 +155,22 @@ const INITIAL_LOAD_CASES: LoadCase[] = [
     targetValue: 1200,
   },
 ];
+
+const PLACEHOLDER_LOAD_CASE: Omit<LoadCase, 'id'> = {
+  name: '',
+  pitchFlag: 'Range',
+  pitchMin: 0,
+  pitchMax: 25,
+  rpmFlag: 'Range',
+  rpmMin: 0,
+  rpmMax: 15,
+  altitude: 0,
+  disa: 0,
+  inflowVelocity: 10,
+  inflowAngle: 0,
+  targetType: 'power',
+  targetValue: 0,
+};
 
 // ControlPoint x = RPM (0–20), y = value in physical units
 const INITIAL_LIMIT_POINTS: Record<LimitsSubTab, ControlPoint[]> = {
@@ -140,12 +207,12 @@ const LIMITS_Y_STEP: Record<LimitsSubTab, number> = {
 };
 
 const LIMITS_UNITS: Record<LimitsSubTab, string> = {
-  thrust: 'kN',
-  torque: 'kNm',
+  thrust: 'N',
+  torque: 'Nm',
   power: 'kW',
 };
 
-const INITIAL_FATIGUE_PROFILES: FatigueProfile[] = [
+const EXISTING_FATIGUE_PROFILES: FatigueProfile[] = [
   {
     id: makeId(),
     name: 'Power production',
@@ -154,11 +221,11 @@ const INITIAL_FATIGUE_PROFILES: FatigueProfile[] = [
       {
         id: makeId(),
         name: 'Start up',
-        loadCase: 'Normal power production',
+        loadCase: 'Start up',
         minScale: 0,
         maxScale: 40,
-        mode: 'time',
-        duration: 60,
+        time: 60,
+        cycles: null,
       },
       {
         id: makeId(),
@@ -166,8 +233,8 @@ const INITIAL_FATIGUE_PROFILES: FatigueProfile[] = [
         loadCase: 'Normal power production',
         minScale: 40,
         maxScale: 85,
-        mode: 'time',
-        duration: 600,
+        time: 600,
+        cycles: null,
       },
       {
         id: makeId(),
@@ -175,8 +242,8 @@ const INITIAL_FATIGUE_PROFILES: FatigueProfile[] = [
         loadCase: 'Normal wind gust',
         minScale: 60,
         maxScale: 100,
-        mode: 'cycles',
-        duration: 2,
+        time: null,
+        cycles: 2,
       },
       {
         id: makeId(),
@@ -184,8 +251,8 @@ const INITIAL_FATIGUE_PROFILES: FatigueProfile[] = [
         loadCase: 'Normal power production',
         minScale: 40,
         maxScale: 85,
-        mode: 'time',
-        duration: 300,
+        time: 300,
+        cycles: null,
       },
       {
         id: makeId(),
@@ -193,8 +260,8 @@ const INITIAL_FATIGUE_PROFILES: FatigueProfile[] = [
         loadCase: 'Normal shutdown',
         minScale: 0,
         maxScale: 85,
-        mode: 'time',
-        duration: 60,
+        time: 60,
+        cycles: null,
       },
     ],
   },
@@ -209,8 +276,27 @@ const INITIAL_FATIGUE_PROFILES: FatigueProfile[] = [
         loadCase: 'Normal power production',
         minScale: 0,
         maxScale: 30,
-        mode: 'time',
-        duration: 90,
+        time: 90,
+        cycles: null,
+      },
+    ],
+  },
+];
+
+const NEW_FATIGUE_PROFILES_PLACEHOLDER: FatigueProfile[] = [
+  {
+    id: makeId(),
+    name: 'Fatigue profile',
+    open: true,
+    cases: [
+      {
+        id: makeId(),
+        name: 'Placeholder',
+        loadCase: '',
+        minScale: 0,
+        maxScale: 100,
+        time: null,
+        cycles: null,
       },
     ],
   },
@@ -227,22 +313,83 @@ interface SelectInlineProps {
 
 function SelectInline({ value, onChange, options, className = '' }: SelectInlineProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    function onDown(e: MouseEvent) {
+      const target = e.target as Node;
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target)
+      ) {
+        setOpen(false);
+      }
     }
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
+  function handleToggle() {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPos({
+        top: rect.bottom + window.scrollY + 2,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      });
+    }
+    setOpen((o) => !o);
+  }
+
+  const dropdown =
+    open && pos
+      ? createPortal(
+          <ul
+            ref={dropdownRef}
+            style={{
+              position: 'absolute',
+              top: pos.top,
+              left: pos.left,
+              minWidth: pos.width,
+              zIndex: 9999,
+            }}
+            className="whitespace-nowrap rounded-md border border-[#e5e7eb] bg-white py-1 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1)]"
+          >
+            {options.map((opt) => (
+              <li key={opt}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange(opt);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-[13px] ${
+                    opt === value ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
+                  }`}
+                >
+                  {opt}
+                  {opt === value && <Check className="ml-3 h-3.5 w-3.5" strokeWidth={2} />}
+                </button>
+              </li>
+            ))}
+          </ul>,
+          document.body
+        )
+      : null;
+
   return (
-    <div ref={ref} className={`relative ${className}`}>
+    <div ref={wrapperRef} className={`relative ${className}`}>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={handleToggle}
         className="flex h-8 w-full items-center justify-between gap-1 rounded-md border border-[#e2e8f0] bg-white px-2 text-[13px] text-[#0a0a0a] hover:bg-[#f9fafb]"
       >
         <span className="truncate">{value}</span>
@@ -251,25 +398,135 @@ function SelectInline({ value, onChange, options, className = '' }: SelectInline
           strokeWidth={2}
         />
       </button>
-      {open && (
-        <ul className="absolute left-0 top-[calc(100%+2px)] z-50 min-w-full whitespace-nowrap rounded-md border border-[#e5e7eb] bg-white py-1 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1)]">
-          {options.map((opt) => (
-            <li key={opt}>
-              <button
-                type="button"
-                onClick={() => {
-                  onChange(opt);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-[13px] ${opt === value ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'}`}
-              >
-                {opt}
-                {opt === value && <Check className="ml-3 h-3.5 w-3.5" strokeWidth={2} />}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {dropdown}
+    </div>
+  );
+}
+
+// ─── Load case picker dialog ─────────────────────────────────────────────────
+
+interface LoadCasePickerDialogProps {
+  open: boolean;
+  loadCaseNames: string[];
+  current: string;
+  onSelect: (name: string) => void;
+  onClose: () => void;
+}
+
+function LoadCasePickerDialog({
+  open,
+  loadCaseNames,
+  current,
+  onSelect,
+  onClose,
+}: LoadCasePickerDialogProps) {
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setQuery('');
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return loadCaseNames;
+    return loadCaseNames.filter((n) => n.toLowerCase().includes(q));
+  }, [query, loadCaseNames]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="load-case-picker-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[calc(100vh-4rem)] w-full max-w-[480px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between gap-4">
+          <h2
+            id="load-case-picker-title"
+            className="text-[20px] font-bold leading-7 text-[#181c20]"
+          >
+            Load cases
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
+          >
+            <X className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search"
+            autoFocus
+            className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
+          />
+        </div>
+
+        {/* List */}
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 bg-white">
+              <tr className="border-b border-[#e5e7eb]">
+                <th className="h-10 px-3 text-left text-[14px] font-medium text-[#6b7280]">Name</th>
+                <th className="h-10 w-[100px] px-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((name) => (
+                <tr
+                  key={name}
+                  className={`border-b border-[#e5e7eb] last:border-b-0 ${
+                    name === current ? 'bg-[#eef9ff]' : 'hover:bg-[#f9fafb]'
+                  }`}
+                >
+                  <td className="px-3 py-3 text-[14px] font-medium text-[#0a0a0a]">{name}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => { onSelect(name); onClose(); }}
+                      className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[13px] font-medium text-[#fafafa] hover:bg-[#005580]"
+                    >
+                      Select
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={2} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                    No load cases match your search.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -289,7 +546,9 @@ export function LoadGroupNew() {
   const [description, setDescription] = useState(existing?.description ?? '');
 
   // Load cases
-  const [loadCases, setLoadCases] = useState<LoadCase[]>(INITIAL_LOAD_CASES);
+  const [loadCases, setLoadCases] = useState<LoadCase[]>(() =>
+    isNew ? [{ ...PLACEHOLDER_LOAD_CASE, id: makeId() }] : EXISTING_LOAD_CASES
+  );
 
   // Limits
   const [limitsSubTab, setLimitsSubTab] = useState<LimitsSubTab>('thrust');
@@ -297,9 +556,14 @@ export function LoadGroupNew() {
     useState<Record<LimitsSubTab, ControlPoint[]>>(INITIAL_LIMIT_POINTS);
 
   // Fatigue profiles
-  const [fatigueProfiles, setFatigueProfiles] =
-    useState<FatigueProfile[]>(INITIAL_FATIGUE_PROFILES);
+  const [fatigueProfiles, setFatigueProfiles] = useState<FatigueProfile[]>(() =>
+    isNew ? NEW_FATIGUE_PROFILES_PLACEHOLDER : EXISTING_FATIGUE_PROFILES
+  );
   const [fatigueSearch, setFatigueSearch] = useState('');
+  const [pickingLoadCase, setPickingLoadCase] = useState<{
+    profileId: string;
+    caseId: string;
+  } | null>(null);
 
   const titleText = isNew
     ? name.trim() || 'New load group'
@@ -323,7 +587,7 @@ export function LoadGroupNew() {
   function addLoadCase() {
     const lc: LoadCase = {
       id: makeId(),
-      name: 'New load case',
+      name: '',
       pitchFlag: 'Range',
       pitchMin: 0,
       pitchMax: 25,
@@ -342,6 +606,22 @@ export function LoadGroupNew() {
 
   function deleteLoadCase(caseId: string) {
     setLoadCases((prev) => prev.filter((c) => c.id !== caseId));
+  }
+
+  function duplicateLoadCase(caseId: string) {
+    setLoadCases((prev) => {
+      const idx = prev.findIndex((c) => c.id === caseId);
+      if (idx === -1) return prev;
+      const src = prev[idx];
+      const clone: LoadCase = {
+        ...src,
+        id: makeId(),
+        name: src.name ? `${src.name} copy` : 'copy',
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, clone);
+      return next;
+    });
   }
 
   // ── Limits helpers ───────────────────────────────────────────────────────
@@ -415,12 +695,12 @@ export function LoadGroupNew() {
         if (p.id !== profileId) return p;
         const fc: FatigueCase = {
           id: makeId(),
-          name: 'New fatigue case',
+          name: '',
           loadCase: '',
           minScale: 0,
           maxScale: 100,
-          mode: 'time',
-          duration: 0,
+          time: null,
+          cycles: null,
         };
         return { ...p, cases: [...p.cases, fc] };
       })
@@ -458,15 +738,15 @@ export function LoadGroupNew() {
     'h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]';
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f8fafc]">
       <MainNav />
 
       {/* Sub-toolbar */}
-      <div className="sticky top-[69px] z-40 flex h-[52px] w-full shrink-0 items-center justify-between gap-4 border-b border-[#e5e7eb] bg-[#f8fafc] px-4">
+      <div className="relative flex h-[52px] w-full shrink-0 items-center justify-between bg-[#f8fafc] px-4 py-2">
         <Tabs
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as Tab)}
-          className="h-9"
+          className="h-9 shrink-0"
         >
           <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
             <TabsTrigger value="general" className={triggerCls}>
@@ -488,78 +768,169 @@ export function LoadGroupNew() {
           {titleText}
         </h1>
 
-        <button
-          type="button"
-          onClick={handleExit}
-          className="inline-flex h-8 items-center gap-2 rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
-        >
-          Exit edit mode
-          <X className="h-4 w-4 opacity-70" strokeWidth={1.33} />
-        </button>
+        <div className="flex shrink-0 items-center gap-4">
+          <div className="flex items-center gap-[6px]">
+            <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
+            <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="Undo"
+              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9] text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
+            >
+              <Undo2 className="h-4 w-4" strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              aria-label="Redo"
+              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9] text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
+            >
+              <Redo2 className="h-4 w-4" strokeWidth={2} />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={handleExit}
+            className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
+          >
+            Back to Load groups
+          </button>
+        </div>
       </div>
 
       {/* ── Main content ──────────────────────────────────────────────────── */}
-      <main className="flex-1 px-4 py-6 sm:px-8 lg:px-16">
-        <div className="mx-auto w-full max-w-[1400px]">
+      <main className="flex-1 overflow-hidden px-4 pb-6 pt-4">
+        <div>
 
           {/* ── GENERAL TAB ─────────────────────────────────────────────── */}
           {activeTab === 'general' && (
-            <div className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-              <div className="flex flex-col gap-2">
-                <Label
-                  htmlFor="load-group-name"
-                  className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-                >
-                  Name <span className="text-[#dc2626]">*</span>
-                </Label>
-                <Input
-                  id="load-group-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Name the load group"
-                  className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-                />
+            <div className={isNew ? 'relative min-h-[500px]' : ''}>
+              {/* Form card — relative z-10 so it floats above the absolute explainer */}
+              <div className={`flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] ${isNew ? 'relative z-10 w-full max-w-[468px]' : 'w-full max-w-[468px]'}`}>
+                <div className="flex flex-col gap-2">
+                  <Label
+                    htmlFor="load-group-name"
+                    className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+                  >
+                    Name <span className="text-[#dc2626]">*</span>
+                  </Label>
+                  <Input
+                    id="load-group-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Name the load group"
+                    className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label
+                    htmlFor="load-group-description"
+                    className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+                  >
+                    Description <span className="text-[#dc2626]">*</span>
+                  </Label>
+                  <Textarea
+                    id="load-group-description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Describe the load group"
+                    rows={4}
+                    className="rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+                  />
+                </div>
               </div>
-              <div className="flex flex-col gap-2">
-                <Label
-                  htmlFor="load-group-description"
-                  className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-                >
-                  Description <span className="text-[#dc2626]">*</span>
-                </Label>
-                <Textarea
-                  id="load-group-description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe the load group"
-                  rows={4}
-                  className="rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-                />
-              </div>
+
+              {/* Canvas explainer — absolute overlay, centered across full page width */}
+              {isNew && (
+                <div className="pointer-events-none absolute inset-0 flex items-start justify-center pt-1">
+                  <div className="pointer-events-auto flex w-[500px] flex-col gap-5">
+                  {/* Description text */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-start gap-2">
+                      <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#6b7280]" strokeWidth={2} />
+                      <p className="text-[14px] leading-6 text-[#374151]">
+                        A load group is a collection of one or several load cases which can be used to form fatigue cases and fatigue profiles.
+                      </p>
+                    </div>
+                    <p className="ml-6 text-[14px] leading-5 text-[#737373]">
+                      Fatigue profiles are only required for fatigue simulation.
+                    </p>
+                  </div>
+
+                  {/* Structure diagram — hugs content, centered within the 500px column */}
+                  <div className="mx-auto w-fit rounded-[16px] border border-[#e5e7eb] bg-[#f9fafb] p-5">
+                    <div className="flex flex-col gap-4">
+                      <p className="text-center text-[11px] font-semibold uppercase tracking-widest text-[#6b7280]">
+                        Load Group
+                      </p>
+                      <div className="flex items-start gap-5">
+                        {/* Load cases column */}
+                        <div className="flex flex-col gap-1.5">
+                          {['Load case 1', 'Load case 2', 'Load case 3', 'Load case 4', 'Load case 5', 'Load case 6', 'Load case 7'].map((lc) => (
+                            <div
+                              key={lc}
+                              className="whitespace-nowrap rounded-md border border-[#e5e7eb] bg-white px-3 py-1.5 text-[12px] text-[#374151]"
+                            >
+                              {lc}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Fatigue profiles column */}
+                        <div className="flex flex-col gap-2.5">
+                          {[
+                            {
+                              name: 'Fatigue profile 1',
+                              cases: [
+                                { lc: 'Load case 1', fc: 'Fatigue case 1' },
+                                { lc: 'Load case 2', fc: 'Fatigue case 2' },
+                              ],
+                            },
+                            {
+                              name: 'Fatigue profile 2',
+                              cases: [
+                                { lc: 'Load case 1', fc: 'Fatigue case 1' },
+                                { lc: 'Load case 1', fc: 'Fatigue case 2' },
+                                { lc: 'Load case 6', fc: 'Fatigue case 3' },
+                              ],
+                            },
+                          ].map((profile) => (
+                            <div
+                              key={profile.name}
+                              className="rounded-[10px] border border-[#e5e7eb] bg-white p-3"
+                            >
+                              <p className="mb-2 whitespace-nowrap text-[12px] font-semibold text-[#0a0a0a]">
+                                {profile.name}
+                              </p>
+                              <div className="flex flex-col gap-1.5">
+                                {profile.cases.map((c, i) => (
+                                  <div key={i} className="flex items-center gap-2">
+                                    <span className="whitespace-nowrap rounded-md border border-[#e5e7eb] bg-white px-3 py-1.5 text-[12px] text-[#374151]">
+                                      {c.lc}
+                                    </span>
+                                    <span className="text-[11px] text-[#6b7280]">→</span>
+                                    <span className="whitespace-nowrap rounded-md border border-[#e5e7eb] bg-white px-3 py-1.5 text-[12px] text-[#374151]">
+                                      {c.fc}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* ── LOAD CASES TAB ──────────────────────────────────────────── */}
           {activeTab === 'load-cases' && (
             <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-              {/* Undo / Redo */}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-label="Undo"
-                  className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                >
-                  <Undo2 className="h-4 w-4" strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Redo"
-                  className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                >
-                  <Redo2 className="h-4 w-4" strokeWidth={2} />
-                </button>
-              </div>
-
               {/* Table */}
               <div className="overflow-x-auto rounded-md border border-[#e5e7eb]">
                 <table className="w-full border-collapse text-[13px]" style={{ minWidth: 1100 }}>
@@ -582,7 +953,7 @@ export function LoadGroupNew() {
                       </th>
                       <th className="h-10 px-3 text-left font-medium text-[#6b7280]">Target type</th>
                       <th className="h-10 px-3 text-left font-medium text-[#6b7280]">Target value</th>
-                      <th className="h-10 w-10 px-2" />
+                      <th className="h-10 w-[72px] px-2" />
                     </tr>
                   </thead>
                   <tbody>
@@ -592,6 +963,7 @@ export function LoadGroupNew() {
                           <Input
                             value={lc.name}
                             onChange={(e) => updateLoadCase(lc.id, 'name', e.target.value)}
+                            placeholder="Placeholder"
                             className="h-8 min-w-[160px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
                           />
                         </td>
@@ -616,14 +988,32 @@ export function LoadGroupNew() {
                           />
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input
-                            type="number"
-                            value={lc.pitchMax}
-                            onChange={(e) =>
-                              updateLoadCase(lc.id, 'pitchMax', parseFloat(e.target.value) || 0)
-                            }
-                            className="h-8 w-[70px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
-                          />
+                          {(() => {
+                            const isFixed = lc.pitchFlag === 'Fixed';
+                            const hasError = isFixed && lc.pitchMax !== 0;
+                            return (
+                              <div className="group/pitchmax relative">
+                                <Input
+                                  type="number"
+                                  value={lc.pitchMax}
+                                  onChange={(e) =>
+                                    updateLoadCase(lc.id, 'pitchMax', parseFloat(e.target.value) || 0)
+                                  }
+                                  disabled={isFixed && !hasError}
+                                  className={`h-8 w-[70px] rounded-md px-2 text-[13px] disabled:cursor-not-allowed ${
+                                    hasError
+                                      ? 'border-[#dc2626] !opacity-100 disabled:bg-[#fff5f5]'
+                                      : 'border-[#e2e8f0] disabled:bg-[#f8fafc] disabled:opacity-50'
+                                  }`}
+                                />
+                                {hasError && (
+                                  <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/pitchmax:opacity-100">
+                                    Maximum value is not allowed in fixed mode
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="px-2 py-1.5">
                           <SelectInline
@@ -644,14 +1034,32 @@ export function LoadGroupNew() {
                           />
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input
-                            type="number"
-                            value={lc.rpmMax}
-                            onChange={(e) =>
-                              updateLoadCase(lc.id, 'rpmMax', parseFloat(e.target.value) || 0)
-                            }
-                            className="h-8 w-[70px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
-                          />
+                          {(() => {
+                            const isFixed = lc.rpmFlag === 'Fixed';
+                            const hasError = isFixed && lc.rpmMax !== 0;
+                            return (
+                              <div className="group/rpmmax relative">
+                                <Input
+                                  type="number"
+                                  value={lc.rpmMax}
+                                  onChange={(e) =>
+                                    updateLoadCase(lc.id, 'rpmMax', parseFloat(e.target.value) || 0)
+                                  }
+                                  disabled={isFixed && !hasError}
+                                  className={`h-8 w-[70px] rounded-md px-2 text-[13px] disabled:cursor-not-allowed ${
+                                    hasError
+                                      ? 'border-[#dc2626] !opacity-100 disabled:bg-[#fff5f5]'
+                                      : 'border-[#e2e8f0] disabled:bg-[#f8fafc] disabled:opacity-50'
+                                  }`}
+                                />
+                                {hasError && (
+                                  <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/rpmmax:opacity-100">
+                                    Maximum value is not allowed in fixed mode
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="px-2 py-1.5">
                           <Input
@@ -707,8 +1115,8 @@ export function LoadGroupNew() {
                             onChange={(v) =>
                               updateLoadCase(lc.id, 'targetType', v as TargetType)
                             }
-                            options={['power', 'thrust']}
-                            className="w-[80px]"
+                            options={['torque', 'thrust', 'power']}
+                            className="w-[86px]"
                           />
                         </td>
                         <td className="px-2 py-1.5">
@@ -726,19 +1134,29 @@ export function LoadGroupNew() {
                               className="h-8 w-[80px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
                             />
                             <span className="text-[11px] text-[#6b7280]">
-                              {lc.targetType === 'power' ? 'kW' : 'kN'}
+                              {lc.targetType === 'power' ? 'kW' : lc.targetType === 'torque' ? 'Nm' : 'N'}
                             </span>
                           </div>
                         </td>
                         <td className="px-2 py-1.5">
-                          <button
-                            type="button"
-                            onClick={() => deleteLoadCase(lc.id)}
-                            aria-label="Delete load case"
-                            className="flex h-7 w-7 items-center justify-center rounded text-[#6b7280] opacity-0 transition-opacity hover:bg-[#fee2e2] hover:text-[#dc2626] group-hover:opacity-100"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
-                          </button>
+                          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => duplicateLoadCase(lc.id)}
+                              aria-label="Duplicate load case"
+                              className="flex h-7 w-7 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
+                            >
+                              <Copy className="h-3.5 w-3.5" strokeWidth={2} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteLoadCase(lc.id)}
+                              aria-label="Delete load case"
+                              className="flex h-7 w-7 items-center justify-center rounded text-[#6b7280] hover:bg-[#fee2e2] hover:text-[#dc2626]"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -766,126 +1184,123 @@ export function LoadGroupNew() {
 
           {/* ── LIMITS TAB ──────────────────────────────────────────────── */}
           {activeTab === 'limits' && (
-            <div className="flex w-full flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-              {/* Undo / Redo */}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-label="Undo"
-                  className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+            <div className="flex w-fit flex-col rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+              {/* Info banner + Sub-tabs header */}
+              <div className="flex flex-col gap-6 p-6 pb-4">
+                <div className="flex items-start gap-2">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#6b7280]" strokeWidth={2} />
+                  <p className="max-w-[560px] text-[13px] font-normal leading-5 text-[#6b7280]">
+                    Define the maximum allowable aerodynamic and mechanical loads as a function of rotor speed. These limits constrain the simulation envelope for all load cases in this group.
+                  </p>
+                </div>
+                <Tabs
+                  value={limitsSubTab}
+                  onValueChange={(v) => setLimitsSubTab(v as LimitsSubTab)}
                 >
-                  <Undo2 className="h-4 w-4" strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Redo"
-                  className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                >
-                  <Redo2 className="h-4 w-4" strokeWidth={2} />
-                </button>
+                  <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
+                    {(['thrust', 'torque', 'power'] as const).map((sub) => (
+                      <TabsTrigger key={sub} value={sub} className={triggerCls}>
+                        {sub.charAt(0).toUpperCase() + sub.slice(1)}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
               </div>
 
-              {/* Sub-tabs: Thrust / Torque / Power */}
-              <Tabs
-                value={limitsSubTab}
-                onValueChange={(v) => setLimitsSubTab(v as LimitsSubTab)}
-              >
-                <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
-                  {(['thrust', 'torque', 'power'] as const).map((sub) => (
-                    <TabsTrigger key={sub} value={sub} className={triggerCls}>
-                      {sub.charAt(0).toUpperCase() + sub.slice(1)}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-
               {/* BezierEditor + Table side by side */}
-              <div className="grid grid-cols-[1fr_minmax(0,260px)] gap-6">
-                {/* Interactive Bezier chart */}
-                <BezierEditor
-                  points={limitPoints[limitsSubTab]}
-                  onChange={(next) =>
-                    setLimitPoints((prev) => ({ ...prev, [limitsSubTab]: next }))
-                  }
-                  xMin={0}
-                  xMax={20}
-                  xStep={5}
-                  yMin={0}
-                  yMax={LIMITS_Y_MAX[limitsSubTab]}
-                  yStep={LIMITS_Y_STEP[limitsSubTab]}
-                />
+              <div className="px-6 pb-6">
+                <div className="grid grid-cols-[minmax(480px,1fr)_260px] gap-6">
+                  {/* Interactive Bezier chart */}
+                  <div className="flex flex-col gap-3">
+                    <BezierEditor
+                      points={limitPoints[limitsSubTab]}
+                      onChange={(next) =>
+                        setLimitPoints((prev) => ({ ...prev, [limitsSubTab]: next }))
+                      }
+                      xMin={0}
+                      xMax={20}
+                      xStep={5}
+                      yMin={0}
+                      yMax={LIMITS_Y_MAX[limitsSubTab]}
+                      yStep={LIMITS_Y_STEP[limitsSubTab]}
+                      yUnit={LIMITS_UNITS[limitsSubTab]}
+                    />
+                  </div>
 
-                {/* Precise editing table */}
-                <div className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
-                  <table className="w-full border-collapse text-[13px]">
-                    <thead>
-                      <tr className="border-b border-[#e5e7eb]">
-                        <th className="h-9 w-8 px-2 text-left font-medium text-[#6b7280]">#</th>
-                        <th className="h-9 px-2 text-left font-medium text-[#6b7280]">RPM</th>
-                        <th className="h-9 px-2 text-left font-medium text-[#6b7280]">
-                          {LIMITS_UNITS[limitsSubTab]}
-                        </th>
-                        <th className="h-9 w-8 px-1" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {limitPoints[limitsSubTab].map((pt, idx) => {
-                        const isEndpoint =
-                          idx === 0 || idx === limitPoints[limitsSubTab].length - 1;
-                        return (
-                          <tr
-                            key={idx}
-                            className="group border-b border-[#e5e7eb] last:border-b-0"
-                          >
-                            <td className="px-2 py-1.5 text-[#6b7280]">{idx}</td>
-                            <td className="px-1 py-1.5">
-                              <BufferedNumberInput
-                                step="0.1"
-                                min={0}
-                                max={20}
-                                value={pt.x}
-                                format={(v) => v.toFixed(2)}
-                                disabled={isEndpoint}
-                                onCommit={(v) => updateLimitPoint(limitsSubTab, idx, 'x', v)}
-                                className="h-7 w-full rounded border-[#e2e8f0] px-1.5 text-[12px] disabled:bg-[#f8fafc] disabled:text-[#6b7280]"
-                              />
-                            </td>
-                            <td className="px-1 py-1.5">
-                              <BufferedNumberInput
-                                step="1"
-                                min={0}
-                                max={LIMITS_Y_MAX[limitsSubTab]}
-                                value={pt.y}
-                                format={(v) => v.toFixed(0)}
-                                onCommit={(v) => updateLimitPoint(limitsSubTab, idx, 'y', v)}
-                                className="h-7 w-full rounded border-[#e2e8f0] px-1.5 text-[12px]"
-                              />
-                            </td>
-                            <td className="px-1 py-1.5">
-                              {!isEndpoint && (
-                                <button
-                                  type="button"
-                                  onClick={() => deleteLimitPoint(limitsSubTab, idx)}
-                                  aria-label="Delete point"
-                                  className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] opacity-0 hover:bg-[#fee2e2] hover:text-[#dc2626] group-hover:opacity-100"
-                                >
-                                  <Trash2 className="h-3 w-3" strokeWidth={2} />
-                                </button>
-                              )}
-                            </td>
+                  {/* Precise editing table */}
+                  <div className="flex flex-col gap-3">
+                    <div className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
+                      <table className="w-full border-collapse text-[13px]">
+                        <thead>
+                          <tr className="border-b border-[#e5e7eb]">
+                            <th className="h-10 w-8 px-2 text-left font-medium text-[#6b7280]">#</th>
+                            <th className="h-10 px-3 text-left font-medium text-[#6b7280]">RPM</th>
+                            <th className="h-10 px-3 text-left font-medium text-[#6b7280]">
+                              {LIMITS_UNITS[limitsSubTab]}
+                            </th>
+                            <th className="h-10 w-8 px-1" />
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <button
-                    type="button"
-                    onClick={() => addLimitPoint(limitsSubTab)}
-                    className="flex w-full items-center justify-center gap-1.5 border-t border-[#e5e7eb] py-2 text-[13px] font-medium text-[#006496] hover:bg-[#f0f9ff]"
-                  >
-                    <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                    Add point
-                  </button>
+                        </thead>
+                        <tbody>
+                          {limitPoints[limitsSubTab].map((pt, idx) => {
+                            const isEndpoint =
+                              idx === 0 || idx === limitPoints[limitsSubTab].length - 1;
+                            return (
+                              <tr
+                                key={idx}
+                                className="group border-b border-[#e5e7eb] last:border-b-0"
+                              >
+                                <td className="px-2 py-2 text-[#6b7280]">{idx}</td>
+                                <td className="px-2 py-2">
+                                  <BufferedNumberInput
+                                    step="0.1"
+                                    min={0}
+                                    max={20}
+                                    value={pt.x}
+                                    format={(v) => v.toFixed(2)}
+                                    disabled={isEndpoint}
+                                    onCommit={(v) => updateLimitPoint(limitsSubTab, idx, 'x', v)}
+                                    className="h-8 w-full rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:bg-[#f8fafc] disabled:text-[#6b7280]"
+                                  />
+                                </td>
+                                <td className="px-2 py-2">
+                                  <BufferedNumberInput
+                                    step="1"
+                                    min={0}
+                                    max={LIMITS_Y_MAX[limitsSubTab]}
+                                    value={pt.y}
+                                    format={(v) => v.toFixed(0)}
+                                    onCommit={(v) => updateLimitPoint(limitsSubTab, idx, 'y', v)}
+                                    className="h-8 w-full rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+                                  />
+                                </td>
+                                <td className="px-1 py-2">
+                                  {!isEndpoint && (
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteLimitPoint(limitsSubTab, idx)}
+                                      aria-label="Delete point"
+                                      className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] opacity-0 hover:bg-[#fee2e2] hover:text-[#dc2626] group-hover:opacity-100"
+                                    >
+                                      <Trash2 className="h-3 w-3" strokeWidth={2} />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <button
+                        type="button"
+                        onClick={() => addLimitPoint(limitsSubTab)}
+                        className="flex w-full items-center justify-center gap-1.5 border-t border-[#e5e7eb] py-2 text-[13px] font-medium text-[#006496] hover:bg-[#f0f9ff]"
+                      >
+                        <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                        Add point
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -996,6 +1411,7 @@ export function LoadGroupNew() {
                           </div>
 
                           {/* Sub-table */}
+                          <TooltipProvider>
                           <div className="overflow-hidden rounded-md border border-[#e5e7eb]">
                             <table className="w-full border-collapse text-[13px]">
                               <thead>
@@ -1007,16 +1423,26 @@ export function LoadGroupNew() {
                                   <th className="h-9 px-3 text-left font-medium text-[#6b7280]">
                                     Load case
                                   </th>
-                                  <th className="h-9 px-3 text-left font-medium text-[#6b7280]">
-                                    Min scale (%)
+                                  <th className="h-9 w-[138px] px-3 text-left font-medium text-[#6b7280]">
+                                    <div className="flex items-center gap-1 whitespace-nowrap">
+                                      Min scale (%)
+                                      <Tooltip content="The lower bound of the load scaling factor. The simulation applies at least this percentage of the referenced load case's loads." side="top">
+                                        <Info className="h-3.5 w-3.5 shrink-0 cursor-default text-[#9ca3af]" strokeWidth={2} />
+                                      </Tooltip>
+                                    </div>
                                   </th>
-                                  <th className="h-9 px-3 text-left font-medium text-[#6b7280]">
-                                    Max scale (%)
+                                  <th className="h-9 w-[138px] px-3 text-left font-medium text-[#6b7280]">
+                                    <div className="flex items-center gap-1 whitespace-nowrap">
+                                      Max scale (%)
+                                      <Tooltip content="The upper bound of the load scaling factor. The simulation will not exceed this percentage of the referenced load case's loads." side="top">
+                                        <Info className="h-3.5 w-3.5 shrink-0 cursor-default text-[#9ca3af]" strokeWidth={2} />
+                                      </Tooltip>
+                                    </div>
                                   </th>
-                                  <th className="h-9 px-3 text-left font-medium text-[#6b7280]">
+                                  <th className="h-9 w-[114px] whitespace-nowrap px-3 text-left font-medium text-[#6b7280]">
                                     Time [sec]
                                   </th>
-                                  <th className="h-9 px-3 text-left font-medium text-[#6b7280]">
+                                  <th className="h-9 w-[114px] whitespace-nowrap px-3 text-left font-medium text-[#6b7280]">
                                     Cycles
                                   </th>
                                   <th className="h-9 w-8 px-1" />
@@ -1042,23 +1468,31 @@ export function LoadGroupNew() {
                                             e.target.value
                                           )
                                         }
+                                        placeholder="Placeholder"
                                         className="h-8 min-w-[140px] rounded border-[#e2e8f0] px-2 text-[13px]"
                                       />
                                     </td>
                                     <td className="px-2 py-1.5">
-                                      <Input
-                                        value={fc.loadCase}
-                                        onChange={(e) =>
-                                          updateFatigueCase(
-                                            profile.id,
-                                            fc.id,
-                                            'loadCase',
-                                            e.target.value
-                                          )
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setPickingLoadCase({
+                                            profileId: profile.id,
+                                            caseId: fc.id,
+                                          })
                                         }
-                                        placeholder="Select"
-                                        className="h-8 min-w-[180px] rounded border-[#e2e8f0] px-2 text-[13px]"
-                                      />
+                                        className="flex h-8 w-full items-center justify-between gap-1 rounded border border-[#e2e8f0] bg-white px-2 text-[13px] hover:bg-[#f9fafb]"
+                                      >
+                                        <span
+                                          className={`truncate text-left ${fc.loadCase ? 'text-[#0a0a0a]' : 'text-[#9ca3af]'}`}
+                                        >
+                                          {fc.loadCase || 'Select'}
+                                        </span>
+                                        <ChevronRight
+                                          className="h-3.5 w-3.5 shrink-0 text-[#6b7280]"
+                                          strokeWidth={2}
+                                        />
+                                      </button>
                                     </td>
                                     <td className="px-2 py-1.5">
                                       <Input
@@ -1072,7 +1506,7 @@ export function LoadGroupNew() {
                                             parseFloat(e.target.value) || 0
                                           )
                                         }
-                                        className="h-8 w-[80px] rounded border-[#e2e8f0] px-2 text-[13px]"
+                                        className="h-8 w-full rounded border-[#e2e8f0] px-2 text-[13px]"
                                       />
                                     </td>
                                     <td className="px-2 py-1.5">
@@ -1087,46 +1521,56 @@ export function LoadGroupNew() {
                                             parseFloat(e.target.value) || 0
                                           )
                                         }
-                                        className="h-8 w-[80px] rounded border-[#e2e8f0] px-2 text-[13px]"
+                                        className="h-8 w-full rounded border-[#e2e8f0] px-2 text-[13px]"
                                       />
                                     </td>
                                     <td className="px-2 py-1.5">
-                                      {fc.mode === 'time' ? (
+                                      <div className="group/timetip relative">
                                         <Input
                                           type="number"
-                                          value={fc.duration}
-                                          onChange={(e) =>
+                                          value={fc.time ?? ''}
+                                          onChange={(e) => {
+                                            const raw = e.target.value;
                                             updateFatigueCase(
                                               profile.id,
                                               fc.id,
-                                              'duration',
-                                              parseFloat(e.target.value) || 0
-                                            )
-                                          }
-                                          className="h-8 w-[80px] rounded border-[#e2e8f0] px-2 text-[13px]"
+                                              'time',
+                                              raw === '' ? null : (parseFloat(raw) || 0)
+                                            );
+                                          }}
+                                          disabled={fc.cycles !== null}
+                                          className="h-8 w-full rounded border-[#e2e8f0] px-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
                                         />
-                                      ) : (
-                                        <span className="px-2 text-[#6b7280]">—</span>
-                                      )}
+                                        {fc.cycles !== null && (
+                                          <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/timetip:opacity-100">
+                                            Clear the &lsquo;Cycles&rsquo; field to add time
+                                          </span>
+                                        )}
+                                      </div>
                                     </td>
                                     <td className="px-2 py-1.5">
-                                      {fc.mode === 'cycles' ? (
+                                      <div className="group/cyclestip relative">
                                         <Input
                                           type="number"
-                                          value={fc.duration}
-                                          onChange={(e) =>
+                                          value={fc.cycles ?? ''}
+                                          onChange={(e) => {
+                                            const raw = e.target.value;
                                             updateFatigueCase(
                                               profile.id,
                                               fc.id,
-                                              'duration',
-                                              parseFloat(e.target.value) || 0
-                                            )
-                                          }
-                                          className="h-8 w-[80px] rounded border-[#e2e8f0] px-2 text-[13px]"
+                                              'cycles',
+                                              raw === '' ? null : (parseFloat(raw) || 0)
+                                            );
+                                          }}
+                                          disabled={fc.time !== null}
+                                          className="h-8 w-full rounded border-[#e2e8f0] px-2 text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
                                         />
-                                      ) : (
-                                        <span className="px-2 text-[#6b7280]">—</span>
-                                      )}
+                                        {fc.time !== null && (
+                                          <span className="pointer-events-none absolute bottom-full right-0 z-50 mb-1.5 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/cyclestip:opacity-100">
+                                            Clear the &lsquo;Time&rsquo; field to add number of Cycles
+                                          </span>
+                                        )}
+                                      </div>
                                     </td>
                                     <td className="px-1 py-1.5">
                                       <button
@@ -1162,6 +1606,7 @@ export function LoadGroupNew() {
                               Add fatigue case
                             </button>
                           </div>
+                          </TooltipProvider>
                         </div>
                       )}
                     </div>
@@ -1178,7 +1623,23 @@ export function LoadGroupNew() {
         </div>
       </main>
 
-      <Footer />
+      <LoadCasePickerDialog
+        open={pickingLoadCase !== null}
+        loadCaseNames={loadCases.map((lc) => lc.name)}
+        current={
+          pickingLoadCase
+            ? (fatigueProfiles
+                .find((p) => p.id === pickingLoadCase.profileId)
+                ?.cases.find((c) => c.id === pickingLoadCase.caseId)?.loadCase ?? '')
+            : ''
+        }
+        onSelect={(name) => {
+          if (pickingLoadCase) {
+            updateFatigueCase(pickingLoadCase.profileId, pickingLoadCase.caseId, 'loadCase', name);
+          }
+        }}
+        onClose={() => setPickingLoadCase(null)}
+      />
     </div>
   );
 }
