@@ -69,6 +69,10 @@ export function rowInteractionProps(onOpen: () => void) {
     tabIndex: 0,
     onClick: onOpen,
     onKeyDown: (e: KeyboardEvent) => {
+      // Only when the row itself is focused — otherwise Enter/Space bubbling up
+      // from a nested control (e.g. an expand chevron) would navigate instead of
+      // activating that control.
+      if (e.target !== e.currentTarget) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         onOpen();
