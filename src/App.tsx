@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Layout } from '@/components/Layout';
 import { Home } from '@/pages/Home';
 import { Nurbs } from '@/pages/Nurbs';
@@ -16,11 +17,13 @@ import { Calculation } from '@/pages/Calculation';
 import { CalculationNew } from '@/pages/CalculationNew';
 import { Report } from '@/pages/Report';
 import { Settings } from '@/pages/Settings';
+import { NotFound } from '@/pages/NotFound';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Layout>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/material" element={<Material />} />
@@ -43,9 +46,11 @@ function App() {
           <Route path="/report" element={<Report />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/nurbs" element={<Nurbs />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
-      </Layout>
-    </BrowserRouter>
+        </Layout>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

@@ -1,10 +1,12 @@
-import { slugify, uniqueId } from '@/lib/utils';
+import { slugify, todayISO, uniqueId } from '@/lib/utils';
 
 export interface LoadGroup {
   id: string;
   name: string;
   description: string;
   lastUpdated: string;
+  /** Fatigue profile names shown in the Calculation fatigue-profile picker. */
+  profiles: string[];
 }
 
 export const LOAD_GROUPS: LoadGroup[] = [
@@ -14,6 +16,7 @@ export const LOAD_GROUPS: LoadGroup[] = [
     description:
       'Normal power production — full lifetime fatigue damage accumulation. Wöhler SN curves, Miner-Palmgren damage.',
     lastUpdated: '2026-04-18',
+    profiles: ['Power production', 'Start-up and shutdown', 'Extreme turbulence', 'Standby extreme wind', 'Low-wind operation', 'High-turbulence burst', 'Yaw-misaligned prod', 'Extreme gust sequence', 'Grid-loss coast-down', 'Test run'],
   },
   {
     id: 'dlc-13-extreme',
@@ -21,6 +24,7 @@ export const LOAD_GROUPS: LoadGroup[] = [
     description:
       'Extreme turbulence model during power production. Return period 50 years, IEC class I-A.',
     lastUpdated: '2026-04-02',
+    profiles: ['Extreme turbulence', 'Power production'],
   },
   {
     id: 'dlc-21-loss-grid',
@@ -28,6 +32,7 @@ export const LOAD_GROUPS: LoadGroup[] = [
     description:
       'Grid loss transient during normal power production. Emergency stop followed by idling.',
     lastUpdated: '2026-03-30',
+    profiles: ['Grid-loss coast-down', 'Emergency shutdown'],
   },
   {
     id: 'dlc-61-parked-50y',
@@ -35,6 +40,7 @@ export const LOAD_GROUPS: LoadGroup[] = [
     description:
       'Parked turbine in 50-year extreme wind. Stand-still with pitch at feather, rotor locked.',
     lastUpdated: '2026-03-17',
+    profiles: ['Standby extreme wind', 'Parked — 50y wind'],
   },
   {
     id: 'dlc-7i-idling-err',
@@ -42,6 +48,7 @@ export const LOAD_GROUPS: LoadGroup[] = [
     description:
       'Idling with one pitch actuator failure. Aerodynamic imbalance during loss-of-grid scenario.',
     lastUpdated: '2026-03-03',
+    profiles: ['Idling — pitch error', 'Resonance check'],
   },
   {
     id: 'modal-analysis-gr',
@@ -49,6 +56,7 @@ export const LOAD_GROUPS: LoadGroup[] = [
     description:
       'Gravitational and centrifugal load group for Campbell diagram modal analysis. RPM sweep 0–20.',
     lastUpdated: '2026-02-19',
+    profiles: ['Modal sweep — 0 RPM', 'Modal sweep — rated'],
   },
   {
     id: 'offshore-wave-c',
@@ -56,6 +64,7 @@ export const LOAD_GROUPS: LoadGroup[] = [
     description:
       'Combined wind-wave offshore load set. Misalignment angle ±30°, Hs=8m, Tp=14s.',
     lastUpdated: '2026-02-08',
+    profiles: ['Wave — aligned', 'Wave — misaligned 30°'],
   },
   {
     id: 'rated-speed-oper',
@@ -63,6 +72,7 @@ export const LOAD_GROUPS: LoadGroup[] = [
     description:
       'Rated wind speed operational cases. Pitch angle schedule validation, power curve verification.',
     lastUpdated: '2026-02-08',
+    profiles: ['Rated — full load', 'Rated — derating'],
   },
   {
     id: 'static-proof-load',
@@ -70,6 +80,7 @@ export const LOAD_GROUPS: LoadGroup[] = [
     description:
       'Static proof load case set for certification. 1.35 × ultimate design load at root and mid-span.',
     lastUpdated: '2026-02-01',
+    profiles: ['Flapwise ULS', 'Edgewise ULS'],
   },
   {
     id: 'tip-deflection-max',
@@ -77,12 +88,9 @@ export const LOAD_GROUPS: LoadGroup[] = [
     description:
       'Maximum tip deflection envelope from combined gust and power production. Tower clearance check.',
     lastUpdated: '2026-01-20',
+    profiles: ['Max deflection — gust', 'Max deflection — rated'],
   },
 ];
-
-function stamp(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export function createLoadGroup(input: { name: string; description: string }): LoadGroup {
   const id = uniqueId(slugify(input.name || 'load-group'), (c) =>
@@ -92,7 +100,8 @@ export function createLoadGroup(input: { name: string; description: string }): L
     id,
     name: input.name.trim() || 'Untitled load group',
     description: input.description.trim(),
-    lastUpdated: stamp(),
+    lastUpdated: todayISO(),
+    profiles: ['Power production', 'Start-up and shutdown'],
   };
   LOAD_GROUPS.unshift(lg);
   return lg;
@@ -104,5 +113,5 @@ export function updateLoadGroup(
 ): void {
   const idx = LOAD_GROUPS.findIndex((g) => g.id === id);
   if (idx === -1) return;
-  LOAD_GROUPS[idx] = { ...LOAD_GROUPS[idx], ...changes, lastUpdated: stamp() };
+  LOAD_GROUPS[idx] = { ...LOAD_GROUPS[idx], ...changes, lastUpdated: todayISO() };
 }

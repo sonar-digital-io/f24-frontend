@@ -184,6 +184,8 @@ export function LoftViewer({
     loftGroup: THREE.Group;
     planeGroup: THREE.Group;
     previewGroup: THREE.Group;
+    previewRing: THREE.LineLoop;
+    previewDisc: THREE.Mesh;
     animId: number;
   } | null>(null);
   const edgeModeRef = useRef(edgePlacementMode);
@@ -199,8 +201,8 @@ export function LoftViewer({
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
-    let width = container.clientWidth || 800;
-    let height = container.clientHeight || 600;
+    const width = container.clientWidth || 800;
+    const height = container.clientHeight || 600;
 
     const scene = new THREE.Scene();
     const canvas = document.createElement('canvas');
@@ -250,6 +252,36 @@ export function LoftViewer({
     const previewGroup = new THREE.Group();
     scene.add(previewGroup);
 
+    // Persistent edge-placement preview — created once, reused on every
+    // mousemove (no per-move geometry/material alloc + dispose churn)
+    const RING_CAPACITY = 256; // max sampled points in the preview ring
+    const ringGeo = new THREE.BufferGeometry();
+    ringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(RING_CAPACITY * 3), 3));
+    ringGeo.setAttribute('lineDistance', new THREE.BufferAttribute(new Float32Array(RING_CAPACITY), 1));
+    const ringMat = new THREE.LineDashedMaterial({
+      color: 0xffcc00,
+      dashSize: 0.15,
+      gapSize: 0.08,
+      linewidth: 1,
+    });
+    const previewRing = new THREE.LineLoop(ringGeo, ringMat);
+    previewRing.frustumCulled = false; // buffer is updated in place
+    previewRing.visible = false;
+    previewGroup.add(previewRing);
+
+    const discGeo = new THREE.PlaneGeometry(8, 8);
+    const discMat = new THREE.MeshBasicMaterial({
+      color: 0xffcc00,
+      transparent: true,
+      opacity: 0.04,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const previewDisc = new THREE.Mesh(discGeo, discMat);
+    previewDisc.rotation.x = -Math.PI / 2;
+    previewDisc.visible = false;
+    previewGroup.add(previewDisc);
+
     // Raycaster for edge placement
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -258,15 +290,9 @@ export function LoftViewer({
 
     const onMouseMove = (event: MouseEvent) => {
       if (!edgeModeRef.current) {
-        // Clear preview when not in edge mode
-        while (previewGroup.children.length > 0) {
-          const c = previewGroup.children[0];
-          previewGroup.remove(c);
-          if (c instanceof THREE.LineLoop || c instanceof THREE.Mesh) {
-            c.geometry.dispose();
-            (c.material as THREE.Material).dispose();
-          }
-        }
+        // Hide preview when not in edge mode
+        previewRing.visible = false;
+        previewDisc.visible = false;
         return;
       }
 
@@ -279,15 +305,9 @@ export function LoftViewer({
       const loftMeshes = loftGroup.children.filter(c => c instanceof THREE.Mesh);
       const intersects = raycaster.intersectObjects(loftMeshes, false);
 
-      // Clear old preview
-      while (previewGroup.children.length > 0) {
-        const c = previewGroup.children[0];
-        previewGroup.remove(c);
-        if (c instanceof THREE.LineLoop || c instanceof THREE.Mesh) {
-          c.geometry.dispose();
-          (c.material as THREE.Material).dispose();
-        }
-      }
+      // Hide preview until a valid hit is found
+      previewRing.visible = false;
+      previewDisc.visible = false;
 
       if (intersects.length > 0) {
         const hitY = intersects[0].point.y;
@@ -327,31 +347,26 @@ export function LoftViewer({
           const curveXZ = sampleClosedBezier(interpAnchors, 48);
           const pts = curveXZ.map(([x, z]) => new THREE.Vector3(x, clampedY, z));
 
-          // Preview ring (dashed line)
-          const ringGeo = new THREE.BufferGeometry().setFromPoints([...pts, pts[0]]);
-          const ringMat = new THREE.LineDashedMaterial({
-            color: 0xffcc00,
-            dashSize: 0.15,
-            gapSize: 0.08,
-            linewidth: 1,
-          });
-          const ring = new THREE.LineLoop(ringGeo, ringMat);
-          ring.computeLineDistances();
-          previewGroup.add(ring);
+          // Preview ring (dashed line) — update the persistent buffers in place
+          const loopPts = [...pts, pts[0]];
+          const count = Math.min(loopPts.length, RING_CAPACITY);
+          const posAttr = ringGeo.getAttribute('position') as THREE.BufferAttribute;
+          const distAttr = ringGeo.getAttribute('lineDistance') as THREE.BufferAttribute;
+          let dist = 0;
+          for (let i = 0; i < count; i++) {
+            const pt = loopPts[i];
+            posAttr.setXYZ(i, pt.x, pt.y, pt.z);
+            if (i > 0) dist += pt.distanceTo(loopPts[i - 1]);
+            distAttr.setX(i, dist);
+          }
+          posAttr.needsUpdate = true;
+          distAttr.needsUpdate = true;
+          ringGeo.setDrawRange(0, count);
+          previewRing.visible = true;
 
           // Semi-transparent disc
-          const discGeo = new THREE.PlaneGeometry(8, 8);
-          const discMat = new THREE.MeshBasicMaterial({
-            color: 0xffcc00,
-            transparent: true,
-            opacity: 0.04,
-            side: THREE.DoubleSide,
-            depthWrite: false,
-          });
-          const disc = new THREE.Mesh(discGeo, discMat);
-          disc.rotation.x = -Math.PI / 2;
-          disc.position.y = clampedY;
-          previewGroup.add(disc);
+          previewDisc.position.y = clampedY;
+          previewDisc.visible = true;
 
           // Store Y for click handler
           previewGroup.userData.pendingY = clampedY;
@@ -382,7 +397,7 @@ export function LoftViewer({
     };
     const animId = requestAnimationFrame(animate);
 
-    sceneRef.current = { scene, camera, renderer, controls, loftGroup, planeGroup, previewGroup, animId };
+    sceneRef.current = { scene, camera, renderer, controls, loftGroup, planeGroup, previewGroup, previewRing, previewDisc, animId };
 
     const onResize = () => {
       const w = container.clientWidth, h = container.clientHeight;
@@ -397,6 +412,17 @@ export function LoftViewer({
       renderer.domElement.removeEventListener('mousemove', onMouseMove);
       renderer.domElement.removeEventListener('click', onClick);
       cancelAnimationFrame(sceneRef.current?.animId || animId);
+      controls.dispose();
+      // Dispose every geometry/material still in the scene (loft, plane
+      // previews, edge-placement preview, grid, axes)
+      scene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
+          obj.geometry.dispose();
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((m) => m.dispose());
+        }
+      });
+      (scene.background as THREE.Texture).dispose();
       renderer.dispose();
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
       sceneRef.current = null;
@@ -533,7 +559,7 @@ export function LoftViewer({
       vertices: vertices.length / 3,
     });
 
-  }, [loftTrigger, planes, ruled, showWireframe, showSurface]);
+  }, [loftTrigger, planes, ruled, showWireframe, showSurface, onStatsUpdate]);
 
   // Toggle OrbitControls when in edge placement mode
   useEffect(() => {
@@ -544,15 +570,9 @@ export function LoftViewer({
       s.renderer.domElement.style.cursor = 'crosshair';
     } else {
       s.renderer.domElement.style.cursor = 'grab';
-      // Clear preview
-      while (s.previewGroup.children.length > 0) {
-        const c = s.previewGroup.children[0];
-        s.previewGroup.remove(c);
-        if (c instanceof THREE.LineLoop || c instanceof THREE.Mesh) {
-          c.geometry.dispose();
-          (c.material as THREE.Material).dispose();
-        }
-      }
+      // Hide preview (persistent objects — disposed on unmount)
+      s.previewRing.visible = false;
+      s.previewDisc.visible = false;
     }
   }, [edgePlacementMode]);
 

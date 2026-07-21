@@ -4,6 +4,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PlyStackViz } from '@/components/PlyStackViz';
+import { BufferedNumberInput } from '@/components/BufferedNumberInput';
+import { nextLocalId } from '@/lib/utils';
 
 export interface Ply {
   id: string;
@@ -83,6 +85,9 @@ export function LayupBuilder() {
   const [unifiedVisualization, setUnifiedVisualization] = useState(true);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
   const [dropOverIdx, setDropOverIdx] = useState<number | null>(null);
+  // Row is draggable only while the grip handle is pressed — otherwise
+  // selecting text inside the name/material inputs starts a row drag.
+  const [dragArmedIdx, setDragArmedIdx] = useState<number | null>(null);
 
   function updatePly<K extends keyof Ply>(idx: number, key: K, value: Ply[K]) {
     setPlies((current) =>
@@ -104,7 +109,7 @@ export function LayupBuilder() {
 
   function handleAdd() {
     const newPly: Ply = {
-      id: `p-${Date.now()}`,
+      id: nextLocalId('p'),
       name: `Layer ${plies.length + 1}`,
       material: 'Torayca T700S / Epoxy',
       thickness: 0.2,
@@ -144,6 +149,7 @@ export function LayupBuilder() {
   function handleDragEnd() {
     setDraggingIdx(null);
     setDropOverIdx(null);
+    setDragArmedIdx(null);
   }
 
   return (
@@ -187,7 +193,7 @@ export function LayupBuilder() {
                 return (
                   <tr
                     key={ply.id}
-                    draggable
+                    draggable={dragArmedIdx === idx}
                     onDragStart={(e) => handleDragStart(idx, e)}
                     onDragOver={(e) => handleDragOver(idx, e)}
                     onDragLeave={handleDragLeave}
@@ -200,6 +206,8 @@ export function LayupBuilder() {
                     <td className="px-2 py-2 align-middle">
                       <span
                         aria-label="Drag handle"
+                        onPointerDown={() => setDragArmedIdx(idx)}
+                        onPointerUp={() => setDragArmedIdx(null)}
                         className="flex h-7 w-7 cursor-grab items-center justify-center text-[#6b7280] hover:text-[#0a0a0a] active:cursor-grabbing"
                       >
                         <GripVertical className="h-4 w-4" strokeWidth={2} />
@@ -238,16 +246,12 @@ export function LayupBuilder() {
                       <Label htmlFor={`ply-thick-${ply.id}`} className="sr-only">
                         Thickness
                       </Label>
-                      <Input
+                      <BufferedNumberInput
                         id={`ply-thick-${ply.id}`}
-                        type="number"
                         step="0.01"
                         min={0}
                         value={ply.thickness}
-                        onChange={(e) => {
-                          const v = parseFloat(e.target.value);
-                          if (Number.isFinite(v)) updatePly(idx, 'thickness', v);
-                        }}
+                        onCommit={(v) => updatePly(idx, 'thickness', v)}
                         className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
                       />
                     </td>
@@ -255,17 +259,13 @@ export function LayupBuilder() {
                       <Label htmlFor={`ply-orient-${ply.id}`} className="sr-only">
                         Orientation
                       </Label>
-                      <Input
+                      <BufferedNumberInput
                         id={`ply-orient-${ply.id}`}
-                        type="number"
                         step="1"
                         min={0}
                         max={180}
                         value={ply.orientation}
-                        onChange={(e) => {
-                          const v = parseFloat(e.target.value);
-                          if (Number.isFinite(v)) updatePly(idx, 'orientation', v);
-                        }}
+                        onCommit={(v) => updatePly(idx, 'orientation', v)}
                         className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
                       />
                     </td>

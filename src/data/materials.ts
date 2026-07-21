@@ -1,4 +1,4 @@
-import { slugify, uniqueId } from '@/lib/utils';
+import { slugify, todayISO, uniqueId } from '@/lib/utils';
 
 export interface MaterialDetails {
   reinforcement: string;
@@ -297,10 +297,16 @@ export const MATERIALS: Material[] = [
   },
 ];
 
-/** "Last updated" stamp for new materials, matching the existing vYYYY/MM style. */
-function materialStamp(): string {
+/** "Last updated" stamp matching the row's format: library rows use vYYYY/MM, own rows ISO. */
+function materialStamp(source: Material['source']): string {
+  if (source === 'own') return todayISO();
   const now = new Date();
   return `v${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Sort key that makes the two lastUpdated formats (vYYYY/MM and YYYY-MM-DD) comparable. */
+export function lastUpdatedSortKey(value: string): string {
+  return value.startsWith('v') ? value.slice(1).replace('/', '-') : value;
 }
 
 /** Update an existing material in-place. Mock stand-in for a PATCH. */
@@ -310,7 +316,11 @@ export function updateMaterial(
 ): void {
   const idx = MATERIALS.findIndex((m) => m.id === id);
   if (idx === -1) return;
-  MATERIALS[idx] = { ...MATERIALS[idx], ...changes, lastUpdated: materialStamp() };
+  MATERIALS[idx] = {
+    ...MATERIALS[idx],
+    ...changes,
+    lastUpdated: materialStamp(MATERIALS[idx].source),
+  };
 }
 
 /** Create a material, prepend it to the list, return it. Mock stand-in for a POST. */
@@ -327,7 +337,7 @@ export function createMaterial(input: {
     name: input.name.trim() || 'Untitled material',
     type: input.type,
     description: input.description.trim(),
-    lastUpdated: materialStamp(),
+    lastUpdated: todayISO(),
     source: 'own',
     details: {
       reinforcement: '—',

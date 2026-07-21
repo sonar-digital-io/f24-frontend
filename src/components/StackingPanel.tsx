@@ -87,33 +87,6 @@ const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
   ],
 };
 
-const PREVIOUS_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
-  sweep: [
-    { x: 0, y: 0 },
-    { x: 0.25, y: 0.08 },
-    { x: 0.6, y: 0.18 },
-    { x: 1, y: -0.08 },
-  ],
-  dihedral: [
-    { x: 0, y: 0 },
-    { x: 0.35, y: 0.04 },
-    { x: 0.7, y: 0.14 },
-    { x: 1, y: 0.04 },
-  ],
-  twist: [
-    { x: 0, y: 13.0 },
-    { x: 0.3, y: 9.0 },
-    { x: 0.7, y: 2.5 },
-    { x: 1, y: 0.0 },
-  ],
-  chord: [
-    { x: 0, y: 1.6 },
-    { x: 0.3, y: 4.2 },
-    { x: 0.7, y: 2.5 },
-    { x: 1, y: 0.8 },
-  ],
-};
-
 function applyXConstraints(points: ControlPoint[], idx: number, nextX: number): number {
   if (idx === 0) return 0;
   if (idx === points.length - 1) return 1;
@@ -249,7 +222,6 @@ export function StackingPanel() {
                     <BezierEditor
                       points={points}
                       onChange={(next) => setPointsForSection(key, next)}
-                      previousPoints={PREVIOUS_SECTION_POINTS[key]}
                       yMin={SECTION_Y_MIN[key]}
                       yMax={SECTION_Y_MAX[key]}
                       yStep={SECTION_Y_STEP[key]}

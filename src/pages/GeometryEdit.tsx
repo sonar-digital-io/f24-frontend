@@ -160,10 +160,14 @@ interface FormFieldProps {
 }
 
 function FormField({ label, value, onChange }: FormFieldProps) {
+  const inputId = `geometry-field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   return (
     <div className="flex flex-col gap-2">
-      <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">{label}</Label>
+      <Label htmlFor={inputId} className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+        {label}
+      </Label>
       <Input
+        id={inputId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
@@ -201,6 +205,13 @@ export function GeometryEdit() {
   function handleCreate() {
     if (!newBladeType || !newName.trim()) return;
     const geom = createGeometry(newName.trim(), newDescription.trim());
+    // /geometry/new and /geometry/:id share a route, so this navigate does NOT
+    // remount the component — leave the create tab and clear the form explicitly,
+    // otherwise the create panel stays up and a second click creates a duplicate.
+    setActiveTab('global-properties');
+    setNewBladeType('');
+    setNewName('');
+    setNewDescription('');
     navigate(`/geometry/${geom.id}`, { replace: true });
   }
 

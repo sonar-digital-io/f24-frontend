@@ -1,56 +1,26 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  ArrowDown,
-  ArrowUpDown,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  Copy,
-  FileText,
-  MoreHorizontal,
-  Search,
-} from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, FileText, Search } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { Footer } from '@/components/Footer';
+import {
+  Pagination,
+  SortableHeader,
+  rowInteractionProps,
+  toggleSort,
+  type SortState,
+} from '@/components/ListTable';
 import { Input } from '@/components/ui/input';
 import {
   MATERIALS,
+  lastUpdatedSortKey,
   type Material as MaterialItem,
   type MaterialDetails,
 } from '@/data/materials';
 
 const PAGE_SIZE = 5;
 
-interface SortableHeaderProps {
-  label: string;
-  sortKey: SortKey;
-  currentSort: SortState;
-  onClick: (key: SortKey) => void;
-}
-
 type SortKey = 'name' | 'type' | 'source' | 'lastUpdated';
-type SortDirection = 'asc' | 'desc';
-interface SortState {
-  key: SortKey;
-  direction: SortDirection;
-}
-
-function SortableHeader({ label, sortKey, currentSort, onClick }: SortableHeaderProps) {
-  const isActive = currentSort.key === sortKey;
-  const Icon = !isActive ? ArrowUpDown : currentSort.direction === 'desc' ? ArrowDown : ChevronUp;
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(sortKey)}
-      className="inline-flex items-center gap-1 text-[14px] font-medium leading-5 text-[#6b7280] hover:text-[#0a0a0a]"
-    >
-      {label}
-      <Icon className="h-3.5 w-3.5" strokeWidth={2} />
-    </button>
-  );
-}
 
 interface DetailRowProps {
   label: string;
@@ -77,8 +47,8 @@ function MaterialRow({ material, expanded, onToggle, onOpen }: MaterialRowProps)
   return (
     <>
       <tr
-        onClick={onOpen}
-        className={`cursor-pointer border-b border-[#e5e7eb] transition-colors ${
+        {...rowInteractionProps(onOpen)}
+        className={`group cursor-pointer border-b border-[#e5e7eb] transition-colors ${
           expanded ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'
         }`}
       >
@@ -126,7 +96,7 @@ function MaterialRow({ material, expanded, onToggle, onOpen }: MaterialRowProps)
         <td className="w-[208px] px-3 py-4 align-top">
           <div
             className={`flex items-center justify-end gap-1 ${
-              expanded ? 'opacity-100' : 'opacity-0 hover:opacity-100'
+              expanded ? 'opacity-100' : 'opacity-0 focus-within:opacity-100 group-hover:opacity-100'
             }`}
           >
             <button
@@ -185,78 +155,11 @@ function MaterialDetailGrid({ details }: { details: MaterialDetails }) {
   );
 }
 
-interface PaginationProps {
-  page: number;
-  totalPages: number;
-  onChange: (page: number) => void;
-}
-
-function Pagination({ page, totalPages, onChange }: PaginationProps) {
-  // Show: prev — first few — ellipsis — last few — next
-  // For small total: just numbers
-  const pageNumbers = useMemo(() => {
-    if (totalPages <= 4) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    const visible: (number | 'ellipsis')[] = [1, 2, 3];
-    if (totalPages > 4) visible.push('ellipsis');
-    return visible;
-  }, [totalPages]);
-
-  return (
-    <nav
-      aria-label="Pagination"
-      className="flex h-9 items-center justify-end gap-1"
-    >
-      <button
-        type="button"
-        onClick={() => onChange(Math.max(1, page - 1))}
-        disabled={page === 1}
-        className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-[14px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:opacity-50"
-      >
-        <ChevronLeft className="h-4 w-4" strokeWidth={2} />
-        Previous
-      </button>
-      {pageNumbers.map((p, idx) =>
-        p === 'ellipsis' ? (
-          <span
-            key={`ellipsis-${idx}`}
-            className="flex h-9 w-9 items-center justify-center text-[#6b7280]"
-          >
-            <MoreHorizontal className="h-4 w-4" strokeWidth={2} />
-          </span>
-        ) : (
-          <button
-            key={p}
-            type="button"
-            onClick={() => onChange(p)}
-            aria-current={p === page ? 'page' : undefined}
-            className={`flex h-9 w-9 items-center justify-center rounded-md text-[14px] font-medium ${
-              p === page
-                ? 'border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]'
-                : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
-            }`}
-          >
-            {p}
-          </button>
-        )
-      )}
-      <button
-        type="button"
-        onClick={() => onChange(Math.min(totalPages, page + 1))}
-        disabled={page === totalPages}
-        className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-[14px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:opacity-50"
-      >
-        Next
-        <ChevronRight className="h-4 w-4" strokeWidth={2} />
-      </button>
-    </nav>
-  );
-}
-
 export function Material() {
   const navigate = useNavigate();
   const [expandedId, setExpandedId] = useState<string | null>('envalior-tepex-101');
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState>({ key: 'lastUpdated', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<SortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
@@ -273,8 +176,15 @@ export function Material() {
   const sorted = useMemo(() => {
     const copy = [...filtered];
     copy.sort((a, b) => {
-      const aVal = a[sort.key].toLowerCase();
-      const bVal = b[sort.key].toLowerCase();
+      // lastUpdated mixes vYYYY/MM (library) and YYYY-MM-DD (own) — normalize before comparing.
+      const aVal =
+        sort.key === 'lastUpdated'
+          ? lastUpdatedSortKey(a.lastUpdated)
+          : a[sort.key].toLowerCase();
+      const bVal =
+        sort.key === 'lastUpdated'
+          ? lastUpdatedSortKey(b.lastUpdated)
+          : b[sort.key].toLowerCase();
       if (aVal === bVal) return 0;
       const cmp = aVal < bVal ? -1 : 1;
       return sort.direction === 'asc' ? cmp : -cmp;
@@ -286,11 +196,7 @@ export function Material() {
   const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function handleSort(key: SortKey) {
-    setSort((prev) =>
-      prev.key === key
-        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
-        : { key, direction: 'asc' }
-    );
+    setSort((prev) => toggleSort(prev, key));
   }
 
   function toggleExpand(id: string) {
@@ -337,43 +243,39 @@ export function Material() {
                 <thead>
                   <tr className="border-b border-[#e5e7eb]">
                     <th className="h-10 w-[52px] px-3 text-left" />
-                    <th className="h-10 w-[240px] px-3 text-left">
-                      <SortableHeader
-                        label="Name"
-                        sortKey="name"
-                        currentSort={sort}
-                        onClick={handleSort}
-                      />
-                    </th>
-                    <th className="h-10 w-[240px] px-3 text-left">
-                      <SortableHeader
-                        label="Type"
-                        sortKey="type"
-                        currentSort={sort}
-                        onClick={handleSort}
-                      />
-                    </th>
-                    <th className="h-10 w-[110px] px-3 text-left">
-                      <SortableHeader
-                        label="Source"
-                        sortKey="source"
-                        currentSort={sort}
-                        onClick={handleSort}
-                      />
-                    </th>
+                    <SortableHeader
+                      label="Name"
+                      sortKey="name"
+                      currentSort={sort}
+                      onClick={handleSort}
+                      className="w-[240px]"
+                    />
+                    <SortableHeader
+                      label="Type"
+                      sortKey="type"
+                      currentSort={sort}
+                      onClick={handleSort}
+                      className="w-[240px]"
+                    />
+                    <SortableHeader
+                      label="Source"
+                      sortKey="source"
+                      currentSort={sort}
+                      onClick={handleSort}
+                      className="w-[110px]"
+                    />
                     <th className="h-10 px-3 text-left">
                       <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
                         Description
                       </span>
                     </th>
-                    <th className="h-10 w-[160px] px-3 text-left">
-                      <SortableHeader
-                        label="Last updated"
-                        sortKey="lastUpdated"
-                        currentSort={sort}
-                        onClick={handleSort}
-                      />
-                    </th>
+                    <SortableHeader
+                      label="Last updated"
+                      sortKey="lastUpdated"
+                      currentSort={sort}
+                      onClick={handleSort}
+                      className="w-[160px]"
+                    />
                     <th className="h-10 w-[208px] px-3 text-left" />
                   </tr>
                 </thead>

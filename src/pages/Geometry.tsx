@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import {
-  ArrowDown,
-  ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  LayoutGrid,
-  List as ListIcon,
-  MoreHorizontal,
-  Search,
-} from 'lucide-react';
+import { LayoutGrid, List as ListIcon, Search } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { Footer } from '@/components/Footer';
+import {
+  Pagination,
+  SortableHeader,
+  rowInteractionProps,
+  toggleSort,
+  type SortState,
+} from '@/components/ListTable';
 import { Input } from '@/components/ui/input';
 import { GeometryCard } from '@/components/GeometryCard';
 import { GEOMETRIES } from '@/data/geometries';
@@ -20,102 +17,13 @@ import { GEOMETRIES } from '@/data/geometries';
 const PAGE_SIZE = 10;
 type ViewMode = 'list' | 'grid';
 type SortKey = 'name' | 'lastUpdated';
-type SortDirection = 'asc' | 'desc';
-interface SortState {
-  key: SortKey;
-  direction: SortDirection;
-}
-
-interface SortableHeaderProps {
-  label: string;
-  sortKey: SortKey;
-  currentSort: SortState;
-  onClick: (key: SortKey) => void;
-}
-
-function SortableHeader({ label, sortKey, currentSort, onClick }: SortableHeaderProps) {
-  const isActive = currentSort.key === sortKey;
-  const Icon = !isActive ? ArrowUpDown : currentSort.direction === 'desc' ? ArrowDown : ChevronUp;
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(sortKey)}
-      className="inline-flex items-center gap-1 text-[14px] font-medium leading-5 text-[#6b7280] hover:text-[#0a0a0a]"
-    >
-      {label}
-      <Icon className="h-3.5 w-3.5" strokeWidth={2} />
-    </button>
-  );
-}
-
-interface PaginationProps {
-  page: number;
-  totalPages: number;
-  onChange: (page: number) => void;
-}
-
-function Pagination({ page, totalPages, onChange }: PaginationProps) {
-  const pageNumbers = useMemo(() => {
-    if (totalPages <= 4) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    const visible: (number | 'ellipsis')[] = [1, 2, 3];
-    if (totalPages > 4) visible.push('ellipsis');
-    return visible;
-  }, [totalPages]);
-
-  return (
-    <nav aria-label="Pagination" className="flex h-9 items-center justify-end gap-1">
-      <button
-        type="button"
-        onClick={() => onChange(Math.max(1, page - 1))}
-        disabled={page === 1}
-        className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-[14px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:opacity-50"
-      >
-        <ChevronLeft className="h-4 w-4" strokeWidth={2} />
-        Previous
-      </button>
-      {pageNumbers.map((p, idx) =>
-        p === 'ellipsis' ? (
-          <span
-            key={`ellipsis-${idx}`}
-            className="flex h-9 w-9 items-center justify-center text-[#6b7280]"
-          >
-            <MoreHorizontal className="h-4 w-4" strokeWidth={2} />
-          </span>
-        ) : (
-          <button
-            key={p}
-            type="button"
-            onClick={() => onChange(p)}
-            aria-current={p === page ? 'page' : undefined}
-            className={`flex h-9 w-9 items-center justify-center rounded-md text-[14px] font-medium ${
-              p === page
-                ? 'border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]'
-                : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
-            }`}
-          >
-            {p}
-          </button>
-        )
-      )}
-      <button
-        type="button"
-        onClick={() => onChange(Math.min(totalPages, page + 1))}
-        disabled={page === totalPages}
-        className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-[14px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:opacity-50"
-      >
-        Next
-        <ChevronRight className="h-4 w-4" strokeWidth={2} />
-      </button>
-    </nav>
-  );
-}
 
 export function Geometry() {
   const navigate = useNavigate();
   const location = useLocation();
   const [view, setView] = useState<ViewMode>('list');
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState>({ key: 'lastUpdated', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<SortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
 
   // Navigate to inline creation flow when arriving with ?new=1 (from Home dashboard)
@@ -151,11 +59,7 @@ export function Geometry() {
   const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function handleSort(key: SortKey) {
-    setSort((prev) =>
-      prev.key === key
-        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
-        : { key, direction: 'asc' }
-    );
+    setSort((prev) => toggleSort(prev, key));
   }
 
   return (
@@ -187,7 +91,7 @@ export function Geometry() {
                     setQuery(e.target.value);
                     setPage(1);
                   }}
-                  placeholder={view === 'list' ? 'Search for geometry' : 'Placeholder'}
+                  placeholder="Search for geometry"
                   className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
                 />
               </div>
@@ -225,34 +129,32 @@ export function Geometry() {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-[#e5e7eb]">
-                      <th className="h-10 w-[240px] px-3 text-left">
-                        <SortableHeader
-                          label="Name"
-                          sortKey="name"
-                          currentSort={sort}
-                          onClick={handleSort}
-                        />
-                      </th>
+                      <SortableHeader
+                        label="Name"
+                        sortKey="name"
+                        currentSort={sort}
+                        onClick={handleSort}
+                        className="w-[240px]"
+                      />
                       <th className="h-10 px-3 text-left">
                         <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
                           Description
                         </span>
                       </th>
-                      <th className="h-10 w-[160px] px-3 text-left">
-                        <SortableHeader
-                          label="Last updated"
-                          sortKey="lastUpdated"
-                          currentSort={sort}
-                          onClick={handleSort}
-                        />
-                      </th>
+                      <SortableHeader
+                        label="Last updated"
+                        sortKey="lastUpdated"
+                        currentSort={sort}
+                        onClick={handleSort}
+                        className="w-[160px]"
+                      />
                     </tr>
                   </thead>
                   <tbody>
                     {pageRows.map((g) => (
                       <tr
                         key={g.id}
-                        onClick={() => navigate(`/geometry/${g.id}`)}
+                        {...rowInteractionProps(() => navigate(`/geometry/${g.id}`))}
                         className="cursor-pointer border-b border-[#e5e7eb] bg-white hover:bg-[#f9fafb]"
                       >
                         <td className="px-3 py-4 text-[14px] font-medium leading-5 text-[#0a0a0a]">
@@ -296,12 +198,10 @@ export function Geometry() {
               </div>
             )}
 
-            {/* Pagination (only on list view per Figma) */}
-            {view === 'list' && (
-              <div className="mt-4">
-                <Pagination page={page} totalPages={totalPages} onChange={setPage} />
-              </div>
-            )}
+            {/* Pagination — grid view paginates the same rows, so it needs the control too */}
+            <div className="mt-4">
+              <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+            </div>
           </div>
         </div>
       </main>

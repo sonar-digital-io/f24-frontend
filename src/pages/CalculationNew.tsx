@@ -3,17 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   LayoutGrid,
   LayoutList,
-  MoreHorizontal,
   Play,
   Search,
   X,
 } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
+import { Pagination } from '@/components/ListTable';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,6 +21,7 @@ import { BladeThumbnail } from '@/components/BladeThumbnail';
 import { GEOMETRIES } from '@/data/geometries';
 import { COMPOSITIONS } from '@/data/compositions';
 import { CALCULATIONS, createCalculation, updateCalculation } from '@/data/calculations';
+import { LOAD_GROUPS } from '@/data/loadGroups';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -30,175 +29,7 @@ type Tab = 'general' | 'composition' | 'configuration' | 'fatigue-profile';
 type CompositionSubTab = 'geometries' | 'compositions';
 type ConfigSection = 'aero' | 'limits';
 
-// ─── Mock fatigue load groups for the picker ──────────────────────────────────
-
-interface FatigueLoadGroup {
-  id: string;
-  name: string;
-  description: string;
-  lastUpdated: string;
-  profiles: string[];
-}
-
-const FATIGUE_LOAD_GROUPS: FatigueLoadGroup[] = [
-  {
-    id: 'op-cycle-normal-01',
-    name: 'OP-CYCLE-NORMAL-01',
-    description:
-      'Standard operational duty cycle including transient events. Combines start-up, power production with gust response, and normal shutdown sequences for comprehensive fatigue damage accumulation analysis.',
-    lastUpdated: '2026-04-22',
-    profiles: [
-      'Power production',
-      'Start-up and shutdown',
-      'Extreme turbulence',
-      'Standby extreme wind',
-      'Low-wind operation',
-      'High-turbulence burst',
-      'Yaw-misaligned prod',
-      'Extreme gust sequence',
-      'Grid-loss coast-down',
-      'Test run',
-    ],
-  },
-  {
-    id: 'dlc-13-extreme',
-    name: 'DLC-1.3-EXTREME',
-    description:
-      'Extreme Turbulence Model (ETM). Ultimate limit state (ULS) check for gust-induced loads.',
-    lastUpdated: '2026-04-02',
-    profiles: ['Extreme turbulence', 'Power production'],
-  },
-  {
-    id: 'dlc-21-loss-grid',
-    name: 'DLC-2.1-LOSS-GRID',
-    description:
-      'Loss of electrical grid during operation. Simulates sudden pitch maneuvers and transient loads.',
-    lastUpdated: '2026-03-30',
-    profiles: ['Grid-loss coast-down', 'Emergency shutdown'],
-  },
-  {
-    id: 'dlc-61-parked-50y',
-    name: 'DLC-6.1-PARKED-50Y',
-    description:
-      'Parked/Standby state with 50-year return period extreme wind speed. Focus on structural survival.',
-    lastUpdated: '2026-03-17',
-    profiles: ['Standby extreme wind', 'Parked — 50y wind'],
-  },
-  {
-    id: 'dlc-7i-idling-err',
-    name: 'DLC-7I-IDLING-ERR',
-    description:
-      'Idling state with pitch system error. Analyzes unbalanced aerodynamic loads on the blade.',
-    lastUpdated: '2026-03-03',
-    profiles: ['Idling — pitch error', 'Resonance check'],
-  },
-  {
-    id: 'modal-analysis-gr',
-    name: 'MODAL-ANALYSIS-GR',
-    description:
-      'Zero-load group for frequency extraction. Determines eigenfrequencies and mode shapes.',
-    lastUpdated: '2026-02-19',
-    profiles: ['Modal sweep — 0 RPM', 'Modal sweep — rated'],
-  },
-  {
-    id: 'offshore-wave-c',
-    name: 'OFFSHORE-WAVE-C',
-    description:
-      'Coupled wind and wave loading group. Focus on base excitation and aerodynamic damping.',
-    lastUpdated: '2026-02-08',
-    profiles: ['Wave — aligned', 'Wave — misaligned 30°'],
-  },
-  {
-    id: 'rated-speed-oper',
-    name: 'RATED-SPEED-OPER',
-    description:
-      'Operation at rated wind speed with maximum thrust. Steady-state structural deflection check.',
-    lastUpdated: '2026-02-08',
-    profiles: ['Rated — full load', 'Rated — derating'],
-  },
-  {
-    id: 'static-proof-load',
-    name: 'STATIC-PROOF-LOAD',
-    description:
-      'Full-scale static test simulation. Equivalent to extreme flapwise and edgewise bending tests.',
-    lastUpdated: '2026-02-01',
-    profiles: ['Flapwise ULS', 'Edgewise ULS'],
-  },
-  {
-    id: 'tip-deflection-max',
-    name: 'TIP-DEFLECTION-MAX',
-    description:
-      'Worst-case operational scenario for tower clearance check. Focus on maximum out-of-plane tip displacement.',
-    lastUpdated: '2026-01-20',
-    profiles: ['Max deflection — gust', 'Max deflection — rated'],
-  },
-];
-
 const FATIGUE_PAGE_SIZE = 10;
-
-// ─── Pagination ───────────────────────────────────────────────────────────────
-
-interface PaginationProps {
-  page: number;
-  totalPages: number;
-  onChange: (page: number) => void;
-}
-
-function Pagination({ page, totalPages, onChange }: PaginationProps) {
-  const pageNumbers = useMemo(() => {
-    if (totalPages <= 4) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    const visible: (number | 'ellipsis')[] = [1, 2, 3];
-    visible.push('ellipsis');
-    return visible;
-  }, [totalPages]);
-
-  return (
-    <nav aria-label="Pagination" className="flex h-9 items-center justify-end gap-1 px-4 py-3">
-      <button
-        type="button"
-        onClick={() => onChange(Math.max(1, page - 1))}
-        disabled={page === 1}
-        className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-[14px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:opacity-50"
-      >
-        <ChevronLeft className="h-4 w-4" strokeWidth={2} />
-        Previous
-      </button>
-      {pageNumbers.map((p, idx) =>
-        p === 'ellipsis' ? (
-          <span
-            key={`ellipsis-${idx}`}
-            className="flex h-9 w-9 items-center justify-center text-[#6b7280]"
-          >
-            <MoreHorizontal className="h-4 w-4" strokeWidth={2} />
-          </span>
-        ) : (
-          <button
-            key={p}
-            type="button"
-            onClick={() => onChange(p)}
-            aria-current={p === page ? 'page' : undefined}
-            className={`flex h-9 w-9 items-center justify-center rounded-md text-[14px] font-medium ${
-              p === page
-                ? 'border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]'
-                : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
-            }`}
-          >
-            {p}
-          </button>
-        )
-      )}
-      <button
-        type="button"
-        onClick={() => onChange(Math.min(totalPages, page + 1))}
-        disabled={page === totalPages}
-        className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-[14px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:opacity-50"
-      >
-        Next
-        <ChevronRight className="h-4 w-4" strokeWidth={2} />
-      </button>
-    </nav>
-  );
-}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -258,7 +89,10 @@ export function CalculationNew() {
 
   function handleRunCalculation() {
     if (isNew) {
-      createCalculation({ name, description });
+      // Run with an empty form would otherwise pollute the list with an
+      // "Untitled calculation" — name it after the fatigue group being run.
+      const fallback = drilledGroup ? `${drilledGroup.name}-CALC` : '';
+      createCalculation({ name: name.trim() || fallback, description });
     } else if (existing) {
       updateCalculation(existing.id, { name, description, status: 'Finished' });
     }
@@ -286,8 +120,8 @@ export function CalculationNew() {
   // ── Fatigue profile picker data ───────────────────────────────────────────
   const filteredGroups = useMemo(() => {
     const q = fatigueSearch.trim().toLowerCase();
-    if (!q) return FATIGUE_LOAD_GROUPS;
-    return FATIGUE_LOAD_GROUPS.filter(
+    if (!q) return LOAD_GROUPS;
+    return LOAD_GROUPS.filter(
       (g) =>
         g.name.toLowerCase().includes(q) || g.description.toLowerCase().includes(q)
     );
@@ -301,7 +135,7 @@ export function CalculationNew() {
 
   // Drilled-in load group
   const drilledGroup = drilledGroupId
-    ? FATIGUE_LOAD_GROUPS.find((g) => g.id === drilledGroupId)
+    ? LOAD_GROUPS.find((g) => g.id === drilledGroupId)
     : null;
 
   const filteredDrilledProfiles = useMemo(() => {
@@ -366,10 +200,14 @@ export function CalculationNew() {
           {activeTab === 'general' && (
             <div className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
               <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+                <Label
+                  htmlFor="calculation-name"
+                  className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+                >
                   Name <span className="text-[#dc2626]">*</span>
                 </Label>
                 <Input
+                  id="calculation-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Name the calculation"
@@ -378,11 +216,15 @@ export function CalculationNew() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+                <Label
+                  htmlFor="calculation-analysis-method"
+                  className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+                >
                   Analysis method <span className="text-[#dc2626]">*</span>
                 </Label>
                 <div className="relative">
                   <select
+                    id="calculation-analysis-method"
                     value={analysisMethod}
                     onChange={(e) => setAnalysisMethod(e.target.value)}
                     className="h-9 w-full appearance-none rounded-md border border-[#e2e8f0] bg-white px-3 pr-8 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] focus:outline-none focus:ring-2 focus:ring-[#006496]/30"
@@ -400,13 +242,17 @@ export function CalculationNew() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+                <Label
+                  htmlFor="calculation-description"
+                  className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+                >
                   Description <span className="text-[#dc2626]">*</span>
                 </Label>
                 <Textarea
+                  id="calculation-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Placeholder"
+                  placeholder="Describe the calculation"
                   rows={4}
                   className="rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
                 />
@@ -605,11 +451,15 @@ export function CalculationNew() {
                     {/* Aerofoil 2D aero */}
                     <div className="grid grid-cols-[minmax(0,340px)_1fr] gap-6">
                       <div className="flex flex-col gap-2">
-                        <Label className="text-[14px] font-medium text-[#0a0a0a]">
+                        <Label
+                          htmlFor="config-aerofoil-model"
+                          className="text-[14px] font-medium text-[#0a0a0a]"
+                        >
                           Aerofoil 2D aero <span className="text-[#dc2626]">*</span>
                         </Label>
                         <div className="relative">
                           <select
+                            id="config-aerofoil-model"
                             value={aerofoilModel}
                             onChange={(e) => setAerofoilModel(e.target.value)}
                             className="h-9 w-full appearance-none rounded-md border border-[#e2e8f0] bg-white px-3 pr-8 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] focus:outline-none focus:ring-2 focus:ring-[#006496]/30"
@@ -634,11 +484,15 @@ export function CalculationNew() {
                     {/* Aero correction */}
                     <div className="grid grid-cols-[minmax(0,340px)_1fr] gap-6">
                       <div className="flex flex-col gap-2">
-                        <Label className="text-[14px] font-medium text-[#0a0a0a]">
+                        <Label
+                          htmlFor="config-aero-correction"
+                          className="text-[14px] font-medium text-[#0a0a0a]"
+                        >
                           Aero correction <span className="text-[#dc2626]">*</span>
                         </Label>
                         <div className="relative">
                           <select
+                            id="config-aero-correction"
                             value={aeroCorrection}
                             onChange={(e) => setAeroCorrection(e.target.value)}
                             className="h-9 w-full appearance-none rounded-md border border-[#e2e8f0] bg-white px-3 pr-8 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] focus:outline-none focus:ring-2 focus:ring-[#006496]/30"
@@ -817,11 +671,13 @@ export function CalculationNew() {
                     )}
                   </div>
 
-                  <Pagination
-                    page={drilledPage}
-                    totalPages={drilledTotalPages}
-                    onChange={setDrilledPage}
-                  />
+                  <div className="px-4 py-3">
+                    <Pagination
+                      page={drilledPage}
+                      totalPages={drilledTotalPages}
+                      onChange={setDrilledPage}
+                    />
+                  </div>
                 </div>
               ) : (
                 /* ── Load group picker list ── */
@@ -899,17 +755,19 @@ export function CalculationNew() {
                             </span>
                             <span className="px-3 text-[14px] text-[#6b7280]">User Name</span>
 
-                            {/* Select button */}
+                            {/* Select button — selected: re-open the group's profile list */}
                             <div className="flex w-20 justify-end">
                               {isSelected ? (
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setSelectedGroupId(null);
+                                    setDrilledGroupId(group.id);
+                                    setDrilledSearch('');
+                                    setDrilledPage(1);
                                   }}
                                   className="inline-flex h-8 items-center rounded-md bg-[#006496] px-3 text-[13px] font-medium text-white hover:bg-[#005580]"
                                 >
-                                  Select
+                                  Open
                                 </button>
                               ) : (
                                 <button
@@ -952,11 +810,13 @@ export function CalculationNew() {
                     )}
                   </div>
 
-                  <Pagination
-                    page={fatiguePage}
-                    totalPages={fatigueTotalPages}
-                    onChange={setFatiguePage}
-                  />
+                  <div className="px-4 py-3">
+                    <Pagination
+                      page={fatiguePage}
+                      totalPages={fatigueTotalPages}
+                      onChange={setFatiguePage}
+                    />
+                  </div>
                 </div>
               )}
             </>

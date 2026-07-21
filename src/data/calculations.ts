@@ -94,12 +94,25 @@ export const CALCULATIONS: Calculation[] = [
 ];
 
 function stamp(): string {
+  // Local date + local time — mixing toISOString() (UTC) with getHours()
+  // (local) would produce timestamps that never existed around midnight.
   const now = new Date();
-  const date = now.toISOString().slice(0, 10);
+  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate()
+  ).padStart(2, '0')}`;
   const h = now.getHours() % 12 || 12;
   const m = String(now.getMinutes()).padStart(2, '0');
   const ampm = now.getHours() < 12 ? 'AM' : 'PM';
   return `${date} ${h}:${m} ${ampm}`;
+}
+
+/** Parse a 'YYYY-MM-DD h:mm AM/PM' timestamp into a comparable number for sorting. */
+export function timestampValue(ts: string): number {
+  const m = ts.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{1,2}):(\d{2}) (AM|PM)$/);
+  if (!m) return 0;
+  let hours = Number(m[4]) % 12;
+  if (m[6] === 'PM') hours += 12;
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hours, Number(m[5]));
 }
 
 export function createCalculation(input: {

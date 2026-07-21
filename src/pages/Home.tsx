@@ -101,7 +101,7 @@ export function Home() {
                 title="Calculation"
                 description="Start a new calculation based on existing compositions and load groups"
                 buttonLabel="New calculation"
-                to="/calculation"
+                to="/calculation/new"
               />
             </div>
           </section>

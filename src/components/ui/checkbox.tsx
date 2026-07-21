@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-export interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
+export interface CheckboxProps
+  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
   checked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
 }
 
-const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
+const Checkbox = React.forwardRef<HTMLButtonElement, CheckboxProps>(
   ({ className, checked, onCheckedChange, ...props }, ref) => {
     return (
       <button
@@ -19,8 +20,8 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
           checked && 'bg-primary text-primary-foreground',
           className
         )}
-        ref={ref as any}
-        {...(props as any)}
+        ref={ref}
+        {...props}
       >
         {checked && (
           <svg

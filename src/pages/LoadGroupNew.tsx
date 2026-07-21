@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BezierEditor, type ControlPoint } from '@/components/BezierEditor';
+import { BufferedNumberInput } from '@/components/BufferedNumberInput';
 import { LOAD_GROUPS, createLoadGroup, updateLoadGroup } from '@/data/loadGroups';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -505,10 +506,14 @@ export function LoadGroupNew() {
           {activeTab === 'general' && (
             <div className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
               <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+                <Label
+                  htmlFor="load-group-name"
+                  className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+                >
                   Name <span className="text-[#dc2626]">*</span>
                 </Label>
                 <Input
+                  id="load-group-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Name the load group"
@@ -516,10 +521,14 @@ export function LoadGroupNew() {
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+                <Label
+                  htmlFor="load-group-description"
+                  className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+                >
                   Description <span className="text-[#dc2626]">*</span>
                 </Label>
                 <Textarea
+                  id="load-group-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Describe the load group"
@@ -830,39 +839,25 @@ export function LoadGroupNew() {
                           >
                             <td className="px-2 py-1.5 text-[#6b7280]">{idx}</td>
                             <td className="px-1 py-1.5">
-                              <Input
-                                type="number"
+                              <BufferedNumberInput
                                 step="0.1"
                                 min={0}
                                 max={20}
-                                value={pt.x.toFixed(2)}
+                                value={pt.x}
+                                format={(v) => v.toFixed(2)}
                                 disabled={isEndpoint}
-                                onChange={(e) =>
-                                  updateLimitPoint(
-                                    limitsSubTab,
-                                    idx,
-                                    'x',
-                                    parseFloat(e.target.value) || 0
-                                  )
-                                }
+                                onCommit={(v) => updateLimitPoint(limitsSubTab, idx, 'x', v)}
                                 className="h-7 w-full rounded border-[#e2e8f0] px-1.5 text-[12px] disabled:bg-[#f8fafc] disabled:text-[#6b7280]"
                               />
                             </td>
                             <td className="px-1 py-1.5">
-                              <Input
-                                type="number"
+                              <BufferedNumberInput
                                 step="1"
                                 min={0}
                                 max={LIMITS_Y_MAX[limitsSubTab]}
-                                value={pt.y.toFixed(0)}
-                                onChange={(e) =>
-                                  updateLimitPoint(
-                                    limitsSubTab,
-                                    idx,
-                                    'y',
-                                    parseFloat(e.target.value) || 0
-                                  )
-                                }
+                                value={pt.y}
+                                format={(v) => v.toFixed(0)}
+                                onCommit={(v) => updateLimitPoint(limitsSubTab, idx, 'y', v)}
                                 className="h-7 w-full rounded border-[#e2e8f0] px-1.5 text-[12px]"
                               />
                             </td>

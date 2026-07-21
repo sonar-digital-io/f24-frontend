@@ -52,27 +52,6 @@ const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
   ],
 };
 
-const PREVIOUS_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
-  'maximum-camber': [
-    { x: 0, y: 0 },
-    { x: 0.35, y: 22 },
-    { x: 0.8, y: 19 },
-    { x: 1, y: 6 },
-  ],
-  'maximum-camber-position': [
-    { x: 0, y: 0 },
-    { x: 0.3, y: 10 },
-    { x: 0.65, y: 15 },
-    { x: 1, y: 7 },
-  ],
-  thickness: [
-    { x: 0, y: 4 },
-    { x: 0.25, y: 20 },
-    { x: 0.65, y: 16 },
-    { x: 1, y: 2 },
-  ],
-};
-
 interface SelectProps {
   value: string;
   onChange: (value: string) => void;
@@ -204,8 +183,18 @@ export function ProfileDistributionPanel({
   const [endPos, setEndPos] = useState('1');
   const [profileCount, setProfileCount] = useState('6');
   const [subTab, setSubTab] = useState<SectionKey>('maximum-camber');
-  const [showDistribution, setShowDistribution] = useState(true);
-  const [showTable, setShowTable] = useState(true);
+  // Per-section: in folded mode all three sections render their own switch,
+  // so a shared boolean would flip all of them at once.
+  const [showDistribution, setShowDistribution] = useState<Record<SectionKey, boolean>>({
+    'maximum-camber': true,
+    'maximum-camber-position': true,
+    thickness: true,
+  });
+  const [showTable, setShowTable] = useState<Record<SectionKey, boolean>>({
+    'maximum-camber': true,
+    'maximum-camber-position': true,
+    thickness: true,
+  });
 
   // One set of bezier points per section.
   const [sectionPoints, setSectionPoints] =
@@ -303,25 +292,28 @@ export function ProfileDistributionPanel({
           {/* Distribution view */}
           <div className="flex flex-col gap-3">
             <Switch
-              checked={showDistribution}
-              onChange={setShowDistribution}
+              checked={showDistribution[key]}
+              onChange={(v) => setShowDistribution((s) => ({ ...s, [key]: v }))}
               label="Distribution view"
             />
-            {showDistribution && (
+            {showDistribution[key] && (
               <BezierEditor
                 points={points}
                 onChange={(next) => setPointsForSection(key, next)}
-                previousPoints={PREVIOUS_SECTION_POINTS[key]}
                 yMax={Y_MAX}
-                rootX={parseFloat(startPos) || 0.05}
+                rootX={Number.isFinite(parseFloat(startPos)) ? parseFloat(startPos) : 0.05}
               />
             )}
           </div>
 
           {/* Table */}
           <div className="flex flex-col gap-3">
-            <Switch checked={showTable} onChange={setShowTable} label="Table" />
-            {showTable && (
+            <Switch
+              checked={showTable[key]}
+              onChange={(v) => setShowTable((s) => ({ ...s, [key]: v }))}
+              label="Table"
+            />
+            {showTable[key] && (
               <div className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
                 <table className="w-full border-collapse text-[14px]">
                   <thead>

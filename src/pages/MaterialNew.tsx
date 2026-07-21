@@ -104,12 +104,9 @@ export function MaterialNew() {
   const { id } = useParams<{ id: string }>();
   const existing = id ? MATERIALS.find((m) => m.id === id) : undefined;
 
-  const [name, setName] = useState(existing?.name ?? 'ST-UD-C600-EP');
+  const [name, setName] = useState(existing?.name ?? '');
   const [type, setType] = useState(existing?.type ?? 'UD ply');
-  const [description, setDescription] = useState(
-    existing?.description ??
-      'Carbon/Epoxy UD lamina. Fiber: Toray T700 (600gsm). Matrix: ST-Epoxy-Standard. Characterized via ASTM D3039 tensile tests'
-  );
+  const [description, setDescription] = useState(existing?.description ?? '');
   const [activeTab, setActiveTab] = useState('general');
   const [mechValues, setMechValues] = useState<Record<string, string>>({});
   const [fatigueValues, setFatigueValues] = useState<Record<string, string>>({});
@@ -206,6 +203,7 @@ export function MaterialNew() {
                 id="material-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                placeholder="ST-UD-C600-EP"
                 required
                 className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
               />
@@ -229,6 +227,7 @@ export function MaterialNew() {
                 id="material-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                placeholder="Carbon/Epoxy UD lamina. Fiber: Toray T700 (600gsm). Matrix: ST-Epoxy-Standard."
                 required
                 rows={4}
                 className="min-h-[98px] rounded-md border-[#e2e8f0] bg-white px-3 py-2 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"

@@ -45,7 +45,8 @@ export interface OccViewerProps {
 // IGES loader — returns shape(s) ready for tessellation
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// opencascade.js v1.1.1 ships no TypeScript types — the OCC handle stays `any`.
+/* eslint-disable @typescript-eslint/no-explicit-any */
 async function loadIgesShapes(
   oc: any,
   url: string,
@@ -68,25 +69,30 @@ async function loadIgesShapes(
     // 3. IGES session must be initialised before any read (registers protocol)
     oc.IGESControl_Controller.Init();
 
-    // 4. Create reader and parse
+    // 4. Create reader and parse — Emscripten heap object, must be freed
     const reader = new oc.IGESControl_Reader_1();
-    const retStatus = reader.ReadFile(tmpPath);
+    try {
+      const retStatus = reader.ReadFile(tmpPath);
 
-    const RetDone = oc.IFSelect_ReturnStatus.IFSelect_RetDone;
-    if (retStatus.value !== RetDone.value) {
-      throw new Error(`IGESControl_Reader.ReadFile returned status ${retStatus.value}`);
+      const RetDone = oc.IFSelect_ReturnStatus.IFSelect_RetDone;
+      if (retStatus.value !== RetDone.value) {
+        throw new Error(`IGESControl_Reader.ReadFile returned status ${retStatus.value}`);
+      }
+
+      // 5. Transfer all root entities to B-Rep shapes
+      //    Single overload, no args → no suffix
+      reader.TransferRoots();
+
+      // 6. Compound all transferred shapes into one
+      //    (OneShape returns its own TopoDS handle — the reader can be freed after)
+      const shape = reader.OneShape();
+
+      return [{ shape, color: 0x94a3b8, opacity: 1 }];
+    } finally {
+      reader.delete();
     }
-
-    // 5. Transfer all root entities to B-Rep shapes
-    //    Single overload, no args → no suffix
-    reader.TransferRoots();
-
-    // 6. Compound all transferred shapes into one
-    const shape = reader.OneShape();
-
-    return [{ shape, color: 0x94a3b8, opacity: 1 }];
   } finally {
-    try { oc.FS.unlink(tmpPath); } catch (_) { /* virtual-FS cleanup */ }
+    try { oc.FS.unlink(tmpPath); } catch { /* virtual-FS cleanup */ }
   }
 }
 
@@ -94,13 +100,13 @@ async function loadIgesShapes(
 // Tessellation: B-Rep → Three.js BufferGeometry (v1.1.1 API)
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function tessellate(oc: any, shape: any, color: number, opacity: number): THREE.Mesh | null {
   const FACE     = oc.TopAbs_ShapeEnum.TopAbs_FACE;
   const TOPSHAPE = oc.TopAbs_ShapeEnum.TopAbs_SHAPE;
   const REVERSED = oc.TopAbs_Orientation.TopAbs_REVERSED;
 
-  new oc.BRepMesh_IncrementalMesh_2(shape, 0.05, false, 0.3, false);
+  // Meshing happens in the ctor — the mesher object itself can be freed afterwards
+  const mesher = new oc.BRepMesh_IncrementalMesh_2(shape, 0.05, false, 0.3, false);
 
   const vertices: number[] = [];
   const indices:  number[] = [];
@@ -109,31 +115,51 @@ function tessellate(oc: any, shape: any, color: number, opacity: number): THREE.
   const exp = new oc.TopExp_Explorer_2(shape, FACE, TOPSHAPE);
   const loc = new oc.TopLoc_Location_1();
 
-  while (exp.More()) {
-    const face = oc.TopoDS.Face_1(exp.Current());
-    const poly = oc.BRep_Tool.Triangulation(face, loc);
+  // Every oc.* instance below is an Emscripten heap object → .delete() when done.
+  // The extracted coordinates are copied into plain JS arrays, so nothing here
+  // needs to outlive this function.
+  try {
+    while (exp.More()) {
+      const cur  = exp.Current();
+      const face = oc.TopoDS.Face_1(cur);
+      const poly = oc.BRep_Tool.Triangulation(face, loc);
 
-    if (!poly.IsNull()) {
-      const p  = poly.get();
-      const nb = p.NbNodes();
-      const nt = p.NbTriangles();
+      try {
+        if (!poly.IsNull()) {
+          // poly.get() is a raw pointer owned by the handle — do NOT delete it
+          const p  = poly.get();
+          const nb = p.NbNodes();
+          const nt = p.NbTriangles();
 
-      for (let i = 1; i <= nb; i++) {
-        const pt = p.Node(i);
-        vertices.push(pt.X(), pt.Y(), pt.Z());
+          for (let i = 1; i <= nb; i++) {
+            const pt = p.Node(i);
+            vertices.push(pt.X(), pt.Y(), pt.Z());
+            pt.delete();
+          }
+
+          const rev = face.Orientation_1().value === REVERSED.value;
+          for (let i = 1; i <= nt; i++) {
+            const tri = p.Triangle(i);
+            const a = tri.Value(1) - 1 + offset;
+            const b = tri.Value(2) - 1 + offset;
+            const c = tri.Value(3) - 1 + offset;
+            if (rev) indices.push(a, c, b);
+            else indices.push(a, b, c);
+            tri.delete();
+          }
+          offset += nb;
+        }
+      } finally {
+        poly.delete();
+        face.delete();
+        cur.delete();
       }
-
-      const rev = face.Orientation_1().value === REVERSED.value;
-      for (let i = 1; i <= nt; i++) {
-        const tri = p.Triangle(i);
-        const a = tri.Value(1) - 1 + offset;
-        const b = tri.Value(2) - 1 + offset;
-        const c = tri.Value(3) - 1 + offset;
-        rev ? indices.push(a, c, b) : indices.push(a, b, c);
-      }
-      offset += nb;
+      exp.Next();
     }
-    exp.Next();
+  } finally {
+    loc.delete();
+    exp.delete();
+    mesher.delete();
   }
 
   if (vertices.length === 0) return null;
@@ -170,10 +196,12 @@ export function OccViewer({
   const containerRef  = useRef<HTMLDivElement>(null);
   const meshesRef     = useRef<THREE.Mesh[]>([]);
   const wireLineRef   = useRef<THREE.LineSegments[]>([]);
+  const wireframeRef  = useRef(wireframe);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   // Wireframe toggle without scene re-creation
   useEffect(() => {
+    wireframeRef.current = wireframe; // async OCC load reads the latest value from here
     meshesRef.current.forEach((m) => {
       const mat = m.material as THREE.MeshPhysicalMaterial;
       mat.opacity = wireframe ? 0 : (mat.userData.baseOpacity as number ?? 1);
@@ -293,9 +321,9 @@ export function OccViewer({
         if (disposed) return;
 
         // Load IGES file
-        let occShapes: Array<{ shape: any; color: number; opacity: number }>;  // eslint-disable-line @typescript-eslint/no-explicit-any
+        let occShapes: Array<{ shape: any; color: number; opacity: number }>;   
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           occShapes = await loadIgesShapes(oc as any, igesUrl);
         } catch (err) {
           console.error('[OccViewer] IGES load failed:', err);
@@ -303,7 +331,11 @@ export function OccViewer({
           return;
         }
 
-        if (disposed) return;
+        if (disposed) {
+          // Unmounted while loading — still free the OCC heap objects
+          occShapes.forEach(({ shape }) => shape.delete());
+          return;
+        }
 
         // Tessellate shapes
         const newMeshes: THREE.Mesh[]         = [];
@@ -311,11 +343,11 @@ export function OccViewer({
 
         for (const { shape, color, opacity } of occShapes) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             const mesh = tessellate(oc as any, shape, color, opacity);
             if (!mesh) continue;
             (mesh.material as THREE.MeshPhysicalMaterial).userData.baseOpacity = opacity;
-            if (wireframe) (mesh.material as THREE.MeshPhysicalMaterial).opacity = 0;
+            if (wireframeRef.current) (mesh.material as THREE.MeshPhysicalMaterial).opacity = 0;
             scene.add(mesh);
             newMeshes.push(mesh);
 
@@ -327,11 +359,14 @@ export function OccViewer({
               transparent: true,
             });
             const lines = new THREE.LineSegments(edgeGeo, edgeMat);
-            lines.visible = wireframe;
+            lines.visible = wireframeRef.current;
             scene.add(lines);
             newLines.push(lines);
           } catch (err) {
             console.warn('[OccViewer] tessellation failed for one shape:', err);
+          } finally {
+            // Mesh data lives in the BufferGeometry now — the OCC shape can go
+            shape.delete();
           }
         }
 
@@ -392,9 +427,24 @@ export function OccViewer({
       ro.disconnect();
       window.removeEventListener('resize', onResize);
       cancelAnimationFrame(animId);
+      controls.dispose();
+      // scene.clear() alone does not free GPU resources — dispose every
+      // geometry/material/texture still in the scene (IGES meshes, edge lines,
+      // grid, shadow ground, loading ring)
+      scene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
+          obj.geometry.dispose();
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((mat) => {
+            Object.values(mat).forEach((v) => {
+              if (v instanceof THREE.Texture) v.dispose();
+            });
+            mat.dispose();
+          });
+        }
+      });
+      (scene.background as THREE.Texture).dispose();
       scene.clear();
-      groundGeo.dispose();
-      groundMat.dispose();
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
@@ -402,7 +452,7 @@ export function OccViewer({
       meshesRef.current   = [];
       wireLineRef.current = [];
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [igesUrl]);
 
   return (

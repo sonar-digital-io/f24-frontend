@@ -34,8 +34,6 @@ export interface BezierEditorProps {
   xMin?: number;
   xMax?: number;
   xStep?: number;
-  /** Kept for API compatibility — no longer rendered statically. */
-  previousPoints?: ControlPoint[];
   rootX?: number;
 }
 
@@ -195,10 +193,10 @@ export function BezierEditor({
     let { x, y } = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
     y = clamp(y, yMin, yMax);
     const xEps = (xMax - xMin) * 0.001;
-    if (idx === 0) {
-      x = xMin;
-    } else if (idx === points.length - 1) {
-      x = xMax;
+    if (idx === 0 || idx === points.length - 1) {
+      // Endpoints move vertically only — pinned to their CURRENT x, not to
+      // xMin/xMax, so callers may keep endpoints inside the visible range.
+      x = points[idx].x;
     } else {
       x = clamp(x, points[idx - 1].x + xEps, points[idx + 1].x - xEps);
     }
@@ -272,8 +270,13 @@ export function BezierEditor({
     const local = screenToViewBox(e.clientX, e.clientY);
     if (!local) return;
     let { x, y } = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
+    // Stay strictly between the two fixed endpoints (which may sit inside
+    // the xMin..xMax range), so the point array stays x-sorted.
+    const firstX = points[0]?.x ?? xMin;
+    const lastX = points[points.length - 1]?.x ?? xMax;
     const margin = (xMax - xMin) * 0.02;
-    x = clamp(x, xMin + margin, xMax - margin); // stay away from fixed endpoints
+    if (lastX - firstX <= 2 * margin) return;
+    x = clamp(x, firstX + margin, lastX - margin);
     y = clamp(y, yMin, yMax);
     // Skip if too close to an existing anchor
     if (points.some((p) => Math.abs(p.x - x) < (xMax - xMin) * 0.03)) return;
@@ -287,6 +290,16 @@ export function BezierEditor({
     setZoom(1);
     setPanX(0);
     setPanY(0);
+  }
+
+  // Degenerate bounds would put NaN into every coordinate (or loop forever
+  // building ticks) — bail out with a placeholder instead.
+  if (xMax <= xMin || yMax <= yMin || xStep <= 0 || yStep <= 0) {
+    return (
+      <div className="flex h-[260px] w-full items-center justify-center rounded-md bg-white text-[12px] text-[#6b7280]">
+        Invalid chart bounds
+      </div>
+    );
   }
 
   // ── Ticks ────────────────────────────────────────────────────────────────

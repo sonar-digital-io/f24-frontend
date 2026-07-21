@@ -51,8 +51,36 @@ export function Tabs({ value: controlledValue, defaultValue, onValueChange, chil
 }
 
 export function TabsList({ children, className }: TabsListProps) {
+  const listRef = React.useRef<HTMLDivElement>(null);
+
+  // Roving arrow-key navigation between the enabled tabs, per the WAI-ARIA
+  // tabs pattern (this hand-rolled component replaces Radix, which did this).
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') {
+      return;
+    }
+    const list = listRef.current;
+    if (!list) return;
+    const tabs = Array.from(
+      list.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)')
+    );
+    if (tabs.length === 0) return;
+    const current = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    let next: number;
+    if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = tabs.length - 1;
+    else if (e.key === 'ArrowRight') next = current < 0 ? 0 : (current + 1) % tabs.length;
+    else next = current < 0 ? 0 : (current - 1 + tabs.length) % tabs.length;
+    e.preventDefault();
+    tabs[next].focus();
+    tabs[next].click();
+  }
+
   return (
     <div
+      ref={listRef}
+      role="tablist"
+      onKeyDown={handleKeyDown}
       className={cn(
         'inline-flex h-6 items-center justify-center rounded-md bg-muted p-0.5 text-muted-foreground',
         className
@@ -69,6 +97,10 @@ export function TabsTrigger({ value, children, className, disabled }: TabsTrigge
 
   return (
     <button
+      type="button"
+      role="tab"
+      aria-selected={isSelected}
+      tabIndex={isSelected ? 0 : -1}
       data-state={isSelected ? 'active' : 'inactive'}
       disabled={disabled}
       onClick={() => !disabled && onValueChange(value)}

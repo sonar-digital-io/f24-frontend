@@ -26,11 +26,16 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GeometryCard } from '@/components/GeometryCard';
 import { LayupPickerDialog } from '@/components/LayupPickerDialog';
-import { LayupMappingBezierDialog } from '@/components/LayupMappingBezierDialog';
+import {
+  DEFAULT_MAPPING_POINTS,
+  LayupMappingBezierDialog,
+} from '@/components/LayupMappingBezierDialog';
+import type { ControlPoint } from '@/components/BezierEditor';
 import { TransversalMappingSection } from '@/components/TransversalMappingSection';
 import { GEOMETRIES } from '@/data/geometries';
 import { LAYUPS } from '@/data/layups';
 import { COMPOSITIONS, createComposition, updateComposition } from '@/data/compositions';
+import { nextLocalId } from '@/lib/utils';
 
 type RenderMode = 'solid' | 'wireframe';
 
@@ -73,6 +78,8 @@ interface LayupMapping {
   id: string;
   name: string;
   layupId: string | null;
+  /** Bezier curve edited in LayupMappingBezierDialog; undefined = default curve. */
+  points?: ControlPoint[];
 }
 
 interface LayupMappingTableProps {
@@ -299,6 +306,12 @@ export function CompositionNew() {
     return `${sideLabel} / ${m?.name?.trim() || 'untitled'}`;
   })();
 
+  const bezierPoints = (() => {
+    if (!bezierFor) return DEFAULT_MAPPING_POINTS;
+    const arr = bezierFor.side === 'upper' ? upperMappings : lowerMappings;
+    return arr.find((x) => x.id === bezierFor.mappingId)?.points ?? DEFAULT_MAPPING_POINTS;
+  })();
+
   function duplicateMapping(side: 'upper' | 'lower', id: string) {
     const setter = side === 'upper' ? setUpperMappings : setLowerMappings;
     setter((arr) => {
@@ -307,7 +320,7 @@ export function CompositionNew() {
       const src = arr[idx];
       const dup: LayupMapping = {
         ...src,
-        id: `${side[0]}-${Date.now()}`,
+        id: nextLocalId(side[0]),
         name: src.name ? `${src.name} (copy)` : '',
       };
       const next = [...arr];
@@ -359,13 +372,13 @@ export function CompositionNew() {
   function addUpper() {
     setUpperMappings((arr) => [
       ...arr,
-      { id: `u-${Date.now()}`, name: '', layupId: null },
+      { id: nextLocalId('u'), name: '', layupId: null },
     ]);
   }
   function addLower() {
     setLowerMappings((arr) => [
       ...arr,
-      { id: `l-${Date.now()}`, name: '', layupId: null },
+      { id: nextLocalId('l'), name: '', layupId: null },
     ]);
   }
   function updateMapping(side: 'upper' | 'lower', id: string, next: Partial<LayupMapping>) {
@@ -377,10 +390,10 @@ export function CompositionNew() {
     setter((arr) => arr.filter((m) => m.id !== id));
   }
   function copyUpperToLower() {
-    setLowerMappings(upperMappings.map((m, i) => ({ ...m, id: `l-copy-${i}-${Date.now()}` })));
+    setLowerMappings(upperMappings.map((m) => ({ ...m, id: nextLocalId('l-copy') })));
   }
   function copyLowerToUpper() {
-    setUpperMappings(lowerMappings.map((m, i) => ({ ...m, id: `u-copy-${i}-${Date.now()}` })));
+    setUpperMappings(lowerMappings.map((m) => ({ ...m, id: nextLocalId('u-copy') })));
   }
 
   return (
@@ -695,11 +708,16 @@ export function CompositionNew() {
         onClose={() => setLayupPicker(null)}
       />
 
-      <LayupMappingBezierDialog
-        open={bezierFor !== null}
-        title={bezierTitle}
-        onClose={() => setBezierFor(null)}
-      />
+      {bezierFor && (
+        <LayupMappingBezierDialog
+          key={`${bezierFor.side}-${bezierFor.mappingId}`}
+          open
+          title={bezierTitle}
+          points={bezierPoints}
+          onChange={(pts) => updateMapping(bezierFor.side, bezierFor.mappingId, { points: pts })}
+          onClose={() => setBezierFor(null)}
+        />
+      )}
     </div>
   );
 }
