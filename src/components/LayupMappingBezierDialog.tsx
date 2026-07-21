@@ -12,7 +12,8 @@ const Y_MIN = -14;
 const Y_MAX = 0;
 const Y_STEP = 2;
 
-const INITIAL_POINTS: ControlPoint[] = [
+/** Default curve for mapping rows that haven't been edited yet. */
+export const DEFAULT_MAPPING_POINTS: ControlPoint[] = [
   { x: 8, y: -13.598 },
   { x: 8, y: 1.13015 },
   { x: 52, y: 1.14 },
@@ -35,15 +36,19 @@ interface LayupMappingBezierDialogProps {
   open: boolean;
   /** Side + mapping name combined into the title, e.g. "Upper side / layup1". */
   title: string;
+  /** Controlled: the parent owns the curve per mapping row. */
+  points: ControlPoint[];
+  onChange: (points: ControlPoint[]) => void;
   onClose: () => void;
 }
 
 export function LayupMappingBezierDialog({
   open,
   title,
+  points,
+  onChange,
   onClose,
 }: LayupMappingBezierDialogProps) {
-  const [points, setPoints] = useState<ControlPoint[]>(INITIAL_POINTS);
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -73,10 +78,10 @@ export function LayupMappingBezierDialog({
     setEditingValues((v) => ({ ...v, [fieldKey(idx, field)]: raw }));
     const parsed = parseFloat(raw);
     if (!Number.isFinite(parsed)) return;
-    setPoints((current) =>
-      current.map((p, i) => {
+    onChange(
+      points.map((p, i) => {
         if (i !== idx) return p;
-        if (field === 'x') return { ...p, x: applyXConstraints(current, idx, parsed) };
+        if (field === 'x') return { ...p, x: applyXConstraints(points, idx, parsed) };
         return { ...p, y: clamp(parsed, Y_MIN, Y_MAX) };
       }),
     );
@@ -91,8 +96,10 @@ export function LayupMappingBezierDialog({
     });
   }
   function handleDelete(idx: number) {
-    if (points.length <= 2) return; // need at least 2 points for a curve
-    setPoints((current) => current.filter((_, i) => i !== idx));
+    // Match the chart's rules: endpoints stay, minimum 3 points.
+    if (idx === 0 || idx === points.length - 1) return;
+    if (points.length <= 3) return;
+    onChange(points.filter((_, i) => i !== idx));
   }
 
   if (!open) return null;
@@ -147,7 +154,7 @@ export function LayupMappingBezierDialog({
           <div>
             <BezierEditor
               points={points}
-              onChange={setPoints}
+              onChange={onChange}
               xMin={X_MIN}
               xMax={X_MAX}
               xStep={X_STEP}
@@ -173,46 +180,52 @@ export function LayupMappingBezierDialog({
                 </tr>
               </thead>
               <tbody>
-                {points.map((_p, idx) => (
-                  <tr key={idx} className="border-b border-[#e5e7eb] last:border-b-0">
-                    <td className="px-3 py-2 text-[#0a0a0a]">{idx}</td>
-                    <td className="px-2 py-2">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min={X_MIN}
-                        max={X_MAX}
-                        value={getInputValue(idx, 'x')}
-                        onChange={(e) => handleInputChange(idx, 'x', e.target.value)}
-                        onBlur={() => handleInputBlur(idx, 'x')}
-                        className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <Input
-                        type="number"
-                        step="0.001"
-                        min={Y_MIN}
-                        max={Y_MAX}
-                        value={getInputValue(idx, 'y')}
-                        onChange={(e) => handleInputChange(idx, 'y', e.target.value)}
-                        onBlur={() => handleInputBlur(idx, 'y')}
-                        className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(idx)}
-                        aria-label={`Delete row ${idx}`}
-                        disabled={points.length <= 2}
-                        className="flex h-8 w-8 items-center justify-center rounded-md text-[#6b7280] hover:bg-[#fef2f2] hover:text-[#dc2626] disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <Trash2 className="h-4 w-4" strokeWidth={2} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {points.map((_p, idx) => {
+                  const isEndpoint = idx === 0 || idx === points.length - 1;
+                  return (
+                    <tr key={idx} className="border-b border-[#e5e7eb] last:border-b-0">
+                      <td className="px-3 py-2 text-[#0a0a0a]">{idx}</td>
+                      <td className="px-2 py-2">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={X_MIN}
+                          max={X_MAX}
+                          value={getInputValue(idx, 'x')}
+                          onChange={(e) => handleInputChange(idx, 'x', e.target.value)}
+                          onBlur={() => handleInputBlur(idx, 'x')}
+                          disabled={isEndpoint}
+                          className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:opacity-60"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <Input
+                          type="number"
+                          step="0.001"
+                          min={Y_MIN}
+                          max={Y_MAX}
+                          value={getInputValue(idx, 'y')}
+                          onChange={(e) => handleInputChange(idx, 'y', e.target.value)}
+                          onBlur={() => handleInputBlur(idx, 'y')}
+                          className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        {!isEndpoint && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(idx)}
+                            aria-label={`Delete row ${idx}`}
+                            disabled={points.length <= 3}
+                            className="flex h-8 w-8 items-center justify-center rounded-md text-[#6b7280] hover:bg-[#fef2f2] hover:text-[#dc2626] disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Trash2 className="h-4 w-4" strokeWidth={2} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

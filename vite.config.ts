@@ -19,6 +19,13 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
   },
+  // Keep `vite preview` cross-origin-isolated like dev and Vercel (vercel.json).
+  preview: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

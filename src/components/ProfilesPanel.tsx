@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AirfoilPreview } from '@/components/AirfoilPreview';
 import { INITIAL_PROFILES, PROFILE_TYPES, type Profile } from '@/data/profiles';
+import { nextLocalId } from '@/lib/utils';
+import { BufferedNumberInput } from '@/components/BufferedNumberInput';
 
 interface SelectProps {
   value: string;
@@ -141,14 +143,10 @@ function ProfileDetailPopover({ profile, onChange, onClose }: ProfileDetailPopov
               value={profile.name}
               onChange={(v) => update('name', v)}
             />
-            <Field
+            <NumberField
               label="Position (relative radius)"
-              value={String(profile.position)}
-              onChange={(v) => {
-                const parsed = parseFloat(v);
-                if (Number.isFinite(parsed)) update('position', parsed);
-              }}
-              type="number"
+              value={profile.position}
+              onCommit={(v) => update('position', v)}
               step="0.0001"
             />
             <div className="flex flex-col gap-2">
@@ -159,34 +157,22 @@ function ProfileDetailPopover({ profile, onChange, onClose }: ProfileDetailPopov
                 options={PROFILE_TYPES}
               />
             </div>
-            <Field
+            <NumberField
               label="Maximum camber (%)"
-              value={String(profile.maxCamber)}
-              onChange={(v) => {
-                const parsed = parseFloat(v);
-                if (Number.isFinite(parsed)) update('maxCamber', parsed);
-              }}
-              type="number"
+              value={profile.maxCamber}
+              onCommit={(v) => update('maxCamber', v)}
               step="0.01"
             />
-            <Field
+            <NumberField
               label="Maximum camber position"
-              value={String(profile.maxCamberPosition)}
-              onChange={(v) => {
-                const parsed = parseFloat(v);
-                if (Number.isFinite(parsed)) update('maxCamberPosition', parsed);
-              }}
-              type="number"
+              value={profile.maxCamberPosition}
+              onCommit={(v) => update('maxCamberPosition', v)}
               step="0.000001"
             />
-            <Field
+            <NumberField
               label="Thickness (TMC) (%)"
-              value={String(profile.thickness)}
-              onChange={(v) => {
-                const parsed = parseFloat(v);
-                if (Number.isFinite(parsed)) update('thickness', parsed);
-              }}
-              type="number"
+              value={profile.thickness}
+              onCommit={(v) => update('thickness', v)}
               step="0.000001"
             />
           </div>
@@ -229,6 +215,28 @@ function Field({ label, value, onChange, type = 'text', step }: FieldProps) {
   );
 }
 
+interface NumberFieldProps {
+  label: string;
+  value: number;
+  onCommit: (value: number) => void;
+  step?: string;
+}
+
+/** Numeric Field with a typing buffer — the field stays clearable mid-edit. */
+function NumberField({ label, value, onCommit, step }: NumberFieldProps) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">{label}</Label>
+      <BufferedNumberInput
+        step={step}
+        value={value}
+        onCommit={onCommit}
+        className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+      />
+    </div>
+  );
+}
+
 export function ProfilesPanel() {
   const [profiles, setProfiles] = useState<Profile[]>(INITIAL_PROFILES);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -246,7 +254,7 @@ export function ProfilesPanel() {
   function handleAdd() {
     const nextIdx = profiles.length;
     const newProfile: Profile = {
-      id: `p${Date.now()}`,
+      id: nextLocalId('p'),
       name: `Profile${nextIdx}`,
       position: Math.min(1, (profiles[profiles.length - 1]?.position ?? 0) + 0.1),
       type: 'NACA 4 digit',

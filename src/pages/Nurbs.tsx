@@ -187,7 +187,7 @@ export function Nurbs() {
           showWireframe={showWireframe}
           showSurface={showSurface}
           showControlPoints={showControlPoints}
-          geometryType={selectedGeometry as any}
+          geometryType={selectedGeometry}
         />
       ) : (
         <LoftViewer

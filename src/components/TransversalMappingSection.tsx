@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { AirfoilPreview } from '@/components/AirfoilPreview';
 import { INITIAL_PROFILES, type Profile } from '@/data/profiles';
 import { LAYUPS } from '@/data/layups';
+import { nextLocalId } from '@/lib/utils';
 
 interface TransversalMapping {
   id: string;
@@ -228,6 +229,7 @@ function ProfileEditorPopover({ profile, onClose }: ProfileEditorPopoverProps) {
 
 export function TransversalMappingSection() {
   const [mappings, setMappings] = useState<TransversalMapping[]>(INITIAL_MAPPINGS);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [editingProfileFor, setEditingProfileFor] = useState<{
     mappingId: string;
     side: 'start' | 'end';
@@ -241,16 +243,18 @@ export function TransversalMappingSection() {
   }
 
   function addMapping() {
+    const id = nextLocalId('tm');
     setMappings((arr) => [
       ...arr,
       {
-        id: `tm-${Date.now()}`,
+        id,
         name: '',
         layupId: null,
         startProfileId: null,
         endProfileId: null,
       },
     ]);
+    setEditingNameId(id);
   }
 
   function deleteMapping(id: string) {
@@ -291,14 +295,25 @@ export function TransversalMappingSection() {
               return (
                 <tr key={m.id} className="group border-b border-[#e5e7eb] last:border-b-0">
                   <td className="px-2 py-2">
-                    {m.name ? (
-                      <span className="inline-flex h-8 items-center rounded-md bg-[#ede9fe] px-2 text-[12px] font-semibold uppercase tracking-wide text-[#5b21b6]">
+                    {m.name && editingNameId !== m.id ? (
+                      <button
+                        type="button"
+                        onClick={() => setEditingNameId(m.id)}
+                        title="Edit name"
+                        className="inline-flex h-8 items-center rounded-md bg-[#ede9fe] px-2 text-[12px] font-semibold uppercase tracking-wide text-[#5b21b6] hover:bg-[#ddd6fe]"
+                      >
                         {m.name}
-                      </span>
+                      </button>
                     ) : (
                       <Input
                         value={m.name}
+                        autoFocus={editingNameId === m.id}
+                        onFocus={() => setEditingNameId(m.id)}
                         onChange={(e) => updateMapping(m.id, { name: e.target.value })}
+                        onBlur={() => setEditingNameId(null)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') setEditingNameId(null);
+                        }}
                         placeholder="Name"
                         className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
                       />
@@ -410,6 +425,7 @@ export function TransversalMappingSection() {
 
         {editingProfile && (
           <ProfileEditorPopover
+            key={editingProfile.id}
             profile={editingProfile}
             onClose={() => setEditingProfileFor(null)}
           />

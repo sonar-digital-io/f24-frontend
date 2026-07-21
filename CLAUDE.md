@@ -29,8 +29,6 @@ src/
 │   ├── Footer.tsx               # eCon Engineering branding lábléc (SVG logo placeholder)
 │   ├── PagePlaceholder.tsx      # Közös stub layout aloldalakhoz ("Coming soon")
 │   ├── PropertyFormTab.tsx      # Sidebar + form body — Material edit Mechanical/Fatigue tab-jaihoz
-│   ├── NewGeometryModal.tsx     # "Project configuration" modal a Geometry létrehozáshoz
-│   ├── BladeScene.tsx           # Three.js full-bleed 3D scene a GeometryEdit-en (tapered blade placeholder)
 │   ├── BladeThumbnail.tsx       # SVG szárny thumbnail a Geometry grid kártyákon
 │   ├── BezierEditor.tsx         # Interaktív cubic Bézier editor (drag + zoom + pan + yMin/yMax)
 │   ├── ProfileDistributionPanel.tsx  # GeometryEdit "Profile distribution" tab — 3 szekció bezier + table
@@ -42,34 +40,28 @@ src/
 │   ├── GeometryCard.tsx         # Geometry kártya (Geometry list grid + CompositionNew picker)
 │   ├── LayupPickerDialog.tsx    # Layup chooser modal a Layup mapping táblázathoz
 │   ├── LayupMappingBezierDialog.tsx  # Bezier modal per layup-mapping row (longitudinal × transversal)
+│   ├── TransversalMappingSection.tsx # CompositionNew "Transversal mapping" tab — mapping tábla + profil popover
 │   ├── Layout.tsx               # Passthrough wrapper — minden page maga rendereli MainNav+Footer
-│   ├── BackgroundScene.tsx      # 3D háttér jelenet a Composition route-on
-│   ├── CadViewer.tsx            # Szélturbina 3D megjelenítő
-│   ├── NurbsViewer.tsx          # NURBS felület vizualizáció
-│   ├── LoftViewer.tsx           # Loft felület készítő (OpenCascade.js)
-│   ├── BezierPanel.tsx          # Bezier görbe szerkesztő panel
-│   ├── BoxViewer.tsx            # Doboz geometria megjelenítő
-│   ├── SplitView.tsx            # Osztott nézetablak
-│   ├── TopNav.tsx               # ⚠️ Régi nav — már nem használt, lehet törölni
-│   ├── CompositionContent.tsx
-│   ├── LayupMappingSection.tsx
-│   ├── GradientBar.tsx
+│   ├── OccViewer.tsx            # OpenCascade.js IGES viewer — GeometryEdit + CompositionNew 3D háttere
+│   ├── NurbsViewer.tsx          # NURBS felület vizualizáció (/nurbs)
+│   ├── LoftViewer.tsx           # Loft felület készítő (/nurbs)
 │   └── ui/                      # shadcn/ui komponensek (badge, button, card, checkbox, input, label, slider, tabs, textarea)
 ├── pages/
 │   ├── Home.tsx                 # / — Dashboard (Add new / Recently edited / What's new) — Figma 576:19645
 │   ├── Material.tsx             # /material — Data table accordion-soros expand-dal — Figma 576:19313 / 584:15263
 │   ├── MaterialNew.tsx          # /material/new — 3 tab: General / Mechanical / Fatigue — Figma 584:15600 / 596:2160 / 584:15789
 │   ├── Geometry.tsx              # /geometry — List/Grid view toggle — Figma 600:22786 / 600:22858
-│   ├── GeometryEdit.tsx         # /geometry/:id — Full-bleed Three.js + floating panel — Figma 596:22661
+│   ├── GeometryEdit.tsx         # /geometry/:id — Full-bleed OccViewer (IGES) + floating panel — Figma 596:22661
 │   ├── Layup.tsx                # /layup — Layup data table list — Figma 600:23689
 │   ├── LayupNew.tsx             # /layup/new — General + Layup building tabs — Figma 600:27124 / 600:24328
 │   ├── Composition.tsx          # /composition — Composition list page (table) — Figma 600:27699
 │   ├── CompositionNew.tsx       # /composition/new — General + Geometry + Layup mapping + Transversal mapping — Figma 600:27773 + 600:29097 + 600:28625 + 600:27811
-│   ├── LoadGroup.tsx            # /load-group — stub
-│   ├── Calculation.tsx          # /calculation — stub
+│   ├── LoadGroup.tsx            # /load-group — Load group list page (table) — Figma 614:41830
+│   ├── LoadGroupNew.tsx         # /load-group/new — General / Load cases / Limits / Fatigue profiles tabok
+│   ├── Calculation.tsx          # /calculation — Calculation list page (timestamp + status badge) — Figma 614:45470
+│   ├── CalculationNew.tsx       # /calculation/new — General / Composition / Configuration / Fatigue profile tabok
 │   ├── Report.tsx               # /report — stub
 │   ├── Settings.tsx             # /settings — stub (jobb felső ⚙ ikonról)
-│   ├── Game.tsx                 # Szélturbina demo (nem routed)
 │   └── Nurbs.tsx                # /nurbs — teljes képernyős NURBS/Loft szerkesztő (nav nélkül)
 ├── data/
 │   ├── materials.ts             # Material[] mock + típusok (cseréld API hívásra)
@@ -77,9 +69,12 @@ src/
 │   ├── geometries.ts            # Geometry[] mock + típusok
 │   ├── profiles.ts              # Profile[] mock + PROFILE_TYPES — Profiles tab data
 │   ├── layups.ts                # Layup[] mock — Layup list page data
-│   └── compositions.ts          # Composition[] mock — Composition list page data
-├── lib/utils.ts                 # cn() segédfüggvény (clsx + tailwind-merge)
-├── types/                       # TypeScript típusok
+│   ├── compositions.ts          # Composition[] mock — Composition list page data
+│   ├── loadGroups.ts            # LoadGroup[] mock — Load group list page data
+│   └── calculations.ts          # Calculation[] mock — Calculation list page data
+├── lib/
+│   ├── utils.ts                 # cn(), slugify, uniqueId, todayISO segédfüggvények
+│   └── occ-init.ts              # OpenCascade.js WASM singleton inicializálás
 ├── App.tsx                      # Router konfiguráció
 ├── main.tsx                     # Belépési pont
 └── index.css                    # Tailwind direktívák + CSS változók
@@ -93,14 +88,16 @@ src/
 | `/material` | `Material` | Material data table accordion-szerű expand-dal — Figma 576:19313 |
 | `/material/new` | `MaterialNew` | Új material létrehozás 3 tab-bal — Figma 584:15600 |
 | `/geometry` | `Geometry` | Geometry list + grid view toggle — Figma 600:22786 / 600:22858 |
-| `/geometry/:id` | `GeometryEdit` | Geometry edit full-bleed Three.js canvas-szal. Sub-tabs: Global properties (596:22661), Profile distribution (596:19816), Profiles (596:19631), Stacking (596:20399), Spars (placeholder) |
-| `/geometry?new=1` | `Geometry` | Lista + auto-nyíló New geometry modal (Home dashboard-ról jövő flow) |
+| `/geometry/:id` | `GeometryEdit` | Geometry edit full-bleed OccViewer canvas-szal. Sub-tabs: Create geometry (csak `/geometry/new`), Global properties (596:22661), Profile distribution (596:19816), Profiles (596:19631), Stacking (596:20399), Spars (placeholder) |
+| `/geometry/new` | `GeometryEdit` | Új geometria inline létrehozás (a `/geometry?new=1` link ide redirectel) |
 | `/layup` | `Layup` | Layup list page (table) — Figma 600:23689 |
 | `/layup/new` | `LayupNew` | New layup (General + Layup building) — Figma 600:27124 / 600:24328 |
 | `/composition` | `Composition` | Composition list page (table) — Figma 600:27699 |
 | `/composition/new` | `CompositionNew` | New composition (General + Geometry + Layup mapping + Transversal mapping) — Figma 600:27773 + 600:29097 + 600:28625 + 600:27811 |
-| `/load-group` | `LoadGroup` | Stub |
-| `/calculation` | `Calculation` | Stub |
+| `/load-group` | `LoadGroup` | Load group list page (table) |
+| `/load-group/new`, `/load-group/:id` | `LoadGroupNew` | Load group edit — General / Load cases / Limits / Fatigue profiles |
+| `/calculation` | `Calculation` | Calculation list page (timestamp, status badge) |
+| `/calculation/new`, `/calculation/:id` | `CalculationNew` | Calculation edit — General / Composition / Configuration / Fatigue profile |
 | `/report` | `Report` | Stub |
 | `/settings` | `Settings` | Stub (jobb felső ⚙ ikonról) |
 | `/nurbs` | `Nurbs` | Teljes képernyős NURBS szerkesztő, nav nélkül |
@@ -119,7 +116,7 @@ src/
   ```
 - **Edit page szerkezet** (`MaterialNew`, `GeometryEdit`): sub-toolbar a MainNav alatt, sticky `top-[69px] h-[52px]`, tartalmazza a tabs + középre pozícionált címet + Exit edit mode gombot. Részletek `design.md`-ben.
 - **Full-bleed canvas page** (`GeometryEdit`): a `<main>` `relative overflow-hidden`, a Three.js canvas `absolute inset-0`, minden UI overlay (sub-toolbar, panel, gizmó) z-index-szel felette, transparent háttérrel. **Footer eltávolítva** (edit mode).
-- **Kivételek**: `Nurbs` (fullscreen, nincs nav, nincs footer), `Composition` (nincs footer), `GeometryEdit` (nincs footer).
+- **Kivételek**: `Nurbs` (fullscreen, nincs nav, nincs footer), `GeometryEdit`, `CompositionNew`, `CalculationNew` (nincs footer — edit mode).
 - **Layout** (`src/components/Layout.tsx`) szándékosan passthrough — történelmi okból maradt.
 - **Stílusok**: Tailwind utility classok inline. Pixel-pontos Figma illesztéshez **hex literálok** (`text-[#0a0a0a]`, `rounded-[14px]`) — nem CSS változókon keresztül abstraction.
 - **shadcn primitívek**: `src/components/ui/` — `npx shadcn add <name>` az új komponensekhez. Nem módosítjuk közvetlenül.
@@ -148,6 +145,5 @@ A Figma MCP setup gotchákat lásd: `lessons.md` és a felhasználói memory (`~
 
 - A `README.md` jelenleg elavult (Angular-t ír, de ez egy React projekt) — frissíteni kellene
 - Font: Geist Sans (CDN-ről töltve az `index.html`-ben)
-- A `src/components/TopNav.tsx` régi, már nem használt — törölhető
 - Részletes design tokenek + komponens katalógus: `design.md`
 - Tanulságok / gotchák: `lessons.md`
