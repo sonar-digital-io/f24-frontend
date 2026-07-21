@@ -25,6 +25,11 @@ export default tseslint.config(
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+      // Allow the `set.has(x) ? set.delete(x) : set.add(x)` toggle idiom.
+      '@typescript-eslint/no-unused-expressions': [
+        'error',
+        { allowShortCircuit: true, allowTernary: true },
+      ],
     },
   }
 );

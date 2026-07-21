@@ -19,43 +19,67 @@ export function PropertyFormTab({
 }: PropertyFormTabProps) {
   const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id ?? '');
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // After a nav click, keep the clicked section active until the user manually scrolls it
+  // into the detection zone (or scrolls away from it in the other direction).
+  const lastClickedRef = useRef<string | null>(null);
 
-  // Scroll-spy: update activeSectionId based on which section is closest to top of viewport
   useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
     function handleScroll() {
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      const containerTop = el.getBoundingClientRect().top;
       const offsets = sections
         .map((s) => {
           const el = sectionRefs.current[s.id];
-          return el ? { id: s.id, top: el.getBoundingClientRect().top } : null;
+          return el ? { id: s.id, top: el.getBoundingClientRect().top - containerTop } : null;
         })
         .filter((x): x is { id: string; top: number } => x !== null);
 
-      // The section with the smallest positive top OR the closest negative top is active.
-      const aboveOrAt = offsets.filter((o) => o.top <= 200);
-      if (aboveOrAt.length > 0) {
-        setActiveSectionId(aboveOrAt[aboveOrAt.length - 1].id);
-      } else if (offsets[0]) {
-        setActiveSectionId(offsets[0].id);
+      const aboveOrAt = offsets.filter((o) => o.top <= 100);
+      const detected =
+        aboveOrAt.length > 0 ? aboveOrAt[aboveOrAt.length - 1].id : offsets[0]?.id;
+      if (!detected) return;
+
+      // If the user clicked a nav item that can't reach the top threshold (e.g. last
+      // section in a short list), keep it active until the user scrolls past it.
+      if (lastClickedRef.current && lastClickedRef.current !== detected) {
+        const clickedEl = sectionRefs.current[lastClickedRef.current];
+        if (clickedEl) {
+          const clickedTop = clickedEl.getBoundingClientRect().top - containerTop;
+          if (clickedTop > 100) return; // section is still below threshold — keep it active
+        }
       }
+      lastClickedRef.current = null;
+      setActiveSectionId(detected);
     }
 
     handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
   }, [sections]);
 
   function jumpTo(id: string) {
+    setActiveSectionId(id);
+    lastClickedRef.current = id;
+
+    const container = scrollContainerRef.current;
     const el = sectionRefs.current[id];
-    if (!el) return;
-    const top = el.getBoundingClientRect().top + window.scrollY - 100;
-    window.scrollTo({ top, behavior: 'smooth' });
+    if (!container || !el) return;
+    const containerTop = container.getBoundingClientRect().top;
+    const elTop = el.getBoundingClientRect().top;
+    // Instant scroll avoids timing races with the scroll-spy.
+    container.scrollBy({ top: elTop - containerTop - 16 });
   }
 
   return (
-    <div className="flex w-full max-w-[1200px] flex-col gap-6 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] lg:flex-row">
-      {/* Sidebar */}
-      <aside className="shrink-0 lg:w-[256px]">
-        <nav className="sticky top-[100px] flex flex-col gap-1" aria-label="Form sections">
+    <div className="flex h-full w-full max-w-[1200px] overflow-hidden rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] lg:flex-row">
+      {/* Sidebar — fixed, nem görget */}
+      <aside className="shrink-0 p-6">
+        <nav className="flex flex-col gap-1" aria-label="Form sections">
           {sections.map((section) => {
             const active = section.id === activeSectionId;
             return (
@@ -64,7 +88,7 @@ export function PropertyFormTab({
                 type="button"
                 onClick={() => jumpTo(section.id)}
                 aria-current={active ? 'true' : undefined}
-                className={`flex h-9 items-center rounded-md px-3 text-left text-[14px] font-medium leading-5 transition-colors ${
+                className={`flex h-9 items-center whitespace-nowrap rounded-md px-3 text-left text-[14px] font-medium leading-5 transition-colors ${
                   active
                     ? 'bg-[#eef9ff] text-[#171717]'
                     : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
@@ -77,15 +101,15 @@ export function PropertyFormTab({
         </nav>
       </aside>
 
-      {/* Form body */}
-      <div className="min-w-0 flex-1">
+      {/* Form body — ez görget */}
+      <div ref={scrollContainerRef} className="min-w-0 flex-1 overflow-y-auto p-6">
         <div className="flex flex-col gap-12">
           {sections.map((section, idx) => (
             <section
               key={section.id}
               id={section.id}
               ref={(el) => (sectionRefs.current[section.id] = el)}
-              className="flex flex-col gap-4 scroll-mt-[100px]"
+              className="flex flex-col gap-4"
             >
               <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">
                 {section.label}
@@ -137,7 +161,7 @@ function FieldRow({ name, label, required, helper, value, onChange }: FieldRowPr
         <Input
           id={`field-${name}`}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(e.target.value.replace(',', '.'))}
           placeholder="0"
           className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
         />

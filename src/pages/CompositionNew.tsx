@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Check,
@@ -12,10 +12,9 @@ import {
   Redo2,
   Search,
   Settings,
-  SquareArrowOutUpRight,
+  Spline,
   Trash2,
   Undo2,
-  X,
 } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { OccViewer } from '@/components/OccViewer';
@@ -32,6 +31,7 @@ import {
 } from '@/components/LayupMappingBezierDialog';
 import type { ControlPoint } from '@/components/BezierEditor';
 import { TransversalMappingSection } from '@/components/TransversalMappingSection';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipRoot, TooltipTrigger } from '@/components/ui/tooltip';
 import { GEOMETRIES } from '@/data/geometries';
 import { LAYUPS } from '@/data/layups';
 import { COMPOSITIONS, createComposition, updateComposition } from '@/data/compositions';
@@ -42,6 +42,22 @@ type RenderMode = 'solid' | 'wireframe';
 interface RenderToggleProps {
   value: RenderMode;
   onChange: (v: RenderMode) => void;
+}
+
+function CoordinateGizmo() {
+  return (
+    <svg viewBox="0 0 100 100" className="h-20 w-20" aria-hidden="true">
+      <line x1="50" y1="50" x2="50" y2="15" stroke="#16a34a" strokeWidth="2" />
+      <polygon points="50,10 46,18 54,18" fill="#16a34a" />
+      <text x="55" y="14" fontSize="9" fill="#16a34a">z</text>
+      <line x1="50" y1="50" x2="85" y2="50" stroke="#2563eb" strokeWidth="2" />
+      <polygon points="90,50 82,46 82,54" fill="#2563eb" />
+      <text x="80" y="64" fontSize="9" fill="#2563eb">y</text>
+      <line x1="50" y1="50" x2="22" y2="78" stroke="#dc2626" strokeWidth="2" />
+      <polygon points="18,82 26,80 22,72" fill="#dc2626" />
+      <text x="10" y="78" fontSize="9" fill="#dc2626">x</text>
+    </svg>
+  );
 }
 
 function RenderToggle({ value, onChange }: RenderToggleProps) {
@@ -82,10 +98,23 @@ interface LayupMapping {
   points?: ControlPoint[];
 }
 
+const DEFAULT_UPPER_MAPPINGS: LayupMapping[] = [
+  { id: 'u0', name: 'OUTER-SHELL', layupId: 'biax-skin-04' },
+  { id: 'u1', name: 'MID-SHELL',   layupId: 'biax-skin-08' },
+  { id: 'u2', name: 'INNER-SHELL', layupId: 'hyb-trans-12' },
+];
+
+const DEFAULT_LOWER_MAPPINGS: LayupMapping[] = [
+  { id: 'l0', name: 'OUTER-SHELL copy', layupId: 'biax-skin-04' },
+  { id: 'l1', name: 'MID-SHELL copy',   layupId: 'biax-skin-08' },
+  { id: 'l2', name: 'INNER-SHELL copy', layupId: 'hyb-trans-12' },
+];
+
 interface LayupMappingTableProps {
   title: string;
   copyLabel: string;
   mappings: LayupMapping[];
+  activeMappingId?: string | null;
   onAdd: () => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, next: Partial<LayupMapping>) => void;
@@ -100,6 +129,7 @@ function LayupMappingTable({
   title,
   copyLabel,
   mappings,
+  activeMappingId,
   onAdd,
   onDelete,
   onUpdate,
@@ -110,7 +140,8 @@ function LayupMappingTable({
   onPickLayup,
 }: LayupMappingTableProps) {
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
-  const [dropOverIdx, setDropOverIdx] = useState<number | null>(null);
+  const [insertBeforeIdx, setInsertBeforeIdx] = useState<number | null>(null);
+  const dragFromHandleRef = useRef<string | null>(null);
 
   function handleDragStart(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
     setDraggingIdx(idx);
@@ -120,21 +151,31 @@ function LayupMappingTable({
   function handleDragOver(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (dropOverIdx !== idx) setDropOverIdx(idx);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const newInsert = e.clientY < rect.top + rect.height / 2 ? idx : idx + 1;
+    if (insertBeforeIdx !== newInsert) setInsertBeforeIdx(newInsert);
   }
-  function handleDrop(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
+  function handleDragLeave() {
+    setInsertBeforeIdx(null);
+  }
+  function handleDrop(e: React.DragEvent<HTMLTableRowElement>) {
     e.preventDefault();
     const fromIdx = Number(e.dataTransfer.getData('text/plain'));
-    if (!Number.isNaN(fromIdx) && fromIdx !== idx) onReorder(fromIdx, idx);
+    if (insertBeforeIdx !== null && !Number.isNaN(fromIdx) && insertBeforeIdx !== fromIdx && insertBeforeIdx !== fromIdx + 1) {
+      const toIdx = insertBeforeIdx > fromIdx ? insertBeforeIdx - 1 : insertBeforeIdx;
+      onReorder(fromIdx, toIdx);
+    }
     setDraggingIdx(null);
-    setDropOverIdx(null);
+    setInsertBeforeIdx(null);
   }
   function handleDragEnd() {
+    dragFromHandleRef.current = null;
     setDraggingIdx(null);
-    setDropOverIdx(null);
+    setInsertBeforeIdx(null);
   }
 
   return (
+    <TooltipProvider>
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[16px] font-semibold leading-6 text-[#0a0a0a]">{title}</h3>
@@ -157,26 +198,40 @@ function LayupMappingTable({
           </tr>
         </thead>
         <tbody>
-          {mappings.map((m, idx) => {
+          {mappings.flatMap((m, idx) => {
             const layupLabel = LAYUPS.find((l) => l.id === m.layupId)?.name;
             const isDragging = draggingIdx === idx;
-            const isDropOver = dropOverIdx === idx && draggingIdx !== idx;
-            return (
+            const insertLine = (key: string) => (
+              <tr key={key} className="pointer-events-none">
+                <td colSpan={5} className="p-0">
+                  <div className="mx-2 h-0.5 rounded-full bg-[#006496]" />
+                </td>
+              </tr>
+            );
+            const row = (
               <tr
                 key={m.id}
                 draggable
-                onDragStart={(e) => handleDragStart(idx, e)}
+                onDragStart={(e) => {
+                  if (dragFromHandleRef.current !== m.id) {
+                    e.preventDefault();
+                    return;
+                  }
+                  handleDragStart(idx, e);
+                }}
                 onDragOver={(e) => handleDragOver(idx, e)}
-                onDragLeave={() => setDropOverIdx(null)}
-                onDrop={(e) => handleDrop(idx, e)}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
                 onDragEnd={handleDragEnd}
                 className={`group border-b border-[#e5e7eb] last:border-b-0 transition-colors ${
                   isDragging ? 'opacity-40' : ''
-                } ${isDropOver ? 'bg-[#eef9ff]' : ''}`}
+                } ${activeMappingId === m.id ? 'bg-[#eef9ff]' : ''}`}
               >
                 <td className="px-2 py-2 align-middle">
                   <span
                     aria-label="Drag handle"
+                    onMouseDown={() => { dragFromHandleRef.current = m.id; }}
+                    onMouseUp={() => { dragFromHandleRef.current = null; }}
                     className="flex h-7 w-7 cursor-grab items-center justify-center text-[#cbd5e1] opacity-0 transition-opacity hover:text-[#0a0a0a] active:cursor-grabbing group-hover:opacity-100"
                   >
                     <GripVertical className="h-4 w-4" strokeWidth={2} />
@@ -184,12 +239,17 @@ function LayupMappingTable({
                 </td>
                 <td className="px-2 py-2 text-[#0a0a0a]">{idx}</td>
                 <td className="px-2 py-2">
-                  <Input
-                    value={m.name}
-                    onChange={(e) => onUpdate(m.id, { name: e.target.value })}
-                    placeholder="Placeholder"
-                    className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-                  />
+                  <TooltipRoot delayDuration={400}>
+                    <TooltipTrigger asChild>
+                      <Input
+                        value={m.name}
+                        onChange={(e) => onUpdate(m.id, { name: e.target.value })}
+                        placeholder="Placeholder"
+                        className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] text-ellipsis"
+                      />
+                    </TooltipTrigger>
+                    {m.name && <TooltipContent>{m.name}</TooltipContent>}
+                  </TooltipRoot>
                 </td>
                 <td className="px-2 py-2">
                   <button
@@ -205,34 +265,45 @@ function LayupMappingTable({
                 </td>
                 <td className="px-2 py-2">
                   <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={() => onDuplicate(m.id)}
-                      aria-label="Duplicate mapping"
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                    >
-                      <Copy className="h-3.5 w-3.5" strokeWidth={2} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onOpenBezier(m.id)}
-                      aria-label="Open mapping bezier view"
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                    >
-                      <SquareArrowOutUpRight className="h-3.5 w-3.5" strokeWidth={2} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDelete(m.id)}
-                      aria-label="Delete mapping"
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#fef2f2] hover:text-[#dc2626]"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
-                    </button>
+                    <Tooltip content="Edit mapping">
+                      <button
+                        type="button"
+                        onClick={() => onOpenBezier(m.id)}
+                        aria-label="Open mapping bezier view"
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+                      >
+                        <Spline className="h-3.5 w-3.5" strokeWidth={2} />
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Duplicate">
+                      <button
+                        type="button"
+                        onClick={() => onDuplicate(m.id)}
+                        aria-label="Duplicate mapping"
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+                      >
+                        <Copy className="h-3.5 w-3.5" strokeWidth={2} />
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Delete">
+                      <button
+                        type="button"
+                        onClick={() => onDelete(m.id)}
+                        aria-label="Delete mapping"
+                        className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#fef2f2] hover:text-[#dc2626]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                      </button>
+                    </Tooltip>
                   </div>
                 </td>
               </tr>
             );
+            const result = [];
+            if (draggingIdx !== null && insertBeforeIdx === idx) result.push(insertLine(`insert-before-${idx}`));
+            result.push(row);
+            if (draggingIdx !== null && idx === mappings.length - 1 && insertBeforeIdx === mappings.length) result.push(insertLine('insert-end'));
+            return result;
           })}
           {mappings.length === 0 && (
             <tr>
@@ -252,6 +323,7 @@ function LayupMappingTable({
         Add layup mapping
       </button>
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -275,21 +347,26 @@ export function CompositionNew() {
   const [geomView, setGeomView] = useState<'list' | 'grid'>('grid');
   const [selectedGeometryId, setSelectedGeometryId] = useState<string | null>(null);
 
-  // Layup mapping
-  const [upperMappings, setUpperMappings] = useState<LayupMapping[]>([
-    { id: 'u0', name: '', layupId: null },
-  ]);
-  const [lowerMappings, setLowerMappings] = useState<LayupMapping[]>([
-    { id: 'l0', name: '', layupId: null },
-  ]);
+  // Layup mapping — pre-filled with defaults for existing compositions
+  const [upperMappings, setUpperMappings] = useState<LayupMapping[]>(
+    existing ? DEFAULT_UPPER_MAPPINGS : [{ id: 'u0', name: '', layupId: null }],
+  );
+  const [lowerMappings, setLowerMappings] = useState<LayupMapping[]>(
+    existing ? DEFAULT_LOWER_MAPPINGS : [{ id: 'l0', name: '', layupId: null }],
+  );
   const [layupPicker, setLayupPicker] = useState<{
     side: 'upper' | 'lower';
     mappingId: string;
   } | null>(null);
 
+  const layupPanelRef = useRef<HTMLDivElement>(null);
+
   const [bezierFor, setBezierFor] = useState<{
     side: 'upper' | 'lower';
     mappingId: string;
+    anchorRight?: number;
+    anchorTop?: number;
+    anchorLeft?: number;
   } | null>(null);
 
   const pickerCurrentLayupId = (() => {
@@ -390,10 +467,10 @@ export function CompositionNew() {
     setter((arr) => arr.filter((m) => m.id !== id));
   }
   function copyUpperToLower() {
-    setLowerMappings(upperMappings.map((m) => ({ ...m, id: nextLocalId('l-copy') })));
+    setLowerMappings(upperMappings.map((m) => ({ ...m, id: nextLocalId('l-copy'), name: m.name ? `${m.name} copy` : '' })));
   }
   function copyLowerToUpper() {
-    setUpperMappings(lowerMappings.map((m) => ({ ...m, id: nextLocalId('u-copy') })));
+    setUpperMappings(lowerMappings.map((m) => ({ ...m, id: nextLocalId('u-copy'), name: m.name ? `${m.name} copy` : '' })));
   }
 
   return (
@@ -408,7 +485,7 @@ export function CompositionNew() {
       {/* Sub-toolbar floating above the canvas */}
       <div className="absolute inset-x-0 top-0 z-40 h-[52px] border-b border-[#e5e7eb]/70">
         <div className="absolute inset-y-0 left-4 flex items-center">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="h-9">
+          <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as typeof activeTab); setBezierFor(null); }} className="h-9">
             <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
               {[
                 { value: 'general', label: 'General' },
@@ -432,37 +509,39 @@ export function CompositionNew() {
           {titleText}
         </h1>
 
-        <div className="absolute inset-y-0 right-4 flex items-center gap-2">
-          {/* Undo / Redo */}
-          <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white/95 p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm">
+        <div className="absolute inset-y-0 right-4 flex items-center gap-4">
+          <div className="flex items-center gap-[6px]">
+            <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
+            <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
+          </div>
+          <div className="flex items-center gap-1">
             <button
               type="button"
               aria-label="Undo"
-              className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
+              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
             >
-              <Undo2 className="h-3.5 w-3.5" strokeWidth={2} />
+              <Undo2 className="h-4 w-4" strokeWidth={2} />
             </button>
             <button
               type="button"
               aria-label="Redo"
-              className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
+              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
             >
-              <Redo2 className="h-3.5 w-3.5" strokeWidth={2} />
+              <Redo2 className="h-4 w-4" strokeWidth={2} />
             </button>
           </div>
           <button
             type="button"
             onClick={handleExit}
-            className="inline-flex h-8 items-center gap-2 rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
+            className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
           >
-            Exit edit mode
-            <X className="h-4 w-4 opacity-70" strokeWidth={1.33} />
+            Back to Compositions
           </button>
         </div>
       </div>
 
       {/* Render toggle + settings (top-center, below sub-toolbar) */}
-      <div className="absolute left-1/2 top-[60px] z-20 flex -translate-x-1/2 items-center gap-2 pt-2">
+      <div className={`absolute left-1/2 top-[60px] z-20 flex -translate-x-1/2 items-center gap-2 pt-2${activeTab === 'geometry' ? ' hidden' : ''}`}>
         <RenderToggle value={renderMode} onChange={setRenderMode} />
         <button
           type="button"
@@ -471,6 +550,11 @@ export function CompositionNew() {
         >
           <Settings className="h-4 w-4" strokeWidth={2} />
         </button>
+      </div>
+
+      {/* Coordinate gizmo (bottom-left) */}
+      <div className="pointer-events-none absolute bottom-4 left-4 z-20">
+        <CoordinateGizmo />
       </div>
 
       {/* Tab content panels — pointer-events-none on wrapper so the canvas
@@ -608,39 +692,47 @@ export function CompositionNew() {
                     geometry={g}
                     onClick={() => setSelectedGeometryId(g.id)}
                     selected={selectedGeometryId === g.id}
+                    showMenu={false}
                   />
                 ))}
               </div>
             ) : (
               <div className="mt-4 overflow-hidden rounded-md border border-[#e5e7eb]">
-                <table className="w-full border-collapse text-[14px]">
+                <table className="w-full border-separate border-spacing-0 text-[14px]">
                   <thead>
-                    <tr className="border-b border-[#e5e7eb]">
-                      <th className="h-10 w-[240px] px-3 text-left font-medium text-[#6b7280]">
+                    <tr>
+                      <th className="h-10 w-[240px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
                         Name
                       </th>
-                      <th className="h-10 px-3 text-left font-medium text-[#6b7280]">
+                      <th className="h-10 border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
                         Description
                       </th>
-                      <th className="h-10 w-[160px] px-3 text-left font-medium text-[#6b7280]">
+                      <th className="h-10 w-[160px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
                         Last updated
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredGeometries.map((g) => (
-                      <tr
-                        key={g.id}
-                        onClick={() => setSelectedGeometryId(g.id)}
-                        className={`cursor-pointer border-b border-[#e5e7eb] last:border-b-0 ${
-                          selectedGeometryId === g.id ? 'bg-[#eef9ff]' : 'hover:bg-[#f9fafb]'
-                        }`}
-                      >
-                        <td className="px-3 py-3 font-medium text-[#0a0a0a]">{g.name}</td>
-                        <td className="px-3 py-3 text-[#0a0a0a]">{g.description}</td>
-                        <td className="px-3 py-3 text-[#0a0a0a]">{g.lastUpdated}</td>
-                      </tr>
-                    ))}
+                    {filteredGeometries.map((g, idx) => {
+                      const isLast = idx === filteredGeometries.length - 1;
+                      const isSelected = selectedGeometryId === g.id;
+                      const cellBorder = isLast || isSelected ? '' : 'border-b border-[#e5e7eb]';
+                      return (
+                        <tr
+                          key={g.id}
+                          onClick={() => setSelectedGeometryId(g.id)}
+                          className={`cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#eef9ff] shadow-[inset_2px_0_0_#006496]'
+                              : 'hover:bg-[#f9fafb]'
+                          }`}
+                        >
+                          <td className={`px-3 py-3 font-medium text-[#0a0a0a] ${cellBorder}`}>{g.name}</td>
+                          <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>{g.description}</td>
+                          <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>{g.lastUpdated}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -648,26 +740,22 @@ export function CompositionNew() {
           </div>
         )}
 
-        {activeTab === 'layup-mapping' && (
-          <div className="pointer-events-auto flex max-h-[calc(100vh-145px)] w-full max-w-[480px] flex-col gap-6 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
-            <button
-              type="button"
-              aria-label="Settings"
-              className="inline-flex h-9 w-9 items-center justify-center self-start rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
-            >
-              <Plus className="h-4 w-4" strokeWidth={2.5} />
-            </button>
-
+        {/* Always mounted — hidden instead of unmounted so mapping state survives tab switches */}
+        <div ref={layupPanelRef} className={`pointer-events-auto flex max-h-[calc(100vh-145px)] w-full max-w-[560px] flex-col gap-6 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm${activeTab !== 'layup-mapping' ? ' hidden' : ''}`}>
             <LayupMappingTable
               title="Upper side"
               copyLabel="Copy to lower side"
               mappings={upperMappings}
+              activeMappingId={bezierFor?.side === 'upper' ? bezierFor.mappingId : null}
               onAdd={addUpper}
               onDelete={(id) => deleteMapping('upper', id)}
               onUpdate={(id, next) => updateMapping('upper', id, next)}
               onCopy={copyUpperToLower}
               onDuplicate={(id) => duplicateMapping('upper', id)}
-              onOpenBezier={(id) => setBezierFor({ side: 'upper', mappingId: id })}
+              onOpenBezier={(id) => {
+                const rect = layupPanelRef.current?.getBoundingClientRect();
+                setBezierFor({ side: 'upper', mappingId: id, anchorRight: rect?.right, anchorTop: rect?.top, anchorLeft: rect?.left });
+              }}
               onReorder={(from, to) => reorderMapping('upper', from, to)}
               onPickLayup={(id) => setLayupPicker({ side: 'upper', mappingId: id })}
             />
@@ -676,23 +764,28 @@ export function CompositionNew() {
               title="Lower side"
               copyLabel="Copy to upper side"
               mappings={lowerMappings}
+              activeMappingId={bezierFor?.side === 'lower' ? bezierFor.mappingId : null}
               onAdd={addLower}
               onDelete={(id) => deleteMapping('lower', id)}
               onUpdate={(id, next) => updateMapping('lower', id, next)}
               onCopy={copyLowerToUpper}
               onDuplicate={(id) => duplicateMapping('lower', id)}
-              onOpenBezier={(id) => setBezierFor({ side: 'lower', mappingId: id })}
+              onOpenBezier={(id) => {
+                const rect = layupPanelRef.current?.getBoundingClientRect();
+                setBezierFor({ side: 'lower', mappingId: id, anchorRight: rect?.right, anchorTop: rect?.top, anchorLeft: rect?.left });
+              }}
               onReorder={(from, to) => reorderMapping('lower', from, to)}
               onPickLayup={(id) => setLayupPicker({ side: 'lower', mappingId: id })}
             />
           </div>
-        )}
 
-        {activeTab === 'transversal-mapping' && (
-          <div className="pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto">
-            <TransversalMappingSection />
-          </div>
-        )}
+        {/* Always mounted — hidden instead of unmounted so internal state survives tab switches */}
+        <div className={`pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto${activeTab !== 'transversal-mapping' ? ' hidden' : ''}`}>
+          <TransversalMappingSection
+            useDefaultData={!!existing}
+            upperMappingNames={upperMappings.map((m) => m.name)}
+          />
+        </div>
       </div>
       </main>
 
@@ -702,6 +795,14 @@ export function CompositionNew() {
         onSelect={(layupId) => {
           if (layupPicker) {
             updateMapping(layupPicker.side, layupPicker.mappingId, { layupId });
+            const rect = layupPanelRef.current?.getBoundingClientRect();
+            setBezierFor({
+              side: layupPicker.side,
+              mappingId: layupPicker.mappingId,
+              anchorRight: rect?.right,
+              anchorTop: rect?.top,
+              anchorLeft: rect?.left,
+            });
           }
           setLayupPicker(null);
         }}
@@ -715,6 +816,9 @@ export function CompositionNew() {
           title={bezierTitle}
           points={bezierPoints}
           onChange={(pts) => updateMapping(bezierFor.side, bezierFor.mappingId, { points: pts })}
+          anchorRight={bezierFor.anchorRight}
+          anchorTop={bezierFor.anchorTop}
+          anchorLeft={bezierFor.anchorLeft}
           onClose={() => setBezierFor(null)}
         />
       )}

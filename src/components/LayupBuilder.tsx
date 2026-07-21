@@ -1,11 +1,32 @@
-import { useState } from 'react';
-import { GripVertical, Plus, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ChevronDown, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PlyStackViz } from '@/components/PlyStackViz';
 import { BufferedNumberInput } from '@/components/BufferedNumberInput';
 import { nextLocalId } from '@/lib/utils';
+import { MaterialPickerDialog } from '@/components/MaterialPickerDialog';
+import { MATERIALS } from '@/data/materials';
+
+const MATERIAL_TYPE_COLORS: Record<string, string> = {
+  'UD Carbon Ply':      '#0066cc',
+  'UD Ply':             '#0066cc',
+  'Biaxial Ply (±45°)': '#22c55e',
+  'Core (PET Foam)':    '#f59e0b',
+  'Core (Balsa)':       '#f59e0b',
+  'Surface Ply':        '#9333ea',
+  'Hybrid Ply':         '#06b6d4',
+  'Random Mat Ply':     '#ec4899',
+  'Consolidated Ply':   '#1e3a8a',
+};
+const FALLBACK_COLOR = '#6b7280';
+
+function getMaterialColor(materialName: string): string {
+  const m = MATERIALS.find((mat) => mat.name === materialName);
+  if (m) return MATERIAL_TYPE_COLORS[m.type] ?? FALLBACK_COLOR;
+  return FALLBACK_COLOR;
+}
 
 export interface Ply {
   id: string;
@@ -16,56 +37,15 @@ export interface Ply {
   color: string; // hex
 }
 
-/** Map orientation (deg) to a base color used in both the table swatch and viz. */
-function defaultColorForOrientation(o: number): string {
-  // 0  -> blue, 45 -> green, 90 -> yellow, anything else: interpolate-ish
-  if (o <= 22.5) return '#0066cc';
-  if (o <= 67.5) return '#22c55e';
-  if (o <= 112.5) return '#f59e0b';
-  if (o <= 157.5) return '#22c55e';
-  return '#0066cc';
-}
 
 const INITIAL_PLIES: Ply[] = [
   {
     id: 'p1',
-    name: 'Top skin',
-    material: 'Torayca T700S / Epoxy',
-    thickness: 0.2,
+    name: 'Placeholder',
+    material: 'Select',
+    thickness: 0,
     orientation: 0,
-    color: '#0066cc',
-  },
-  {
-    id: 'p2',
-    name: 'Biax Layer',
-    material: 'E-Glass 1200gsm (Biax)',
-    thickness: 0.25,
-    orientation: 45,
-    color: '#22c55e',
-  },
-  {
-    id: 'p3',
-    name: 'Core Ply (Mid)',
-    material: 'Torayca T700S / Epoxy',
-    thickness: 0.85,
-    orientation: 90,
-    color: '#f59e0b',
-  },
-  {
-    id: 'p4',
-    name: 'Biax Layer',
-    material: 'E-Glass 1200gsm (Biax)',
-    thickness: 0.25,
-    orientation: 45,
-    color: '#22c55e',
-  },
-  {
-    id: 'p5',
-    name: 'Bottom skin',
-    material: 'Torayca T700S / Epoxy',
-    thickness: 0.2,
-    orientation: 0,
-    color: '#0066cc',
+    color: FALLBACK_COLOR,
   },
 ];
 
@@ -83,22 +63,16 @@ const INITIAL_PLIES: Ply[] = [
 export function LayupBuilder() {
   const [plies, setPlies] = useState<Ply[]>(INITIAL_PLIES);
   const [unifiedVisualization, setUnifiedVisualization] = useState(true);
+  const dragFromHandleRef = useRef<string | null>(null);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
-  const [dropOverIdx, setDropOverIdx] = useState<number | null>(null);
-  // Row is draggable only while the grip handle is pressed — otherwise
-  // selecting text inside the name/material inputs starts a row drag.
-  const [dragArmedIdx, setDragArmedIdx] = useState<number | null>(null);
+  const [insertBeforeIdx, setInsertBeforeIdx] = useState<number | null>(null);
+  const [materialPickerPlyId, setMaterialPickerPlyId] = useState<string | null>(null);
 
   function updatePly<K extends keyof Ply>(idx: number, key: K, value: Ply[K]) {
     setPlies((current) =>
       current.map((p, i) => {
         if (i !== idx) return p;
-        const next = { ...p, [key]: value };
-        // Keep color in sync with orientation if it was at the default value
-        if (key === 'orientation') {
-          next.color = defaultColorForOrientation(value as number);
-        }
-        return next;
+        return { ...p, [key]: value };
       })
     );
   }
@@ -110,11 +84,11 @@ export function LayupBuilder() {
   function handleAdd() {
     const newPly: Ply = {
       id: nextLocalId('p'),
-      name: `Layer ${plies.length + 1}`,
-      material: 'Torayca T700S / Epoxy',
-      thickness: 0.2,
+      name: 'Placeholder',
+      material: 'Select',
+      thickness: 0,
       orientation: 0,
-      color: '#0066cc',
+      color: FALLBACK_COLOR,
     };
     setPlies((current) => [...current, newPly]);
   }
@@ -128,28 +102,31 @@ export function LayupBuilder() {
   function handleDragOver(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (dropOverIdx !== idx) setDropOverIdx(idx);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const newInsert = e.clientY < rect.top + rect.height / 2 ? idx : idx + 1;
+    if (insertBeforeIdx !== newInsert) setInsertBeforeIdx(newInsert);
   }
   function handleDragLeave() {
-    setDropOverIdx(null);
+    setInsertBeforeIdx(null);
   }
-  function handleDrop(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
+  function handleDrop(e: React.DragEvent<HTMLTableRowElement>) {
     e.preventDefault();
     const fromIdx = Number(e.dataTransfer.getData('text/plain'));
     setPlies((current) => {
-      if (Number.isNaN(fromIdx) || fromIdx === idx) return current;
+      if (insertBeforeIdx === null || Number.isNaN(fromIdx)) return current;
+      if (insertBeforeIdx === fromIdx || insertBeforeIdx === fromIdx + 1) return current;
       const next = [...current];
       const [moved] = next.splice(fromIdx, 1);
-      next.splice(idx, 0, moved);
+      const adjustedIdx = insertBeforeIdx > fromIdx ? insertBeforeIdx - 1 : insertBeforeIdx;
+      next.splice(adjustedIdx, 0, moved);
       return next;
     });
     setDraggingIdx(null);
-    setDropOverIdx(null);
+    setInsertBeforeIdx(null);
   }
   function handleDragEnd() {
     setDraggingIdx(null);
-    setDropOverIdx(null);
-    setDragArmedIdx(null);
+    setInsertBeforeIdx(null);
   }
 
   return (
@@ -187,27 +164,40 @@ export function LayupBuilder() {
               </tr>
             </thead>
             <tbody>
-              {plies.map((ply, idx) => {
+              {plies.flatMap((ply, idx) => {
                 const isDragging = draggingIdx === idx;
-                const isDropOver = dropOverIdx === idx && draggingIdx !== idx;
-                return (
+                const insertLine = (key: string) => (
+                  <tr key={key} className="pointer-events-none">
+                    <td colSpan={7} className="p-0">
+                      <div className="mx-2 h-0.5 rounded-full bg-[#006496]" />
+                    </td>
+                  </tr>
+                );
+                const row = (
                   <tr
                     key={ply.id}
-                    draggable={dragArmedIdx === idx}
-                    onDragStart={(e) => handleDragStart(idx, e)}
+                    draggable
+                    onDragStart={(e) => {
+                      if (dragFromHandleRef.current !== ply.id) {
+                        e.preventDefault();
+                        return;
+                      }
+                      handleDragStart(idx, e);
+                    }}
                     onDragOver={(e) => handleDragOver(idx, e)}
                     onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(idx, e)}
-                    onDragEnd={handleDragEnd}
+                    onDrop={handleDrop}
+                    onDragEnd={() => { dragFromHandleRef.current = null; handleDragEnd(); }}
                     className={`border-b border-[#e5e7eb] transition-colors last:border-b-0 ${
                       isDragging ? 'opacity-40' : ''
-                    } ${isDropOver ? 'bg-[#eef9ff]' : ''}`}
+                    }`}
                   >
                     <td className="px-2 py-2 align-middle">
                       <span
+                        data-drag-handle
                         aria-label="Drag handle"
-                        onPointerDown={() => setDragArmedIdx(idx)}
-                        onPointerUp={() => setDragArmedIdx(null)}
+                        onMouseDown={() => { dragFromHandleRef.current = ply.id; }}
+                        onMouseUp={() => { dragFromHandleRef.current = null; }}
                         className="flex h-7 w-7 cursor-grab items-center justify-center text-[#6b7280] hover:text-[#0a0a0a] active:cursor-grabbing"
                       >
                         <GripVertical className="h-4 w-4" strokeWidth={2} />
@@ -232,15 +222,17 @@ export function LayupBuilder() {
                       />
                     </td>
                     <td className="px-3 py-2 align-middle">
-                      <Label htmlFor={`ply-material-${ply.id}`} className="sr-only">
-                        Material
-                      </Label>
-                      <Input
-                        id={`ply-material-${ply.id}`}
-                        value={ply.material}
-                        onChange={(e) => updatePly(idx, 'material', e.target.value)}
-                        className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-                      />
+                      <button
+                        type="button"
+                        aria-label={`Select material for ${ply.name}`}
+                        onClick={() => setMaterialPickerPlyId(ply.id)}
+                        className="flex h-8 w-full items-center justify-between gap-1 rounded-md border border-[#e2e8f0] bg-white px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:border-[#006496]"
+                      >
+                        <span className={`truncate text-left ${ply.material === 'Select' ? 'text-[#9ca3af]' : 'text-[#0a0a0a]'}`}>
+                          {ply.material}
+                        </span>
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={2} />
+                      </button>
                     </td>
                     <td className="px-3 py-2 align-middle">
                       <Label htmlFor={`ply-thick-${ply.id}`} className="sr-only">
@@ -281,6 +273,11 @@ export function LayupBuilder() {
                     </td>
                   </tr>
                 );
+                const result = [];
+                if (draggingIdx !== null && insertBeforeIdx === idx) result.push(insertLine(`insert-before-${idx}`));
+                result.push(row);
+                if (draggingIdx !== null && idx === plies.length - 1 && insertBeforeIdx === plies.length) result.push(insertLine('insert-end'));
+                return result;
               })}
               {plies.length === 0 && (
                 <tr>
@@ -312,8 +309,22 @@ export function LayupBuilder() {
 
       {/* Right: isometric ply stack viz */}
       <div className="flex w-full max-w-[440px] shrink-0 flex-col items-center">
-        <PlyStackViz plies={plies} className="h-auto w-full" />
+        <PlyStackViz plies={plies} unified={unifiedVisualization} className="h-auto w-full" />
       </div>
+
+      <MaterialPickerDialog
+        open={materialPickerPlyId !== null}
+        currentMaterialName={plies.find((p) => p.id === materialPickerPlyId)?.material}
+        onSelect={(materialName) => {
+          const idx = plies.findIndex((p) => p.id === materialPickerPlyId);
+          if (idx !== -1) {
+            updatePly(idx, 'material', materialName);
+            updatePly(idx, 'color', getMaterialColor(materialName));
+          }
+          setMaterialPickerPlyId(null);
+        }}
+        onClose={() => setMaterialPickerPlyId(null)}
+      />
     </div>
   );
 }

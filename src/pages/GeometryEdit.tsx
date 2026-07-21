@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Settings, Check, X, Undo2, Redo2 } from 'lucide-react';
+import { ChevronDown, Settings, Check, Undo2, Redo2 } from 'lucide-react';
 import { MainNav } from '@/components/MainNav';
 import { OccViewer } from '@/components/OccViewer';
 import { ProfileDistributionPanel } from '@/components/ProfileDistributionPanel';
@@ -10,9 +10,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GEOMETRIES, createGeometry, updateGeometry } from '@/data/geometries';
+import { BLADE_TYPES, GEOMETRIES, createGeometry, updateGeometry } from '@/data/geometries';
+import type { BladeType } from '@/data/geometries';
 
-const BLADE_TYPES = ['Wind turbine blade', 'Gas turbine blade', 'Aero blade', 'Hydraulic blade'];
+
 const MANUFACTURING_TECHNOLOGIES = [
   'To be determined',
   'Vacuum infusion',
@@ -32,11 +33,12 @@ interface GlobalProperties {
 interface SelectProps {
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: readonly string[];
   placeholder?: string;
+  disabled?: boolean;
 }
 
-function Select({ value, onChange, options, placeholder = 'Select' }: SelectProps) {
+function Select({ value, onChange, options, placeholder = 'Select', disabled = false }: SelectProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -60,10 +62,11 @@ function Select({ value, onChange, options, placeholder = 'Select' }: SelectProp
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => !disabled && setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-[#e2e8f0] bg-white px-3 py-1 text-left text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f9fafb] focus:outline-none"
+        disabled={disabled}
+        className="flex h-9 w-full items-center justify-between rounded-md border border-[#e2e8f0] bg-white px-3 py-1 text-left text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className={value ? 'text-[#0a0a0a]' : 'text-[#6b7280]'}>{value || placeholder}</span>
         <ChevronDown
@@ -153,6 +156,19 @@ function RenderToggle({ value, onChange }: RenderToggleProps) {
   );
 }
 
+function Tip({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="group/tip relative">
+      {children}
+      {label && (
+        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1.5 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100">
+          {label}
+        </span>
+      )}
+    </div>
+  );
+}
+
 interface FormFieldProps {
   label: string;
   value: string;
@@ -186,17 +202,26 @@ export function GeometryEdit() {
   const [activeTab, setActiveTab] = useState(isNew ? 'create' : 'global-properties');
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
   const [profileFolded, setProfileFolded] = useState(false);
+  const [stackingFolded, setStackingFolded] = useState(true);
   const [props, setProps] = useState<GlobalProperties>({
     nominalRadius: '75.0',
     rootRadius: '5.0',
     stackingReference: '0.3',
   });
 
-  // New geometry project config state
-  const [newBladeType, setNewBladeType] = useState('');
+  // New geometry project config state — pre-filled from existing geometry when returning to this tab
+  const [newBladeType, setNewBladeType] = useState(geometry?.type ?? '');
   const [newManufacturing, setNewManufacturing] = useState('To be determined');
-  const [newName, setNewName] = useState('');
-  const [newDescription, setNewDescription] = useState('');
+  const [newName, setNewName] = useState(geometry?.name ?? '');
+  const [newDescription, setNewDescription] = useState(geometry?.description ?? '');
+
+  // When Create is clicked, navigate replaces /geometry/new → /geometry/:id without
+  // remounting (same route pattern). Switch to Global properties once isNew turns false.
+  useEffect(() => {
+    if (!isNew && activeTab === 'create') {
+      setActiveTab('global-properties');
+    }
+  }, [isNew]);
 
   function updateField(key: keyof GlobalProperties, value: string) {
     setProps((p) => ({ ...p, [key]: value }));
@@ -204,7 +229,7 @@ export function GeometryEdit() {
 
   function handleCreate() {
     if (!newBladeType || !newName.trim()) return;
-    const geom = createGeometry(newName.trim(), newDescription.trim());
+    const geom = createGeometry(newName.trim(), newDescription.trim(), newBladeType as BladeType);
     // /geometry/new and /geometry/:id share a route, so this navigate does NOT
     // remount the component — leave the create tab and clear the form explicitly,
     // otherwise the create panel stays up and a second click creates a duplicate.
@@ -240,7 +265,7 @@ export function GeometryEdit() {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="h-9">
               <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6]/95 p-[3px] backdrop-blur-sm">
                 {[
-                  ...(isNew ? [{ value: 'create', label: 'Create geometry' }] : []),
+                  { value: 'create', label: 'Project configuration' },
                   { value: 'global-properties', label: 'Global properties' },
                   { value: 'profile-distribution', label: 'Profile distribution' },
                   { value: 'profiles', label: 'Profiles' },
@@ -264,31 +289,35 @@ export function GeometryEdit() {
             {name}
           </h1>
 
-          <div className="absolute inset-y-0 right-4 flex items-center gap-2">
-            {/* Undo / Redo */}
-            <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white/95 p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm">
+          <div className="absolute inset-y-0 right-4 flex items-center gap-4">
+            {!isNew && (
+              <div className="flex items-center gap-[6px]">
+                <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
+                <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 aria-label="Undo"
-                className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
+                className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
               >
-                <Undo2 className="h-3.5 w-3.5" strokeWidth={2} />
+                <Undo2 className="h-4 w-4" strokeWidth={2} />
               </button>
               <button
                 type="button"
                 aria-label="Redo"
-                className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
+                className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
               >
-                <Redo2 className="h-3.5 w-3.5" strokeWidth={2} />
+                <Redo2 className="h-4 w-4" strokeWidth={2} />
               </button>
             </div>
             <button
               type="button"
               onClick={handleExit}
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
+              className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
             >
-              Exit edit mode
-              <X className="h-4 w-4 opacity-70" strokeWidth={1.33} />
+              Back to Geometries
             </button>
           </div>
         </div>
@@ -306,7 +335,9 @@ export function GeometryEdit() {
                 : activeTab === 'profiles'
                   ? 'w-[404px] max-w-[calc(100vw-2rem)]'
                   : activeTab === 'stacking'
-                    ? 'w-[516px] max-w-[calc(100vw-2rem)]'
+                    ? stackingFolded
+                      ? 'w-[516px] max-w-[calc(100vw-2rem)]'
+                      : 'w-[924px] max-w-[calc(100vw-2rem)]'
                     : 'w-[280px]'
           }`}
         >
@@ -322,19 +353,27 @@ export function GeometryEdit() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Blade type</Label>
-                <Select value={newBladeType} onChange={setNewBladeType} options={BLADE_TYPES} />
+                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+                  Blade type<span className="text-[#dc2626]">*</span>
+                </Label>
+                <Tip label={!isNew ? 'Cannot be changed after creation' : ''}>
+                  <Select value={newBladeType} onChange={setNewBladeType} options={BLADE_TYPES} disabled={!isNew} />
+                </Tip>
               </div>
 
               <div className="flex flex-col gap-2">
                 <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
                   Manufacturing technology
                 </Label>
-                <Select value={newManufacturing} onChange={setNewManufacturing} options={MANUFACTURING_TECHNOLOGIES} />
+                <Tip label={!isNew ? 'Cannot be changed after creation' : ''}>
+                  <Select value={newManufacturing} onChange={setNewManufacturing} options={MANUFACTURING_TECHNOLOGIES} disabled={!isNew} />
+                </Tip>
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Name</Label>
+                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+                  Name<span className="text-[#dc2626]">*</span>
+                </Label>
                 <Input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
@@ -354,22 +393,24 @@ export function GeometryEdit() {
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <Link
-                  to="/geometry"
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                >
-                  Cancel
-                </Link>
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  disabled={!newBladeType || !newName.trim()}
-                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
-                >
-                  Create
-                </button>
-              </div>
+              {isNew && (
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <Link
+                    to="/geometry"
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+                  >
+                    Cancel
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleCreate}
+                    disabled={!newBladeType || !newName.trim()}
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
+                  >
+                    Create
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -405,7 +446,9 @@ export function GeometryEdit() {
             />
           )}
           {activeTab === 'profiles' && <ProfilesPanel />}
-          {activeTab === 'stacking' && <StackingPanel />}
+          {activeTab === 'stacking' && (
+            <StackingPanel folded={stackingFolded} onFoldToggle={() => setStackingFolded((f) => !f)} />
+          )}
           {activeTab !== 'create' &&
             activeTab !== 'global-properties' &&
             activeTab !== 'profile-distribution' &&

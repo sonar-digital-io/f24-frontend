@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Pencil, Plus, Redo2, Trash2, Undo2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Plus, Spline, Trash2, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AirfoilPreview } from '@/components/AirfoilPreview';
+import { CrossSectionDialog } from '@/components/CrossSectionDialog';
+import { LayupPickerDialog } from '@/components/LayupPickerDialog';
 import { INITIAL_PROFILES, type Profile } from '@/data/profiles';
 import { LAYUPS } from '@/data/layups';
 import { nextLocalId } from '@/lib/utils';
@@ -14,10 +16,40 @@ interface TransversalMapping {
   layupId: string | null;
   startProfileId: string | null;
   endProfileId: string | null;
+  chordStart: number;
+  chordEnd: number;
+  chordStartLock: string;
+  chordEndLock: string;
 }
 
+// Empty starting state for new compositions
 const INITIAL_MAPPINGS: TransversalMapping[] = [
-  { id: 'tm-0', name: 'SHELL-REINFORCED', layupId: null, startProfileId: null, endProfileId: null },
+  {
+    id: 'tm-0',
+    name: 'SHELL-REINFORCED',
+    layupId: null,
+    startProfileId: null,
+    endProfileId: null,
+    chordStart: -0.2,
+    chordEnd: 0.2,
+    chordStartLock: 'Unlocked',
+    chordEndLock: 'Unlocked',
+  },
+];
+
+// Pre-filled state for existing compositions (matches the cross-section mock data)
+const DEFAULT_MAPPINGS: TransversalMapping[] = [
+  {
+    id: 'tm-0',
+    name: 'SHELL-REINFORCED',
+    layupId: 'le-rein-06',
+    startProfileId: 'p0',
+    endProfileId: 'p5',
+    chordStart: -0.2,
+    chordEnd: 0.2,
+    chordStartLock: 'Unlocked',
+    chordEndLock: 'Unlocked',
+  },
 ];
 
 const LOCK_OPTIONS = ['Unlocked', 'Locked to profile start', 'Locked to profile end'];
@@ -105,14 +137,29 @@ function SelectField({ value, onChange, options, placeholder = 'Select', highlig
 
 interface ProfileEditorPopoverProps {
   profile: Profile;
+  startPosition: number;
+  endPosition: number;
+  startLockedTo: string;
+  endLockedTo: string;
+  onStartChange: (v: number) => void;
+  onEndChange: (v: number) => void;
+  onStartLockedToChange: (v: string) => void;
+  onEndLockedToChange: (v: string) => void;
   onClose: () => void;
 }
 
-function ProfileEditorPopover({ profile, onClose }: ProfileEditorPopoverProps) {
-  const [startPosition, setStartPosition] = useState('0.2');
-  const [startLockedTo, setStartLockedTo] = useState('Unlocked');
-  const [endPosition, setEndPosition] = useState('0.76');
-  const [endLockedTo, setEndLockedTo] = useState('Unlocked');
+function ProfileEditorPopover({
+  profile,
+  startPosition,
+  endPosition,
+  startLockedTo,
+  endLockedTo,
+  onStartChange,
+  onEndChange,
+  onStartLockedToChange,
+  onEndLockedToChange,
+  onClose,
+}: ProfileEditorPopoverProps) {
   const [showAllLayups, setShowAllLayups] = useState(false);
 
   useEffect(() => {
@@ -124,7 +171,7 @@ function ProfileEditorPopover({ profile, onClose }: ProfileEditorPopoverProps) {
   }, [onClose]);
 
   return (
-    <div className="flex w-[300px] flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white p-4 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]">
+    <div className="flex w-[560px] flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white p-4 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[16px] font-semibold leading-6 text-[#0a0a0a]">{profile.name}</h3>
@@ -138,24 +185,6 @@ function ProfileEditorPopover({ profile, onClose }: ProfileEditorPopoverProps) {
         </button>
       </div>
 
-      {/* Undo / Redo */}
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-label="Undo"
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-        >
-          <Undo2 className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          aria-label="Redo"
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-        >
-          <Redo2 className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
-      </div>
-
       {/* 2D airfoil preview placeholder.
           User specifically requested NOT to implement the geometric layer
           editing — we render the basic NACA outline only. */}
@@ -164,19 +193,26 @@ function ProfileEditorPopover({ profile, onClose }: ProfileEditorPopoverProps) {
           maxCamber={profile.maxCamber}
           maxCamberPosition={profile.maxCamberPosition}
           thickness={profile.thickness}
-          className="h-[120px] w-full"
+          className="h-[140px] w-full"
+          startPosition={startPosition}
+          endPosition={endPosition}
+          onStartChange={onStartChange}
+          onEndChange={onEndChange}
         />
       </div>
 
       {/* Start / End position + lock-to */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div className="flex flex-col gap-1">
           <Label className="text-[12px] font-medium text-[#0a0a0a]">Start position</Label>
           <Input
             type="number"
             step="0.01"
             value={startPosition}
-            onChange={(e) => setStartPosition(e.target.value)}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value);
+              if (!isNaN(v)) onStartChange(Math.max(-1, Math.min(1, v)));
+            }}
             className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
           />
         </div>
@@ -184,7 +220,7 @@ function ProfileEditorPopover({ profile, onClose }: ProfileEditorPopoverProps) {
           <Label className="text-[12px] font-medium text-[#0a0a0a]">Start locked to</Label>
           <SelectField
             value={startLockedTo}
-            onChange={setStartLockedTo}
+            onChange={onStartLockedToChange}
             options={LOCK_OPTIONS.map((o) => ({ value: o, label: o }))}
           />
         </div>
@@ -194,7 +230,10 @@ function ProfileEditorPopover({ profile, onClose }: ProfileEditorPopoverProps) {
             type="number"
             step="0.01"
             value={endPosition}
-            onChange={(e) => setEndPosition(e.target.value)}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value);
+              if (!isNaN(v)) onEndChange(Math.max(-1, Math.min(1, v)));
+            }}
             className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
           />
         </div>
@@ -202,7 +241,7 @@ function ProfileEditorPopover({ profile, onClose }: ProfileEditorPopoverProps) {
           <Label className="text-[12px] font-medium text-[#0a0a0a]">End locked to</Label>
           <SelectField
             value={endLockedTo}
-            onChange={setEndLockedTo}
+            onChange={onEndLockedToChange}
             options={LOCK_OPTIONS.map((o) => ({ value: o, label: o }))}
           />
         </div>
@@ -227,15 +266,23 @@ function ProfileEditorPopover({ profile, onClose }: ProfileEditorPopoverProps) {
   );
 }
 
-export function TransversalMappingSection() {
-  const [mappings, setMappings] = useState<TransversalMapping[]>(INITIAL_MAPPINGS);
+interface TransversalMappingSectionProps {
+  useDefaultData?: boolean;
+  upperMappingNames?: string[];
+}
+
+export function TransversalMappingSection({ useDefaultData = false, upperMappingNames }: TransversalMappingSectionProps) {
+  const [mappings, setMappings] = useState<TransversalMapping[]>(
+    useDefaultData ? DEFAULT_MAPPINGS : INITIAL_MAPPINGS,
+  );
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [editingProfileFor, setEditingProfileFor] = useState<{
     mappingId: string;
     side: 'start' | 'end';
   } | null>(null);
+  const [layupPickerFor, setLayupPickerFor] = useState<string | null>(null);
+  const [crossSectionProfile, setCrossSectionProfile] = useState<string | null>(null);
 
-  const layupOptions = LAYUPS.map((l) => ({ value: l.id, label: l.name }));
   const profileOptions = INITIAL_PROFILES.map((p) => ({ value: p.id, label: p.name }));
 
   function updateMapping(id: string, next: Partial<TransversalMapping>) {
@@ -252,6 +299,10 @@ export function TransversalMappingSection() {
         layupId: null,
         startProfileId: null,
         endProfileId: null,
+        chordStart: -0.2,
+        chordEnd: 0.2,
+        chordStartLock: 'Unlocked',
+        chordEndLock: 'Unlocked',
       },
     ]);
     setEditingNameId(id);
@@ -261,13 +312,14 @@ export function TransversalMappingSection() {
     setMappings((arr) => arr.filter((m) => m.id !== id));
   }
 
-  // Resolve the currently-edited profile (if any) for the popover
+  // Resolve the currently-edited mapping + profile for the popover
+  const editingMapping = editingProfileFor
+    ? (mappings.find((m) => m.id === editingProfileFor.mappingId) ?? null)
+    : null;
   const editingProfile = (() => {
-    if (!editingProfileFor) return null;
-    const mapping = mappings.find((m) => m.id === editingProfileFor.mappingId);
-    if (!mapping) return null;
+    if (!editingProfileFor || !editingMapping) return null;
     const profileId =
-      editingProfileFor.side === 'start' ? mapping.startProfileId : mapping.endProfileId;
+      editingProfileFor.side === 'start' ? editingMapping.startProfileId : editingMapping.endProfileId;
     if (!profileId) return null;
     return INITIAL_PROFILES.find((p) => p.id === profileId) ?? null;
   })();
@@ -281,8 +333,8 @@ export function TransversalMappingSection() {
             <tr className="border-b border-[#e5e7eb]">
               <th className="h-8 w-[160px] px-2 text-left font-medium text-[#6b7280]">Name</th>
               <th className="h-8 px-2 text-left font-medium text-[#6b7280]">Layup</th>
-              <th className="h-8 px-2 text-left font-medium text-[#6b7280]">Start profile</th>
-              <th className="h-8 px-2 text-left font-medium text-[#6b7280]">End profile</th>
+              <th className="h-8 w-[200px] px-2 text-left font-medium text-[#6b7280]">Start profile</th>
+              <th className="h-8 w-[200px] px-2 text-left font-medium text-[#6b7280]">End profile</th>
               <th className="h-8 w-9 px-2" />
             </tr>
           </thead>
@@ -320,21 +372,35 @@ export function TransversalMappingSection() {
                     )}
                   </td>
                   <td className="px-2 py-2">
-                    <SelectField
-                      value={m.layupId ?? ''}
-                      onChange={(v) => updateMapping(m.id, { layupId: v })}
-                      options={layupOptions}
-                      highlight
-                    />
+                    {(() => {
+                      const layupLabel = LAYUPS.find((l) => l.id === m.layupId)?.name;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setLayupPickerFor(m.id)}
+                          className={`flex h-8 w-full items-center justify-between gap-2 rounded-md border border-[#e2e8f0] bg-white px-2 py-1 text-left text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f9fafb] ${
+                            layupLabel ? 'text-[#0a0a0a]' : 'text-[#6b7280]'
+                          }`}
+                        >
+                          <span className="truncate">{layupLabel ?? 'Select'}</span>
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={1.5} />
+                        </button>
+                      );
+                    })()}
                   </td>
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-1">
-                      <SelectField
-                        value={m.startProfileId ?? ''}
-                        onChange={(v) => updateMapping(m.id, { startProfileId: v })}
-                        options={profileOptions}
-                        highlight
-                      />
+                      <div className="min-w-0 flex-1">
+                        <SelectField
+                          value={m.startProfileId ?? ''}
+                          onChange={(v) => {
+                            updateMapping(m.id, { startProfileId: v });
+                            setEditingProfileFor({ mappingId: m.id, side: 'start' });
+                          }}
+                          options={profileOptions}
+                          highlight={editingThisStart}
+                        />
+                      </div>
                       <button
                         type="button"
                         aria-label="Edit start profile"
@@ -352,18 +418,23 @@ export function TransversalMappingSection() {
                             : 'bg-white text-[#6b7280] hover:bg-[#f1f5f9]'
                         }`}
                       >
-                        <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+                        <Spline className="h-3.5 w-3.5" strokeWidth={2} />
                       </button>
                     </div>
                   </td>
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-1">
-                      <SelectField
-                        value={m.endProfileId ?? ''}
-                        onChange={(v) => updateMapping(m.id, { endProfileId: v })}
-                        options={profileOptions}
-                        highlight
-                      />
+                      <div className="min-w-0 flex-1">
+                        <SelectField
+                          value={m.endProfileId ?? ''}
+                          onChange={(v) => {
+                            updateMapping(m.id, { endProfileId: v });
+                            setEditingProfileFor({ mappingId: m.id, side: 'end' });
+                          }}
+                          options={profileOptions}
+                          highlight={editingThisEnd}
+                        />
+                      </div>
                       <button
                         type="button"
                         aria-label="Edit end profile"
@@ -381,7 +452,7 @@ export function TransversalMappingSection() {
                             : 'bg-white text-[#6b7280] hover:bg-[#f1f5f9]'
                         }`}
                       >
-                        <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+                        <Spline className="h-3.5 w-3.5" strokeWidth={2} />
                       </button>
                     </div>
                   </td>
@@ -410,27 +481,86 @@ export function TransversalMappingSection() {
         </button>
       </div>
 
-      {/* Side-by-side: Profile name list + Editor popover (when open) */}
+      {/* Side-by-side: Cross-section view list + Editor popover (when open) */}
       <div className="flex flex-row items-start gap-6">
         <div className="flex w-[150px] shrink-0 flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white p-4 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-          <span className="text-[12px] font-medium leading-none text-[#6b7280]">Profile name</span>
-          <ul className="flex flex-col gap-2">
-            {INITIAL_PROFILES.map((p) => (
-              <li key={p.id} className="text-[14px] text-[#0a0a0a]">
-                {p.name}
+          <span className="text-[12px] font-medium leading-none text-[#6b7280]">Cross-section view</span>
+          <ul className="flex flex-col gap-1">
+            {INITIAL_PROFILES.map((prof) => (
+              <li key={prof.id}>
+                <button
+                  type="button"
+                  onClick={() => setCrossSectionProfile(prof.id)}
+                  className={`w-full rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
+                    crossSectionProfile === prof.id
+                      ? 'bg-[#eef9ff] text-[#0a0a0a]'
+                      : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
+                  }`}
+                >
+                  {prof.name}
+                </button>
               </li>
             ))}
           </ul>
         </div>
 
-        {editingProfile && (
+        {editingProfile && editingMapping && (
           <ProfileEditorPopover
             key={editingProfile.id}
             profile={editingProfile}
+            startPosition={editingMapping.chordStart}
+            endPosition={editingMapping.chordEnd}
+            startLockedTo={editingMapping.chordStartLock}
+            endLockedTo={editingMapping.chordEndLock}
+            onStartChange={(v) => updateMapping(editingMapping.id, { chordStart: v })}
+            onEndChange={(v) => updateMapping(editingMapping.id, { chordEnd: v })}
+            onStartLockedToChange={(v) => updateMapping(editingMapping.id, { chordStartLock: v })}
+            onEndLockedToChange={(v) => updateMapping(editingMapping.id, { chordEndLock: v })}
             onClose={() => setEditingProfileFor(null)}
           />
         )}
       </div>
+
+      {/* Cross-section view dialog */}
+      {crossSectionProfile && (() => {
+        const prof = INITIAL_PROFILES.find((p) => p.id === crossSectionProfile);
+        if (!prof) return null;
+        // Only include transversal mappings whose profile span covers this profile
+        const transversalEntries = mappings
+          .filter((m) => {
+            if (!m.startProfileId || !m.endProfileId) return false;
+            const startIdx = INITIAL_PROFILES.findIndex((p) => p.id === m.startProfileId);
+            const endIdx = INITIAL_PROFILES.findIndex((p) => p.id === m.endProfileId);
+            const profIdx = INITIAL_PROFILES.findIndex((p) => p.id === crossSectionProfile);
+            if (startIdx < 0 || endIdx < 0 || profIdx < 0) return false;
+            return profIdx >= Math.min(startIdx, endIdx) && profIdx <= Math.max(startIdx, endIdx);
+          })
+          .map((m) => ({
+            id: m.id,
+            name: m.name,
+            layupName: LAYUPS.find((l) => l.id === m.layupId)?.name ?? 'Unknown layup',
+            startPos: m.chordStart,
+            endPos: m.chordEnd,
+          }));
+        return (
+          <CrossSectionDialog
+            profile={prof}
+            transversalEntries={transversalEntries}
+            layupMappingNames={upperMappingNames}
+            onClose={() => setCrossSectionProfile(null)}
+          />
+        );
+      })()}
+
+      <LayupPickerDialog
+        open={layupPickerFor !== null}
+        currentLayupId={mappings.find((m) => m.id === layupPickerFor)?.layupId}
+        onSelect={(layupId) => {
+          if (layupPickerFor) updateMapping(layupPickerFor, { layupId });
+          setLayupPickerFor(null);
+        }}
+        onClose={() => setLayupPickerFor(null)}
+      />
     </div>
   );
 }

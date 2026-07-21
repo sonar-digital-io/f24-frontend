@@ -1,10 +1,12 @@
 import { BladeThumbnail } from '@/components/BladeThumbnail';
+import { CardMenu } from '@/components/CardMenu';
 import type { Geometry } from '@/data/geometries';
 
 interface GeometryCardProps {
   geometry: Geometry;
   onClick: () => void;
   selected?: boolean;
+  showMenu?: boolean;
 }
 
 /**
@@ -15,21 +17,38 @@ interface GeometryCardProps {
  * When `selected` is true the card gets a primary blue ring — the picker
  * variant uses this to show the currently chosen geometry.
  */
-export function GeometryCard({ geometry, onClick, selected }: GeometryCardProps) {
+export function GeometryCard({ geometry, onClick, selected, showMenu = true }: GeometryCardProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected ?? undefined}
-      className={`flex flex-col gap-3 rounded-[14px] border bg-white p-4 text-left shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] transition-colors hover:bg-[#f9fafb] ${
+    <div
+      className={`flex flex-col rounded-[10px] border bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] transition-colors hover:bg-[#f9fafb] ${
         selected ? 'border-[#006496] ring-2 ring-[#006496]/30' : 'border-[#e5e7eb]'
       }`}
     >
-      <h3 className="text-[14px] font-semibold leading-5 text-[#0a0a0a]">{geometry.name}</h3>
-      <div className="aspect-[2/1] w-full overflow-hidden rounded-md bg-[#f8fafc]">
-        <BladeThumbnail />
+      <div className="flex items-center justify-between gap-1 px-[10px] pt-[10px]">
+        <button
+          type="button"
+          onClick={onClick}
+          aria-pressed={selected ?? undefined}
+          className="min-w-0 flex-1 text-left"
+        >
+          <h3 className="truncate text-[14px] font-semibold leading-5 text-[#0a0a0a]">{geometry.name}</h3>
+        </button>
+        {showMenu && <CardMenu onEdit={onClick} />}
       </div>
-      <span className="text-[14px] leading-5 text-[#6b7280]">{geometry.lastUpdated}</span>
-    </button>
+      <button type="button" onClick={onClick} className="text-left">
+        <div className="flex h-[160px] items-center justify-center px-[10px] py-[10px]">
+          <div className="flex h-full w-full items-center justify-center rounded-md bg-[#f8fafc]">
+            <BladeThumbnail />
+          </div>
+        </div>
+        <div className="flex flex-col gap-[10px] px-[10px] pb-[10px]">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] leading-4 text-[#0a0a0a]">{geometry.type}</span>
+            <span className="text-[12px] leading-4 text-[#0a0a0a]">{geometry.nominalRadius} m</span>
+          </div>
+          <span className="text-[12px] leading-4 text-[#737373]">{geometry.lastUpdated}</span>
+        </div>
+      </button>
+    </div>
   );
 }

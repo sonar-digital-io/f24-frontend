@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Plus, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, Info, Plus, Trash2, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -84,9 +84,17 @@ interface ProfileDetailPopoverProps {
   profile: Profile;
   onChange: (next: Profile) => void;
   onClose: () => void;
+  onSort: () => void;
 }
 
-function ProfileDetailPopover({ profile, onChange, onClose }: ProfileDetailPopoverProps) {
+function ProfileDetailPopover({ profile, onChange, onClose, onSort }: ProfileDetailPopoverProps) {
+  const [pos, setPos] = useState(() => ({
+    x: window.innerWidth / 2,
+    y: window.innerHeight / 2,
+  }));
+  const dragging = useRef(false);
+  const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+
   // ESC closes
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -96,18 +104,45 @@ function ProfileDetailPopover({ profile, onChange, onClose }: ProfileDetailPopov
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  function startDrag(e: React.MouseEvent) {
+    if ((e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
+    dragging.current = true;
+    dragStart.current = { mx: e.clientX, my: e.clientY, px: pos.x, py: pos.y };
+    function onMove(ev: MouseEvent) {
+      if (!dragging.current) return;
+      setPos({
+        x: dragStart.current.px + ev.clientX - dragStart.current.mx,
+        y: dragStart.current.py + ev.clientY - dragStart.current.my,
+      });
+    }
+    function onUp() {
+      dragging.current = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
   function update<K extends keyof Profile>(key: K, value: Profile[K]) {
     onChange({ ...profile, [key]: value });
   }
 
   return (
-    // Floating popover: no overlay, centered horizontally in the canvas area,
-    // positioned a bit below the top toolbar so the profiles list (on the left)
-    // stays clickable.
-    <div className="pointer-events-none fixed left-1/2 top-1/2 z-40 w-[791px] max-w-[calc(100vw-4rem)] -translate-x-1/2 -translate-y-1/2">
-      <div className="pointer-events-auto flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]">
+    <div
+      className="pointer-events-none fixed z-40 w-[791px] max-w-[calc(100vw-4rem)]"
+      style={{ left: pos.x, top: pos.y, transform: 'translate(-50%, -50%)' }}
+    >
+      <div
+        className="pointer-events-auto flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)] select-none"
+        onMouseDown={(e) => {
+          if ((e.target as HTMLElement).closest('button, input, textarea, select, [role="listbox"]')) return;
+          startDrag(e);
+        }}
+      >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex cursor-move items-start justify-between gap-4">
           <h2 className="text-[18px] font-semibold leading-7 text-[#0a0a0a]">{profile.name}</h2>
           <button
             type="button"
@@ -148,6 +183,9 @@ function ProfileDetailPopover({ profile, onChange, onClose }: ProfileDetailPopov
               value={profile.position}
               onCommit={(v) => update('position', v)}
               step="0.0001"
+              max={1}
+              maxMessage="Max value of position is 1"
+              onBlur={onSort}
             />
             <div className="flex flex-col gap-2">
               <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Type</Label>
@@ -197,16 +235,14 @@ interface FieldProps {
   value: string;
   onChange: (value: string) => void;
   type?: string;
-  step?: string;
 }
 
-function Field({ label, value, onChange, type = 'text', step }: FieldProps) {
+function Field({ label, value, onChange, type = 'text' }: FieldProps) {
   return (
     <div className="flex flex-col gap-2">
       <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">{label}</Label>
       <Input
         type={type}
-        step={step}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
@@ -220,29 +256,51 @@ interface NumberFieldProps {
   value: number;
   onCommit: (value: number) => void;
   step?: string;
+  max?: number;
+  maxMessage?: string;
+  onBlur?: () => void;
 }
 
 /** Numeric Field with a typing buffer — the field stays clearable mid-edit. */
-function NumberField({ label, value, onCommit, step }: NumberFieldProps) {
+function NumberField({ label, value, onCommit, step, max, maxMessage, onBlur }: NumberFieldProps) {
+  const hasError = max !== undefined && Number.isFinite(value) && value > max;
   return (
-    <div className="flex flex-col gap-2">
+    // onBlur on the wrapper bubbles from the input (React blur = focusout), so
+    // sort-on-blur fires without clobbering BufferedNumberInput's own onBlur.
+    <div className="flex flex-col gap-2" onBlur={onBlur}>
       <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">{label}</Label>
       <BufferedNumberInput
         step={step}
         value={value}
         onCommit={onCommit}
-        className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+        className={`h-9 rounded-md px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] ${
+          hasError ? 'border-[#dc2626] focus-visible:ring-[#dc2626]/30' : 'border-[#e2e8f0]'
+        }`}
       />
+      {hasError && (
+        <p className="text-[12px] leading-4 text-[#dc2626]">
+          {maxMessage ?? `Max value is ${max}`}
+        </p>
+      )}
     </div>
   );
 }
 
+const HIDE_BANNER_KEY = 'f24_profiles_mode_hide';
+
 export function ProfilesPanel() {
+  const [bannerVisible, setBannerVisible] = useState(
+    () => localStorage.getItem(HIDE_BANNER_KEY) !== 'true'
+  );
   const [profiles, setProfiles] = useState<Profile[]>(INITIAL_PROFILES);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(INITIAL_PROFILES[0]?.id ?? null);
 
   function handleUpdate(next: Profile) {
     setProfiles((current) => current.map((p) => (p.id === next.id ? next : p)));
+  }
+
+  function sortByPosition() {
+    setProfiles((current) => [...current].sort((a, b) => a.position - b.position));
   }
 
   function handleDelete(id: string, e: React.MouseEvent) {
@@ -252,10 +310,9 @@ export function ProfilesPanel() {
   }
 
   function handleAdd() {
-    const nextIdx = profiles.length;
     const newProfile: Profile = {
       id: nextLocalId('p'),
-      name: `Profile${nextIdx}`,
+      name: `Profile${profiles.length}`,
       position: Math.min(1, (profiles[profiles.length - 1]?.position ?? 0) + 0.1),
       type: 'NACA 4 digit',
       maxCamber: 4,
@@ -271,6 +328,51 @@ export function ProfilesPanel() {
 
   return (
     <>
+      {bannerVisible && (
+        <div className="mb-2 flex w-full max-w-[404px] flex-col gap-3 rounded-[14px] border border-[#fde68a] bg-[#fffbeb] p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <Info className="mt-px h-4 w-4 shrink-0 text-[#d97706]" strokeWidth={2} />
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[14px] font-semibold leading-5 text-[#0a0a0a]">
+                  Independent profiles mode
+                </p>
+                <p className="text-[13px] leading-5 text-[#6b7280]">
+                  Changes made to individual profiles here will not affect the defining curves from
+                  the previous step. You are now working on custom, independent sections.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBannerVisible(false)}
+              aria-label="Dismiss"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#6b7280] hover:bg-[#fef08a] hover:text-[#0a0a0a]"
+            >
+              <X className="h-4 w-4" strokeWidth={2} />
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="profiles-dont-show"
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  localStorage.setItem(HIDE_BANNER_KEY, 'true');
+                  setBannerVisible(false);
+                }
+              }}
+              className="size-4 rounded border-[#d97706] data-[state=checked]:border-[#d97706] data-[state=checked]:bg-[#d97706] shadow-none"
+            />
+            <Label
+              htmlFor="profiles-dont-show"
+              className="cursor-pointer text-[13px] leading-none text-[#374151]"
+            >
+              Don&apos;t show again
+            </Label>
+          </div>
+        </div>
+      )}
+
       <div className="flex w-full max-w-[404px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
         <div className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
           <table className="w-full border-collapse text-[14px]">
@@ -300,19 +402,17 @@ export function ProfilesPanel() {
                       active ? 'bg-[#eef9ff]' : 'hover:bg-[#f9fafb]'
                     }`}
                   >
-                    <td className="px-3 py-3 text-[14px] font-medium text-[#0a0a0a]">{p.name}</td>
-                    <td className="px-3 py-3 text-[14px] text-[#0a0a0a]">{p.position}</td>
+                    <td className="px-3 py-2 text-[14px] font-medium text-[#0a0a0a]">{p.name}</td>
+                    <td className="px-3 py-2 text-[14px] text-[#0a0a0a]">{p.position}</td>
                     <td className="px-2 py-2">
-                      {active && (
-                        <button
-                          type="button"
-                          aria-label={`Delete ${p.name}`}
-                          onClick={(e) => handleDelete(p.id, e)}
-                          className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                        >
-                          <Trash2 className="h-4 w-4" strokeWidth={2} />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        aria-label={`Delete ${p.name}`}
+                        onClick={(e) => handleDelete(p.id, e)}
+                        className={`flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9] ${active ? '' : 'invisible'}`}
+                      >
+                        <Trash2 className="h-4 w-4" strokeWidth={2} />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -335,7 +435,8 @@ export function ProfilesPanel() {
         <ProfileDetailPopover
           profile={selected}
           onChange={handleUpdate}
-          onClose={() => setSelectedId(null)}
+          onClose={() => { sortByPosition(); setSelectedId(null); }}
+          onSort={sortByPosition}
         />
       )}
     </>

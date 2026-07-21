@@ -14,7 +14,7 @@ export const PROFILE_TYPES = ['NACA 4 digit', 'NACA 5 digit', 'Custom airfoil'];
 export const INITIAL_PROFILES: Profile[] = [
   {
     id: 'p0',
-    name: 'Profile0',
+    name: 'Profile1',
     position: 0.05,
     type: 'NACA 4 digit',
     maxCamber: 4,
@@ -24,7 +24,7 @@ export const INITIAL_PROFILES: Profile[] = [
   },
   {
     id: 'p1',
-    name: 'Profile1',
+    name: 'Profile2',
     position: 0.15,
     type: 'NACA 4 digit',
     maxCamber: 10,
@@ -34,7 +34,7 @@ export const INITIAL_PROFILES: Profile[] = [
   },
   {
     id: 'p2',
-    name: 'Profile2',
+    name: 'Profile3',
     position: 0.3,
     type: 'NACA 4 digit',
     maxCamber: 8,
@@ -44,7 +44,7 @@ export const INITIAL_PROFILES: Profile[] = [
   },
   {
     id: 'p3',
-    name: 'Profile3',
+    name: 'Profile4',
     position: 0.55,
     type: 'NACA 4 digit',
     maxCamber: 6,
@@ -54,7 +54,7 @@ export const INITIAL_PROFILES: Profile[] = [
   },
   {
     id: 'p4',
-    name: 'Profile4',
+    name: 'Profile5',
     position: 0.8,
     type: 'NACA 4 digit',
     maxCamber: 4,
@@ -64,7 +64,7 @@ export const INITIAL_PROFILES: Profile[] = [
   },
   {
     id: 'p5',
-    name: 'Profile5',
+    name: 'Profile6',
     position: 1,
     type: 'NACA 4 digit',
     maxCamber: 2,

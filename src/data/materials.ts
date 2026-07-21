@@ -24,7 +24,7 @@ export const MATERIALS: Material[] = [
     name: 'Envalior Tepex dynalite 101',
     type: 'Consolidated Ply',
     description: 'Continuous glass fiber reinforced PA6 matrix. High impact resistance; Vf =~ 47%',
-    lastUpdated: 'v2026/01',
+    lastUpdated: 'v2026/06',
     source: 'library',
     details: {
       reinforcement: 'Continuous E-Glass',
@@ -40,7 +40,7 @@ export const MATERIALS: Material[] = [
     type: 'Consolidated Ply',
     description:
       'Carbon fiber reinforced PA6 matrix. Optimized for high stiffness-to-weight ratio and thermoforming.',
-    lastUpdated: 'v2026/01',
+    lastUpdated: 'v2026/05',
     source: 'library',
     details: {
       reinforcement: 'Continuous Carbon',
@@ -85,7 +85,7 @@ export const MATERIALS: Material[] = [
     name: 'ST-Carbon-Hymod-01',
     type: 'UD Ply',
     description: 'In-house characterized high-modulus UD. Post-cured at 80°C. Validated fatigue data.',
-    lastUpdated: '2025-12-10',
+    lastUpdated: '2026-06-03',
     source: 'own',
     details: {
       reinforcement: 'HM Carbon',
@@ -116,7 +116,7 @@ export const MATERIALS: Material[] = [
     type: 'Random Mat Ply',
     description:
       'E-Glass chopped strand mat (450gsm) with epoxy matrix. Isotropic in-plane behavior for non-structural fill.',
-    lastUpdated: '2025-11-19',
+    lastUpdated: '2026-05-19',
     source: 'own',
     details: {
       reinforcement: 'E-Glass CSM',
@@ -147,7 +147,7 @@ export const MATERIALS: Material[] = [
     type: 'Hybrid Ply',
     description:
       'In-house 2x2 twill (Carbon/Glass hybrid). Balanced weave for transition zones. Vf =~ 52%',
-    lastUpdated: '2025-10-22',
+    lastUpdated: '2026-05-22',
     source: 'own',
     details: {
       reinforcement: 'Carbon/Glass 2x2',
@@ -163,7 +163,7 @@ export const MATERIALS: Material[] = [
     type: 'Surface Ply',
     description:
       'Leading Edge Protection (LEP); high erosion resistance, validated for 15m/s rain impact.',
-    lastUpdated: '2025-10-20',
+    lastUpdated: '2026-04-20',
     source: 'own',
     details: {
       reinforcement: 'PU Elastomer',
