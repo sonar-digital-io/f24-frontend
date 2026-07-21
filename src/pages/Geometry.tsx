@@ -203,7 +203,7 @@ export function Geometry() {
                       setQuery(e.target.value);
                       setPage(1);
                     }}
-                    placeholder={view === 'list' ? 'Search for geometry' : 'Placeholder'}
+                    placeholder="Search for geometry"
                     className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
                   />
                 </div>
