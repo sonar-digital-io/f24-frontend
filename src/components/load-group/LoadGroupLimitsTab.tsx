@@ -1,6 +1,6 @@
 import { Info, Plus, Trash2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BezierEditor } from '@/components/common/BezierEditor';
+import { BezierEditor } from '@/components/common/viewer/BezierEditor';
 import type { ControlPoint } from '@/types';
 import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
 import {

@@ -1,38 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Check, Filter, Minus, Search, X } from 'lucide-react';
-import { MainNav } from '@/components/common/MainNav';
-import { Footer } from '@/components/common/Footer';
+import { Filter, Search, X } from 'lucide-react';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { Footer } from '@/components/common/layout/Footer';
 import { CalculationRow } from '@/components/calculation/CalculationRow';
-import {
-  Pagination,
-  SortableHeader,
-  toggleSort,
-} from '@/components/common/ListTable';
+import { Pagination } from '@/components/common/list/Pagination';
+import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { toggleSort } from '@/lib/listTable';
 import type { SortState, CalculationSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { CALCULATIONS, timestampValue } from '@/data/calculations';
+import { FilterCheckbox } from '@/components/common/list/FilterCheckbox';
 
 const PAGE_SIZE = 10;
-
-// ─── Filter checkbox ──────────────────────────────────────────────────────────
-
-function FilterCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate?: boolean }) {
-  return (
-    <div
-      className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded ${
-        checked || indeterminate ? 'bg-[#171717]' : 'border border-[#d1d5db] bg-white'
-      }`}
-    >
-      {indeterminate ? (
-        <Minus className="h-3 w-3 text-white" strokeWidth={3} />
-      ) : checked ? (
-        <Check className="h-3 w-3 text-white" strokeWidth={3} />
-      ) : null}
-    </div>
-  );
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 

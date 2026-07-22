@@ -1,14 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Copy, Download, Pencil, Search, Trash2 } from 'lucide-react';
-import { MainNav } from '@/components/common/MainNav';
-import { Footer } from '@/components/common/Footer';
-import {
-  Pagination,
-  SortableHeader,
-  rowInteractionProps,
-  toggleSort,
-} from '@/components/common/ListTable';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { Footer } from '@/components/common/layout/Footer';
+import { Pagination } from '@/components/common/list/Pagination';
+import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { rowInteractionProps, toggleSort } from '@/lib/listTable';
 import type { SortState, LoadGroupSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { LOAD_GROUPS, type LoadGroup as LoadGroupItem } from '@/data/loadGroups';

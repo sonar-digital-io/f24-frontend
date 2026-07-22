@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ControlPoint } from '@/types';
-import { BezierZoomControls } from '@/components/common/BezierZoomControls';
+import { BezierZoomControls } from '@/components/common/viewer/BezierZoomControls';
 import {
   VB_WIDTH,
   VB_HEIGHT,

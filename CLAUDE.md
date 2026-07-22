@@ -27,23 +27,30 @@ npm run preview  # Produkciós build előnézet
 ```
 src/
 ├── components/
-│   ├── common/                  # 2+ feature-ben ténylegesen megosztott komponensek
-│   │   ├── MainNav.tsx          # Fő navigáció — sticky, gradient bar + nav (NAV_ITEMS exportált)
-│   │   ├── Footer.tsx           # eCon Engineering branding lábléc (SVG logo placeholder)
-│   │   ├── Layout.tsx           # Passthrough wrapper — minden page maga rendereli MainNav+Footer
-│   │   ├── PagePlaceholder.tsx  # Közös stub layout aloldalakhoz ("Coming soon")
-│   │   ├── ErrorBoundary.tsx    # Kritikus 3D/WASM részfák hibahatárolása
-│   │   ├── ListTable.tsx        # Megosztott Pagination + SortableHeader lista oldalakhoz
-│   │   ├── ListFilterControls.tsx # Megosztott Tip + FilterCheckbox lista szűrőkhöz
-│   │   ├── OccViewer.tsx        # OpenCascade.js IGES viewer — GeometryEdit + CompositionNew 3D háttere
-│   │   ├── ViewerOverlayControls.tsx # CoordinateGizmo + RenderToggle — OccViewer feletti overlay
-│   │   ├── BezierEditor.tsx     # Interaktív cubic Bézier editor (drag + zoom + pan + yMin/yMax) — Geometry/Composition/LoadGroup megosztja
-│   │   ├── BezierZoomControls.tsx # BezierEditor zoom in/out gombpár
-│   │   ├── GeometryCard.tsx     # Geometry kártya (Geometry grid + CompositionNew/CalculationNew picker)
-│   │   ├── BladeThumbnail.tsx   # SVG szárny thumbnail — Geometry/Composition/Calculation kártyákon
-│   │   ├── AirfoilPreview.tsx   # 2D NACA airfoil SVG — Geometry és Composition profil popoverekben
-│   │   ├── BufferedNumberInput.tsx # Debounce-olt numerikus input — több feature form mezőjében
-│   │   └── CardMenu.tsx         # Kártya jobb-felső "⋮" akció menü (Geometry/Composition kártyákon)
+│   ├── common/                  # 2+ feature-ben ténylegesen megosztott komponensek — egy fájl egy komponens elvén, alcsoportokba rendezve
+│   │   ├── layout/              # Oldal-keret / chrome
+│   │   │   ├── MainNav.tsx          # Fő navigáció — sticky, gradient bar + nav (NAV_ITEMS exportált)
+│   │   │   ├── Footer.tsx           # eCon Engineering branding lábléc (SVG logo placeholder)
+│   │   │   ├── Layout.tsx           # Passthrough wrapper — minden page maga rendereli MainNav+Footer
+│   │   │   ├── PagePlaceholder.tsx  # Közös stub layout aloldalakhoz ("Coming soon")
+│   │   │   └── ErrorBoundary.tsx    # Kritikus 3D/WASM részfák hibahatárolása
+│   │   ├── list/                # Lista oldalak közös építőkockái
+│   │   │   ├── SortableHeader.tsx   # Rendezhető <th> gomb + irány ikon
+│   │   │   ├── Pagination.tsx       # Lapozó (belső pageWindow segédfüggvénnyel)
+│   │   │   ├── FilterCheckbox.tsx   # Tri-state checkbox szűrő dropdownokhoz
+│   │   │   └── Tip.tsx              # Hover tooltip wrapper sor-akció ikonokhoz
+│   │   ├── viewer/               # 3D / bézier szerkesztő komponensek
+│   │   │   ├── OccViewer.tsx        # OpenCascade.js IGES viewer — GeometryEdit + CompositionNew 3D háttere
+│   │   │   ├── CoordinateGizmo.tsx  # XYZ tengely-indikátor overlay a 3D viewport felett
+│   │   │   ├── RenderToggle.tsx     # Solid/wireframe render mode váltó overlay
+│   │   │   ├── BezierEditor.tsx     # Interaktív cubic Bézier editor (drag + zoom + pan + yMin/yMax) — Geometry/Composition/LoadGroup megosztja
+│   │   │   └── BezierZoomControls.tsx # BezierEditor zoom in/out gombpár
+│   │   ├── card/                 # Grid-kártya komponensek
+│   │   │   ├── GeometryCard.tsx     # Geometry kártya (Geometry grid + CompositionNew/CalculationNew picker)
+│   │   │   ├── CardMenu.tsx         # Kártya jobb-felső "⋮" akció menü (Geometry/Composition kártyákon)
+│   │   │   └── BladeThumbnail.tsx   # SVG szárny thumbnail — Geometry/Composition/Calculation kártyákon
+│   │   ├── AirfoilPreview.tsx   # 2D NACA airfoil SVG — Geometry és Composition profil popoverekben (nem fér bele egyik alcsoportba sem, marad a common/ gyökerén)
+│   │   └── BufferedNumberInput.tsx # Debounce-olt numerikus input — több feature form mezőjében (ua.)
 │   ├── calculation/              # /calculation, /calculation/new
 │   │   ├── CalculationRow.tsx, CalculationSubToolbar.tsx, TagSelect.tsx
 │   │   └── CalculationGeneralTab.tsx, CalculationCompositionTab.tsx, CalculationConfigurationTab.tsx, CalculationLoadGroupTab.tsx, CalculationFatigueProfileTab.tsx
@@ -108,7 +115,8 @@ src/
 │   ├── occ-init.ts              # OpenCascade.js WASM singleton inicializálás
 │   ├── bezierMath.ts            # Bézier-görbe koordináta-transzformáció + interpoláció segédfüggvényei
 │   ├── loftGeometry.ts          # Loft mesh építés (Three.js geometria) — LoftViewer segédfüggvényei
-│   └── crossSectionGeometry.ts  # NACA/SVG keresztmetszet-geometria segédfüggvényei — CrossSectionDialog
+│   ├── crossSectionGeometry.ts  # NACA/SVG keresztmetszet-geometria segédfüggvényei — CrossSectionDialog
+│   └── listTable.ts             # toggleSort, rowInteractionProps — lista oldalak megosztott sort/a11y segédfüggvényei (nem komponens, ezért lib/-ben, nem components/common/list/-ben)
 ├── App.tsx                      # Router konfiguráció
 ├── main.tsx                     # Belépési pont
 └── index.css                    # Tailwind direktívák + CSS változók
@@ -151,7 +159,7 @@ src/
 - **Edit page szerkezet** (`MaterialNew`, `GeometryEdit`): sub-toolbar a MainNav alatt, sticky `top-[69px] h-[52px]`, tartalmazza a tabs + középre pozícionált címet + Exit edit mode gombot. Részletek `design.md`-ben.
 - **Full-bleed canvas page** (`GeometryEdit`): a `<main>` `relative overflow-hidden`, a Three.js canvas `absolute inset-0`, minden UI overlay (sub-toolbar, panel, gizmó) z-index-szel felette, transparent háttérrel. **Footer eltávolítva** (edit mode).
 - **Kivételek**: `Nurbs` (fullscreen, nincs nav, nincs footer), `GeometryEdit`, `CompositionNew`, `CalculationNew` (nincs footer — edit mode).
-- **Layout** (`src/components/common/Layout.tsx`) szándékosan passthrough — történelmi okból maradt.
+- **Layout** (`src/components/common/layout/Layout.tsx`) szándékosan passthrough — történelmi okból maradt.
 - **Stílusok**: Tailwind utility classok inline. Pixel-pontos Figma illesztéshez **hex literálok** (`text-[#0a0a0a]`, `rounded-[14px]`) — nem CSS változókon keresztül abstraction.
 - **shadcn primitívek**: `src/components/ui/` — `npx shadcn add <name>` az új komponensekhez. Nem módosítjuk közvetlenül.
 - **Mock adatok**: `src/data/` — típusos export, később lecserélhető API hívásra ugyanazzal a shape-pel.

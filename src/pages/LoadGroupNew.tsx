@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Check, Redo2, Undo2 } from 'lucide-react';
-import { MainNav } from '@/components/common/MainNav';
+import { MainNav } from '@/components/common/layout/MainNav';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LoadGroupGeneralTab } from '@/components/load-group/LoadGroupGeneralTab';
 import { LoadGroupLoadCasesTab } from '@/components/load-group/LoadGroupLoadCasesTab';

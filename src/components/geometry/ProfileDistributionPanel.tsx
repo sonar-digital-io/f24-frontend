@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, FoldHorizontal, Info, Plus } from 'lucide-react
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BezierEditor } from '@/components/common/BezierEditor';
+import { BezierEditor } from '@/components/common/viewer/BezierEditor';
 import type { ControlPoint } from '@/types';
 import { ProfileDistributionSelect } from '@/components/geometry/ProfileDistributionSelect';
 import { ProfileDistributionSwitch } from '@/components/geometry/ProfileDistributionSwitch';

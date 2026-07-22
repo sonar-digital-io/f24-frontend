@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Settings, Check, Undo2, Redo2 } from 'lucide-react';
-import { MainNav } from '@/components/common/MainNav';
-import { OccViewer } from '@/components/common/OccViewer';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { OccViewer } from '@/components/common/viewer/OccViewer';
 import { ProfileDistributionPanel } from '@/components/geometry/ProfileDistributionPanel';
 import { ProfilesPanel } from '@/components/geometry/ProfilesPanel';
 import { StackingPanel } from '@/components/geometry/StackingPanel';
-import { CoordinateGizmo, RenderToggle } from '@/components/common/ViewerOverlayControls';
+import { CoordinateGizmo } from '@/components/common/viewer/CoordinateGizmo';
+import { RenderToggle } from '@/components/common/viewer/RenderToggle';
 import type { RenderMode } from '@/types';
 import { Select, Tip, FormField } from '@/components/geometry/GeometryEditControls';
 import { Input } from '@/components/ui/input';

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Check } from 'lucide-react';
-import { MainNav } from '@/components/common/MainNav';
+import { MainNav } from '@/components/common/layout/MainNav';
 import { CalculationSubToolbar } from '@/components/calculation/CalculationSubToolbar';
 import { CalculationGeneralTab } from '@/components/calculation/CalculationGeneralTab';
 import { CalculationCompositionTab } from '@/components/calculation/CalculationCompositionTab';

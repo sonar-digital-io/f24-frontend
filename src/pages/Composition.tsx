@@ -12,15 +12,14 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { MainNav } from '@/components/common/MainNav';
-import { Footer } from '@/components/common/Footer';
-import {
-  Pagination,
-  SortableHeader,
-  toggleSort,
-} from '@/components/common/ListTable';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { Footer } from '@/components/common/layout/Footer';
+import { Pagination } from '@/components/common/list/Pagination';
+import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { toggleSort } from '@/lib/listTable';
 import type { SortState, ViewMode, CompositionSortKey } from '@/types';
-import { FilterCheckbox, Tip } from '@/components/common/ListFilterControls';
+import { FilterCheckbox } from '@/components/common/list/FilterCheckbox';
+import { Tip } from '@/components/common/list/Tip';
 import { Input } from '@/components/ui/input';
 import { CompositionCard } from '@/components/composition/CompositionCard';
 import { COMPOSITIONS } from '@/data/compositions';

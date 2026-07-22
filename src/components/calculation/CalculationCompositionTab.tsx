@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 import { ArrowDown, ArrowUpDown, ChevronUp, Filter, LayoutGrid, List as ListIcon } from 'lucide-react';
-import { GeometryCard } from '@/components/common/GeometryCard';
-import { BladeThumbnail } from '@/components/common/BladeThumbnail';
+import { GeometryCard } from '@/components/common/card/GeometryCard';
+import { BladeThumbnail } from '@/components/common/card/BladeThumbnail';
 import { GEOMETRIES } from '@/data/geometries';
 import { COMPOSITIONS } from '@/data/compositions';
 import type { Geometry } from '@/data/geometries';

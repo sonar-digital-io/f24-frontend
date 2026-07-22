@@ -1,6 +1,6 @@
 import { LayoutGrid, List as ListIcon, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { GeometryCard } from '@/components/common/GeometryCard';
+import { GeometryCard } from '@/components/common/card/GeometryCard';
 import { GEOMETRIES } from '@/data/geometries';
 
 export interface CompositionGeometryTabProps {

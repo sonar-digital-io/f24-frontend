@@ -3,17 +3,15 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { Filter, Search, X } from 'lucide-react';
 import { type DateRange } from 'react-day-picker';
-import { MainNav } from '@/components/common/MainNav';
-import { Footer } from '@/components/common/Footer';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { Footer } from '@/components/common/layout/Footer';
 import { MaterialRow } from '@/components/material/MaterialRow';
 import { MaterialDateFilterPopover } from '@/components/material/MaterialDateFilterPopover';
-import {
-  Pagination,
-  SortableHeader,
-  toggleSort,
-} from '@/components/common/ListTable';
+import { Pagination } from '@/components/common/list/Pagination';
+import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { toggleSort } from '@/lib/listTable';
 import type { SortState, MaterialSortKey } from '@/types';
-import { FilterCheckbox } from '@/components/common/ListFilterControls';
+import { FilterCheckbox } from '@/components/common/list/FilterCheckbox';
 import { Input } from '@/components/ui/input';
 import { MATERIALS, lastUpdatedSortKey } from '@/data/materials';
 

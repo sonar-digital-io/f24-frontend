@@ -1,5 +1,5 @@
-import { MainNav } from '@/components/common/MainNav';
-import { Footer } from '@/components/common/Footer';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { Footer } from '@/components/common/layout/Footer';
 
 interface PagePlaceholderProps {
   title: string;

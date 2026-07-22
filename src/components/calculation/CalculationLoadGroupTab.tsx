@@ -1,7 +1,7 @@
 import { Fragment, type RefObject } from 'react';
 import { ArrowDown, ArrowUpDown, ChevronDown, ChevronUp, Filter, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Pagination } from '@/components/common/ListTable';
+import { Pagination } from '@/components/common/list/Pagination';
 import type { FatigueLoadGroup } from '@/data/calculationFatigueLoadGroups';
 import type { LGSort, LGSortKey } from '@/types';
 

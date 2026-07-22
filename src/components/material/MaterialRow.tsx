@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, Copy, Download, Pencil, Trash2 } from 'lucide-react';
-import { rowInteractionProps } from '@/components/common/ListTable';
+import { rowInteractionProps } from '@/lib/listTable';
 import { type Material as MaterialItem, type MaterialDetails } from '@/data/materials';
 
 function Tip({ label, children }: { label: string; children: React.ReactNode }) {

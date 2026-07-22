@@ -15,8 +15,8 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { BladeThumbnail } from '@/components/common/BladeThumbnail';
-import { rowInteractionProps } from '@/components/common/ListTable';
+import { BladeThumbnail } from '@/components/common/card/BladeThumbnail';
+import { rowInteractionProps } from '@/lib/listTable';
 import { type Calculation, type CalculationStatus } from '@/data/calculations';
 
 // ─── Status badge ─────────────────────────────────────────────────────────────

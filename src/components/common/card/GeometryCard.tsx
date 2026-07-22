@@ -1,5 +1,5 @@
-import { BladeThumbnail } from '@/components/common/BladeThumbnail';
-import { CardMenu } from '@/components/common/CardMenu';
+import { BladeThumbnail } from '@/components/common/card/BladeThumbnail';
+import { CardMenu } from '@/components/common/card/CardMenu';
 import type { Geometry } from '@/data/geometries';
 
 interface GeometryCardProps {

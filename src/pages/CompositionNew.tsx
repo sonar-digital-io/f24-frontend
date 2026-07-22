@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Check, Redo2, Settings, Undo2 } from 'lucide-react';
-import { MainNav } from '@/components/common/MainNav';
-import { OccViewer } from '@/components/common/OccViewer';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { OccViewer } from '@/components/common/viewer/OccViewer';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LayupPickerDialog } from '@/components/composition/LayupPickerDialog';
 import {
@@ -10,7 +10,8 @@ import {
   LayupMappingBezierDialog,
 } from '@/components/composition/LayupMappingBezierDialog';
 import { TransversalMappingSection } from '@/components/composition/TransversalMappingSection';
-import { CoordinateGizmo, RenderToggle } from '@/components/common/ViewerOverlayControls';
+import { CoordinateGizmo } from '@/components/common/viewer/CoordinateGizmo';
+import { RenderToggle } from '@/components/common/viewer/RenderToggle';
 import type { RenderMode } from '@/types';
 import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
 import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';

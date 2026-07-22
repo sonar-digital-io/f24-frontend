@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, X } from 'lucide-react';
-import {
-  Pagination,
-  SortableHeader,
-  toggleSort,
-} from '@/components/common/ListTable';
+import { Pagination } from '@/components/common/list/Pagination';
+import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { toggleSort } from '@/lib/listTable';
 import type { SortState } from '@/types';
 import { Input } from '@/components/ui/input';
 import { LAYUPS } from '@/data/layups';
