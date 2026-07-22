@@ -1,45 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, X } from 'lucide-react';
-import {
-  Pagination,
-  SortableHeader,
-  toggleSort,
-  type SortState,
-} from '@/components/ListTable';
+import { Pagination, SortableHeader, toggleSort, type SortState } from '@/components/common/ListTable';
 import { Input } from '@/components/ui/input';
-import { LAYUPS } from '@/data/layups';
+import { MATERIALS } from '@/data/materials';
 
 const PAGE_SIZE = 10;
 
-type SortKey = 'name' | 'lastUpdated';
+type SortKey = 'name' | 'type' | 'lastUpdated';
 
-interface LayupPickerDialogProps {
+interface MaterialPickerDialogProps {
   open: boolean;
-  currentLayupId?: string | null;
-  onSelect: (layupId: string) => void;
+  currentMaterialName?: string | null;
+  onSelect: (materialName: string) => void;
   onClose: () => void;
 }
 
-/**
- * Layup chooser dialog: full-table picker over the existing LAYUPS list.
- * Triggered from the Layup mapping table's per-row "Select" button — replaces
- * a plain dropdown when users need search/sort/pagination over the layup
- * catalog. Confirms selection by clicking "Select" on a row.
- *
- * Pattern matches NewGeometryModal: fixed overlay, click-outside + ESC close,
- * body scroll-lock.
- */
-export function LayupPickerDialog({
+export function MaterialPickerDialog({
   open,
-  currentLayupId,
+  currentMaterialName,
   onSelect,
   onClose,
-}: LayupPickerDialogProps) {
+}: MaterialPickerDialogProps) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortState<SortKey>>({ key: 'name', direction: 'asc' });
   const [page, setPage] = useState(1);
 
-  // Body scroll lock + ESC close
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -54,7 +39,6 @@ export function LayupPickerDialog({
     };
   }, [open, onClose]);
 
-  // Reset query/page when the dialog re-opens
   useEffect(() => {
     if (open) {
       setQuery('');
@@ -64,9 +48,12 @@ export function LayupPickerDialog({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return LAYUPS;
-    return LAYUPS.filter(
-      (l) => l.name.toLowerCase().includes(q) || l.description.toLowerCase().includes(q)
+    if (!q) return MATERIALS;
+    return MATERIALS.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) ||
+        m.type.toLowerCase().includes(q) ||
+        m.description.toLowerCase().includes(q)
     );
   }, [query]);
 
@@ -95,7 +82,7 @@ export function LayupPickerDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-labelledby="layup-picker-title"
+      aria-labelledby="material-picker-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
     >
@@ -106,10 +93,10 @@ export function LayupPickerDialog({
         {/* Header */}
         <div className="flex items-center justify-between gap-4">
           <h2
-            id="layup-picker-title"
+            id="material-picker-title"
             className="text-[20px] font-bold leading-7 text-[#181c20]"
           >
-            Layups
+            Materials
           </h2>
           <button
             type="button"
@@ -131,7 +118,7 @@ export function LayupPickerDialog({
                 setQuery(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search for a layup"
+              placeholder="Search by name, type or description"
               autoFocus
               className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
             />
@@ -148,7 +135,14 @@ export function LayupPickerDialog({
                   sortKey="name"
                   currentSort={sort}
                   onClick={handleSort}
-                  className="w-[240px]"
+                  className="w-[220px]"
+                />
+                <SortableHeader
+                  label="Type"
+                  sortKey="type"
+                  currentSort={sort}
+                  onClick={handleSort}
+                  className="w-[160px]"
                 />
                 <th className="h-10 px-3 text-left">
                   <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
@@ -160,34 +154,35 @@ export function LayupPickerDialog({
                   sortKey="lastUpdated"
                   currentSort={sort}
                   onClick={handleSort}
-                  className="w-[160px] whitespace-nowrap"
+                  className="w-[140px] whitespace-nowrap"
                 />
                 <th className="h-10 w-[100px] px-3 text-right" />
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((l) => {
-                const isCurrent = l.id === currentLayupId;
+              {pageRows.map((m) => {
+                const isCurrent = m.name === currentMaterialName;
                 return (
                   <tr
-                    key={l.id}
+                    key={m.id}
                     className={`border-b border-[#e5e7eb] last:border-b-0 ${
                       isCurrent ? 'bg-[#eef9ff]' : 'hover:bg-[#f9fafb]'
                     }`}
                   >
                     <td className="px-3 py-4 text-[14px] font-medium leading-5 text-[#0a0a0a]">
-                      {l.name}
+                      {m.name}
+                    </td>
+                    <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">{m.type}</td>
+                    <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
+                      {m.description}
                     </td>
                     <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-                      {l.description}
-                    </td>
-                    <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-                      {l.lastUpdated}
+                      {m.lastUpdated}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <button
                         type="button"
-                        onClick={() => onSelect(l.id)}
+                        onClick={() => onSelect(m.name)}
                         className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-3 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
                       >
                         Select
@@ -198,8 +193,8 @@ export function LayupPickerDialog({
               })}
               {pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
-                    No layups match your search.
+                  <td colSpan={5} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                    No materials match your search.
                   </td>
                 </tr>
               )}

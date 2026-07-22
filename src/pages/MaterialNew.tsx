@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Check, Undo2, Redo2 } from 'lucide-react';
-import { MainNav } from '@/components/MainNav';
-import { PropertyFormTab } from '@/components/PropertyFormTab';
+import { MainNav } from '@/components/common/MainNav';
+import { PropertyFormTab } from '@/components/material/PropertyFormTab';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';

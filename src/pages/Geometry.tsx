@@ -2,61 +2,33 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Check,
   Copy,
   Download,
   Filter,
   LayoutGrid,
   List as ListIcon,
-  Minus,
   Pencil,
   Search,
   Trash2,
   X,
 } from 'lucide-react';
-import { MainNav } from '@/components/MainNav';
-import { Footer } from '@/components/Footer';
+import { MainNav } from '@/components/common/MainNav';
+import { Footer } from '@/components/common/Footer';
 import {
   Pagination,
   SortableHeader,
   rowInteractionProps,
   toggleSort,
   type SortState,
-} from '@/components/ListTable';
+} from '@/components/common/ListTable';
+import { FilterCheckbox, Tip } from '@/components/common/ListFilterControls';
 import { Input } from '@/components/ui/input';
-import { GeometryCard } from '@/components/GeometryCard';
+import { GeometryCard } from '@/components/common/GeometryCard';
 import { GEOMETRIES } from '@/data/geometries';
 
 const PAGE_SIZE = 10;
 type ViewMode = 'list' | 'grid';
 type SortKey = 'name' | 'nominalRadius' | 'lastUpdated';
-
-function FilterCheckbox({ checked, indeterminate }: { checked: boolean; indeterminate?: boolean }) {
-  return (
-    <div
-      className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded ${
-        checked || indeterminate ? 'bg-[#171717]' : 'border border-[#d1d5db] bg-white'
-      }`}
-    >
-      {indeterminate ? (
-        <Minus className="h-3 w-3 text-white" strokeWidth={3} />
-      ) : checked ? (
-        <Check className="h-3 w-3 text-white" strokeWidth={3} />
-      ) : null}
-    </div>
-  );
-}
-
-function Tip({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="group/tip relative">
-      {children}
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100">
-        {label}
-      </span>
-    </div>
-  );
-}
 
 export function Geometry() {
   const navigate = useNavigate();

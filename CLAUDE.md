@@ -22,30 +22,53 @@ npm run preview  # Produkciós build előnézet
 
 ## Projekt struktúra
 
+`src/components/` feature-mappákra bontva (nem lapos) — minden almappa egy route/domainhez tartozó komponenseket tartalmaz, `common/` a 2+ feature által ténylegesen megosztott darabokat:
+
 ```
 src/
 ├── components/
-│   ├── MainNav.tsx              # Fő navigáció — sticky, gradient bar + nav (NAV_ITEMS exportált)
-│   ├── Footer.tsx               # eCon Engineering branding lábléc (SVG logo placeholder)
-│   ├── PagePlaceholder.tsx      # Közös stub layout aloldalakhoz ("Coming soon")
-│   ├── PropertyFormTab.tsx      # Sidebar + form body — Material edit Mechanical/Fatigue tab-jaihoz
-│   ├── BladeThumbnail.tsx       # SVG szárny thumbnail a Geometry grid kártyákon
-│   ├── BezierEditor.tsx         # Interaktív cubic Bézier editor (drag + zoom + pan + yMin/yMax)
-│   ├── ProfileDistributionPanel.tsx  # GeometryEdit "Profile distribution" tab — 3 szekció bezier + table
-│   ├── ProfilesPanel.tsx        # GeometryEdit "Profiles" tab — profil lista + popover detail (NACA params)
-│   ├── StackingPanel.tsx        # GeometryEdit "Stacking" tab — Sweep + Dihedral bezier-szerkesztő
-│   ├── AirfoilPreview.tsx       # 2D NACA airfoil SVG (paraméterezhető m / p / t)
-│   ├── LayupBuilder.tsx         # LayupNew "Layup building" tab — drag-and-drop ply table + PlyStackViz
-│   ├── PlyStackViz.tsx          # Izometrikus SVG ply-stack (parallelogramma + fiber lines)
-│   ├── GeometryCard.tsx         # Geometry kártya (Geometry list grid + CompositionNew picker)
-│   ├── LayupPickerDialog.tsx    # Layup chooser modal a Layup mapping táblázathoz
-│   ├── LayupMappingBezierDialog.tsx  # Bezier modal per layup-mapping row (longitudinal × transversal)
-│   ├── TransversalMappingSection.tsx # CompositionNew "Transversal mapping" tab — mapping tábla + profil popover
-│   ├── Layout.tsx               # Passthrough wrapper — minden page maga rendereli MainNav+Footer
-│   ├── OccViewer.tsx            # OpenCascade.js IGES viewer — GeometryEdit + CompositionNew 3D háttere
-│   ├── NurbsViewer.tsx          # NURBS felület vizualizáció (/nurbs)
-│   ├── LoftViewer.tsx           # Loft felület készítő (/nurbs)
-│   └── ui/                      # shadcn/ui komponensek (badge, button, card, checkbox, input, label, slider, tabs, textarea)
+│   ├── common/                  # 2+ feature-ben ténylegesen megosztott komponensek
+│   │   ├── MainNav.tsx          # Fő navigáció — sticky, gradient bar + nav (NAV_ITEMS exportált)
+│   │   ├── Footer.tsx           # eCon Engineering branding lábléc (SVG logo placeholder)
+│   │   ├── Layout.tsx           # Passthrough wrapper — minden page maga rendereli MainNav+Footer
+│   │   ├── PagePlaceholder.tsx  # Közös stub layout aloldalakhoz ("Coming soon")
+│   │   ├── ErrorBoundary.tsx    # Kritikus 3D/WASM részfák hibahatárolása
+│   │   ├── ListTable.tsx        # Megosztott Pagination + SortableHeader lista oldalakhoz
+│   │   ├── ListFilterControls.tsx # Megosztott Tip + FilterCheckbox lista szűrőkhöz
+│   │   ├── OccViewer.tsx        # OpenCascade.js IGES viewer — GeometryEdit + CompositionNew 3D háttere
+│   │   ├── ViewerOverlayControls.tsx # CoordinateGizmo + RenderToggle — OccViewer feletti overlay
+│   │   ├── BezierEditor.tsx     # Interaktív cubic Bézier editor (drag + zoom + pan + yMin/yMax) — Geometry/Composition/LoadGroup megosztja
+│   │   ├── BezierZoomControls.tsx # BezierEditor zoom in/out gombpár
+│   │   ├── GeometryCard.tsx     # Geometry kártya (Geometry grid + CompositionNew/CalculationNew picker)
+│   │   ├── BladeThumbnail.tsx   # SVG szárny thumbnail — Geometry/Composition/Calculation kártyákon
+│   │   ├── AirfoilPreview.tsx   # 2D NACA airfoil SVG — Geometry és Composition profil popoverekben
+│   │   ├── BufferedNumberInput.tsx # Debounce-olt numerikus input — több feature form mezőjében
+│   │   └── CardMenu.tsx         # Kártya jobb-felső "⋮" akció menü (Geometry/Composition kártyákon)
+│   ├── calculation/              # /calculation, /calculation/new
+│   │   ├── CalculationRow.tsx, CalculationSubToolbar.tsx, TagSelect.tsx
+│   │   └── CalculationGeneralTab.tsx, CalculationCompositionTab.tsx, CalculationConfigurationTab.tsx, CalculationLoadGroupTab.tsx, CalculationFatigueProfileTab.tsx
+│   ├── load-group/               # /load-group, /load-group/new
+│   │   ├── LoadGroupGeneralTab.tsx, LoadGroupLoadCasesTab.tsx, LoadGroupLimitsTab.tsx, LoadGroupFatigueProfilesTab.tsx
+│   │   └── LoadCasePickerDialog.tsx, SelectInline.tsx
+│   ├── composition/               # /composition, /composition/new
+│   │   ├── CompositionCard.tsx, CompositionGeneralTab.tsx, CompositionGeometryTab.tsx
+│   │   ├── TransversalMappingSection.tsx, SelectField.tsx, ProfileEditorPopover.tsx
+│   │   ├── LayupMappingTable.tsx, LayupMappingBezierDialog.tsx, LayupMappingChart.tsx, LayupPickerDialog.tsx
+│   │   └── CrossSectionDialog.tsx
+│   ├── geometry/                  # /geometry/:id (GeometryEdit tabs)
+│   │   ├── GeometryEditControls.tsx (Select/Tip/FormField)
+│   │   ├── ProfileDistributionPanel.tsx (+Select/Switch), ProfilesPanel.tsx (+Select/ProfileDetailPopover/FormFields)
+│   │   └── StackingPanel.tsx
+│   ├── layup/                     # /layup/new — LayupBuilder tab (Layup lista maga a Layup.tsx page-ben marad)
+│   │   ├── LayupBuilder.tsx, PlyStackViz.tsx
+│   │   └── MaterialPickerDialog.tsx # egyedüli fogyasztója a LayupBuilder
+│   ├── material/                   # /material, /material/new
+│   │   ├── MaterialRow.tsx, MaterialDateFilterPopover.tsx
+│   │   └── PropertyFormTab.tsx
+│   ├── nurbs/                      # /nurbs
+│   │   ├── NurbsViewer.tsx, LoftViewer.tsx
+│   │   └── NurbsControls.tsx (ToggleBtn/StatBadge), ProfileEditor.tsx
+│   └── ui/                         # shadcn/ui komponensek (badge, button, card, checkbox, input, label, slider, tabs, textarea) — VÁLTOZATLAN, nem kerül feature-mappába
 ├── pages/
 │   ├── Home.tsx                 # / — Dashboard (Add new / Recently edited / What's new) — Figma 576:19645
 │   ├── Material.tsx             # /material — Data table accordion-soros expand-dal — Figma 576:19313 / 584:15263
@@ -117,7 +140,7 @@ src/
 - **Edit page szerkezet** (`MaterialNew`, `GeometryEdit`): sub-toolbar a MainNav alatt, sticky `top-[69px] h-[52px]`, tartalmazza a tabs + középre pozícionált címet + Exit edit mode gombot. Részletek `design.md`-ben.
 - **Full-bleed canvas page** (`GeometryEdit`): a `<main>` `relative overflow-hidden`, a Three.js canvas `absolute inset-0`, minden UI overlay (sub-toolbar, panel, gizmó) z-index-szel felette, transparent háttérrel. **Footer eltávolítva** (edit mode).
 - **Kivételek**: `Nurbs` (fullscreen, nincs nav, nincs footer), `GeometryEdit`, `CompositionNew`, `CalculationNew` (nincs footer — edit mode).
-- **Layout** (`src/components/Layout.tsx`) szándékosan passthrough — történelmi okból maradt.
+- **Layout** (`src/components/common/Layout.tsx`) szándékosan passthrough — történelmi okból maradt.
 - **Stílusok**: Tailwind utility classok inline. Pixel-pontos Figma illesztéshez **hex literálok** (`text-[#0a0a0a]`, `rounded-[14px]`) — nem CSS változókon keresztül abstraction.
 - **shadcn primitívek**: `src/components/ui/` — `npx shadcn add <name>` az új komponensekhez. Nem módosítjuk közvetlenül.
 - **Mock adatok**: `src/data/` — típusos export, később lecserélhető API hívásra ugyanazzal a shape-pel.

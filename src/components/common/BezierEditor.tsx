@@ -1,101 +1,82 @@
 import { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Minus, Plus } from 'lucide-react';
-import type { ControlPoint } from '@/components/BezierEditor';
-
-export type { ControlPoint };
+import { BezierZoomControls } from '@/components/common/BezierZoomControls';
+import {
+  VB_WIDTH,
+  VB_HEIGHT,
+  PAD_LEFT,
+  PAD_RIGHT,
+  PAD_TOP,
+  PAD_BOTTOM,
+  dataToPx,
+  pxToData,
+  clamp,
+  catmullRomPath,
+} from '@/lib/bezierMath';
 
 /**
- * Layup mapping chart — closed straight-line polygon over a static blade
- * planform background. All control points are freely draggable.
+ * Interactive Catmull-Rom spline editor with N control points.
+ *
+ * All points are "on-curve" anchors — the smooth curve passes through each
+ * one. This makes adding intermediate knots intuitive.
+ *
+ * Interactions:
+ * - Click on background  → insert a new anchor at that position
+ * - Drag anchor          → move it (endpoints locked to xMin / xMax)
+ * - Double-click anchor  → remove it (not available for the two endpoints)
+ * - +/- buttons          → zoom in / out
+ * - Drag background      → pan (only when zoomed in)
+ * - Double-click bg      → reset zoom & pan
+ *
+ * Ghost curve:
+ * - While dragging an anchor, the green dashed curve shows where the curve
+ *   was BEFORE the drag started. It vanishes the moment you release.
  */
 
-const VB_WIDTH = 460;
-const VB_HEIGHT = 260;
-const PAD_LEFT = 40;
-const PAD_RIGHT = 12;
-const PAD_TOP = 16;
-const PAD_BOTTOM = 26;
+export interface ControlPoint {
+  x: number; // data units
+  y: number; // data units
+}
+
+export interface BezierEditorProps {
+  points: ControlPoint[];
+  onChange: (points: ControlPoint[]) => void;
+  yMax?: number;
+  yMin?: number;
+  yStep?: number;
+  xMin?: number;
+  xMax?: number;
+  xStep?: number;
+  rootX?: number;
+  yUnit?: string;
+  className?: string;
+}
 
 const ZOOM_MIN = 1;
 const ZOOM_MAX = 8;
 const ZOOM_STEP = 1.25;
 
-// Blade planform outline in VB pixel coordinates.
-// Source: lapat.svg (viewBox 0 0 359 71), placed in the Figma chart at
-//   left=76px, top=103.76px, w=357px, h=69px with -scale-y-100 flip.
-// Grid: y=0 at inner-div top+8px (=bezier py=28), y=-14 at bezier py=243 → 215px/14m.
-// Blade bounding box in data: x 10..54.6 m, y -9.43..-4.94 m (after flip correction).
-// Transform: cx = 80.8 + svg_x * 1.0137,  cy = 162.8 - svg_y * 0.9845
-const BLADE_PATH =
-  'M 356.2 158.7 ' +
-  'C 275.9 164.8 126.1 161.2 61.2 158.7 ' +
-  'L 61.2 124.2 ' +
-  'L 172.8 94.1 ' +
-  'L 413.7 131.8 ' +
-  'C 428.0 138.3 436.6 152.7 356.2 158.7 Z';
-
-interface LayupMappingChartProps {
-  points: ControlPoint[];
-  onChange: (points: ControlPoint[]) => void;
-  xMin?: number;
-  xMax?: number;
-  xStep?: number;
-  yMin?: number;
-  yMax?: number;
-  yStep?: number;
-  className?: string;
-}
-
-function dataToPx(
-  p: ControlPoint,
-  xMin: number,
-  xMax: number,
-  yMin: number,
-  yMax: number,
-) {
-  const w = VB_WIDTH - PAD_LEFT - PAD_RIGHT;
-  const h = VB_HEIGHT - PAD_TOP - PAD_BOTTOM;
-  return {
-    cx: PAD_LEFT + ((p.x - xMin) / (xMax - xMin)) * w,
-    cy: PAD_TOP + (1 - (p.y - yMin) / (yMax - yMin)) * h,
-  };
-}
-
-function pxToData(
-  cx: number,
-  cy: number,
-  xMin: number,
-  xMax: number,
-  yMin: number,
-  yMax: number,
-): ControlPoint {
-  const w = VB_WIDTH - PAD_LEFT - PAD_RIGHT;
-  const h = VB_HEIGHT - PAD_TOP - PAD_BOTTOM;
-  return {
-    x: xMin + (xMax - xMin) * ((cx - PAD_LEFT) / w),
-    y: yMin + (yMax - yMin) * (1 - (cy - PAD_TOP) / h),
-  };
-}
-
-function clamp(v: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-export function LayupMappingChart({
+export function BezierEditor({
   points,
   onChange,
-  xMin = 5,
-  xMax = 55,
-  xStep = 5,
-  yMin = -14,
-  yMax = 0,
+  yMax = 24,
+  yMin = 0,
   yStep = 2,
+  xMin = 0,
+  xMax = 1,
+  xStep = 0.1,
+  rootX = 0.05,
+  yUnit = '',
   className,
-}: LayupMappingChartProps) {
+}: BezierEditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
+  // Ghost curve: snapshot of control points at the moment a drag starts.
+  // Rendered in green while dragging, cleared (via draggingIndex→null) on release.
+  const preEditPointsRef = useRef<ControlPoint[] | null>(null);
+
+  // Zoom + pan
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
@@ -106,6 +87,9 @@ export function LayupMappingChart({
     panX: number;
     panY: number;
   } | null>(null);
+
+  // Track whether a background pointer-down resulted in actual panning so we
+  // can distinguish a plain click (→ add point) from a drag-end.
   const hasPannedRef = useRef(false);
 
   const viewW = VB_WIDTH / zoom;
@@ -133,6 +117,8 @@ export function LayupMappingChart({
     e.preventDefault();
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
+    // Snapshot before edit — shown as green ghost while dragging
+    preEditPointsRef.current = points.map((p) => ({ ...p }));
     setDraggingIndex(idx);
   }
 
@@ -140,9 +126,16 @@ export function LayupMappingChart({
     if (draggingIndex !== idx) return;
     const local = screenToViewBox(e.clientX, e.clientY);
     if (!local) return;
-    const raw = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
-    const x = clamp(raw.x, xMin, xMax);
-    const y = clamp(raw.y, yMin, yMax);
+    let { x, y } = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
+    y = clamp(y, yMin, yMax);
+    const xEps = (xMax - xMin) * 0.001;
+    if (idx === 0 || idx === points.length - 1) {
+      // Endpoints move vertically only — pinned to their CURRENT x, not to
+      // xMin/xMax, so callers may keep endpoints inside the visible range.
+      x = points[idx].x;
+    } else {
+      x = clamp(x, points[idx - 1].x + xEps, points[idx + 1].x - xEps);
+    }
     onChange(points.map((p, i) => (i === idx ? { x, y } : p)));
   }
 
@@ -151,10 +144,19 @@ export function LayupMappingChart({
     try {
       (e.target as Element).releasePointerCapture(e.pointerId);
     } catch { /* ignore */ }
+    // Setting draggingIndex → null causes the ghost to disappear on next render
     setDraggingIndex(null);
   }
 
-  // ── Zoom ─────────────────────────────────────────────────────────────────
+  // Double-click a middle anchor to remove it
+  function handlePointDoubleClick(idx: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (idx === 0 || idx === points.length - 1) return; // keep endpoints
+    if (points.length <= 3) return; // keep minimum 3 points
+    onChange(points.filter((_, i) => i !== idx));
+  }
+
+  // ── Zoom (buttons only — no scroll wheel) ────────────────────────────────
   function zoomBy(factor: number) {
     const next = clamp(zoom * factor, ZOOM_MIN, ZOOM_MAX);
     if (next === zoom) return;
@@ -162,7 +164,7 @@ export function LayupMappingChart({
     setZoom(next);
   }
 
-  // ── Pan ──────────────────────────────────────────────────────────────────
+  // ── Background: pan + add point ──────────────────────────────────────────
   function handleBgPointerDown(e: React.PointerEvent<SVGRectElement>) {
     hasPannedRef.current = false;
     if (zoom <= 1) return;
@@ -181,7 +183,7 @@ export function LayupMappingChart({
     if (panningPointerId === null || !panStartRef.current) return;
     const dx = e.clientX - panStartRef.current.pointerX;
     const dy = e.clientY - panStartRef.current.pointerY;
-    if (dx * dx + dy * dy > 16) hasPannedRef.current = true;
+    if (dx * dx + dy * dy > 16) hasPannedRef.current = true; // 4 px threshold
     const svg = svgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
@@ -198,10 +200,42 @@ export function LayupMappingChart({
     panStartRef.current = null;
   }
 
+  /** Click on background → insert a new anchor at that data position. */
+  function handleBgClick(e: React.MouseEvent<SVGRectElement>) {
+    if (hasPannedRef.current) return; // ignore drag-end clicks
+    const local = screenToViewBox(e.clientX, e.clientY);
+    if (!local) return;
+    let { x, y } = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
+    // Stay strictly between the two fixed endpoints (which may sit inside
+    // the xMin..xMax range), so the point array stays x-sorted.
+    const firstX = points[0]?.x ?? xMin;
+    const lastX = points[points.length - 1]?.x ?? xMax;
+    const margin = (xMax - xMin) * 0.02;
+    if (lastX - firstX <= 2 * margin) return;
+    x = clamp(x, firstX + margin, lastX - margin);
+    y = clamp(y, yMin, yMax);
+    // Skip if too close to an existing anchor
+    if (points.some((p) => Math.abs(p.x - x) < (xMax - xMin) * 0.03)) return;
+    // Insert in x-sorted order (always before the last fixed endpoint)
+    const insertIdx = points.findIndex((p, i) => i > 0 && p.x >= x);
+    const idx = insertIdx === -1 ? points.length - 1 : insertIdx;
+    onChange([...points.slice(0, idx), { x, y }, ...points.slice(idx)]);
+  }
+
   function handleBgDoubleClick() {
     setZoom(1);
     setPanX(0);
     setPanY(0);
+  }
+
+  // Degenerate bounds would put NaN into every coordinate (or loop forever
+  // building ticks) — bail out with a placeholder instead.
+  if (xMax <= xMin || yMax <= yMin || xStep <= 0 || yStep <= 0) {
+    return (
+      <div className="flex h-[260px] w-full items-center justify-center rounded-md bg-white text-[12px] text-[#6b7280]">
+        Invalid chart bounds
+      </div>
+    );
   }
 
   // ── Ticks ────────────────────────────────────────────────────────────────
@@ -217,47 +251,27 @@ export function LayupMappingChart({
   }
   const yDecimals = yStep >= 1 ? 0 : Math.max(0, -Math.floor(Math.log10(yStep)));
   const xDecimals = xStep >= 1 ? 0 : Math.max(0, -Math.floor(Math.log10(xStep)));
-
-  // Closed polygon points string
-  const polygonPoints = points
-    .map((p) => {
-      const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
-      return `${cx.toFixed(1)},${cy.toFixed(1)}`;
-    })
-    .join(' ');
+  const rootPx = dataToPx({ x: rootX, y: 0 }, xMin, xMax, yMin, yMax).cx;
 
   return (
     <div className={cn('relative h-[260px] w-full rounded-md bg-white', className)}>
       {/* Zoom controls */}
-      <div className="absolute right-2 top-2 z-10 flex flex-col overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
-        <button
-          type="button"
-          aria-label="Zoom in"
-          onClick={() => zoomBy(ZOOM_STEP)}
-          disabled={zoom >= ZOOM_MAX}
-          className="flex h-6 w-6 items-center justify-center text-[#6b7280] hover:bg-[#f1f5f9] disabled:opacity-40"
-        >
-          <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          aria-label="Zoom out"
-          onClick={() => zoomBy(1 / ZOOM_STEP)}
-          disabled={zoom <= ZOOM_MIN}
-          className="flex h-6 w-6 items-center justify-center border-t border-[#e5e7eb] text-[#6b7280] hover:bg-[#f1f5f9] disabled:opacity-40"
-        >
-          <Minus className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
-      </div>
+      <BezierZoomControls
+        onZoomIn={() => zoomBy(ZOOM_STEP)}
+        onZoomOut={() => zoomBy(1 / ZOOM_STEP)}
+        canZoomIn={zoom < ZOOM_MAX}
+        canZoomOut={zoom > ZOOM_MIN}
+      />
 
       <svg
         ref={svgRef}
         viewBox={`${viewX} ${viewY} ${viewW} ${viewH}`}
         className="h-full w-full"
-        aria-label="Layup mapping chart"
+        aria-label="Distribution chart"
         style={{ touchAction: 'none' }}
+        /* No onWheel — scroll zoom deliberately disabled */
       >
-        {/* Background hit area for pan */}
+        {/* Background: catches pan + click-to-add-point + dbl-click zoom reset */}
         <rect
           x={viewX}
           y={viewY}
@@ -270,14 +284,21 @@ export function LayupMappingChart({
                 ? panningPointerId !== null
                   ? 'grabbing'
                   : 'grab'
-                : 'default',
+                : 'crosshair',
           }}
           onPointerDown={handleBgPointerDown}
           onPointerMove={handleBgPointerMove}
           onPointerUp={handleBgPointerUp}
           onPointerCancel={handleBgPointerUp}
+          onClick={handleBgClick}
           onDoubleClick={handleBgDoubleClick}
         />
+
+        {yUnit && (
+          <text x="6" y="12" fontSize="10" fill="#6b7280">
+            [{yUnit}]
+          </text>
+        )}
 
         {/* Y grid + labels */}
         {yTicks.map((v) => {
@@ -326,33 +347,48 @@ export function LayupMappingChart({
           );
         })}
 
-        {/* Static blade planform background */}
-        <path
-          d={BLADE_PATH}
-          fill="#f1f5f9"
-          stroke="#1e293b"
+        {/* Root indicator */}
+        <line
+          x1={rootPx}
+          y1={PAD_TOP}
+          x2={rootPx}
+          y2={VB_HEIGHT - PAD_BOTTOM}
+          stroke="#f59e0b"
           strokeWidth="1.5"
+          opacity="0.8"
           vectorEffect="non-scaling-stroke"
-          style={{ pointerEvents: 'none' }}
         />
 
-        {/* Closed polygon */}
-        <polygon
-          points={polygonPoints}
-          fill="rgba(0, 102, 204, 0.08)"
+        {/* Ghost curve — pre-drag snapshot, shown only while a point is being dragged */}
+        {draggingIndex !== null && preEditPointsRef.current && (
+          <path
+            d={catmullRomPath(preEditPointsRef.current, xMin, xMax, yMin, yMax)}
+            fill="none"
+            stroke="#22c55e"
+            strokeWidth="1.5"
+            strokeDasharray="4 3"
+            opacity="0.85"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+
+        {/* Active curve */}
+        <path
+          d={catmullRomPath(points, xMin, xMax, yMin, yMax)}
+          fill="none"
           stroke="#0066cc"
-          strokeWidth="2"
+          strokeWidth="2.5"
           vectorEffect="non-scaling-stroke"
-          style={{ pointerEvents: 'none' }}
         />
 
-        {/* Draggable control points */}
+        {/* Draggable anchors */}
         {points.map((p, idx) => {
           const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
           const isDragging = draggingIndex === idx;
+          const isEndpoint = idx === 0 || idx === points.length - 1;
           return (
             <g key={idx}>
-              {/* Invisible hit area */}
+              {/* Invisible hit area (larger than visible dot for easier grab) */}
               <circle
                 cx={cx}
                 cy={cy}
@@ -363,8 +399,11 @@ export function LayupMappingChart({
                 onPointerMove={(e) => handlePointerMove(idx, e)}
                 onPointerUp={(e) => handlePointerUp(idx, e)}
                 onPointerCancel={(e) => handlePointerUp(idx, e)}
+                onDoubleClick={(e) => handlePointDoubleClick(idx, e)}
               >
-                <title>Drag to move</title>
+                {!isEndpoint && (
+                  <title>Drag to move · Double-click to remove</title>
+                )}
               </circle>
               {/* Visible dot */}
               <circle

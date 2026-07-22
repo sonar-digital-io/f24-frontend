@@ -8,7 +8,7 @@
  * Plies with thickness=0 stay flat but keep a minimum Y gap.
  */
 
-import type { Ply } from '@/components/LayupBuilder';
+import type { Ply } from '@/components/layup/LayupBuilder';
 import { MATERIALS } from '@/data/materials';
 
 const BIAXIAL_TYPES = new Set(['Biaxial Ply (±45°)']);

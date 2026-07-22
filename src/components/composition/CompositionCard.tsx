@@ -1,5 +1,5 @@
-import { BladeThumbnail } from '@/components/BladeThumbnail';
-import { CardMenu } from '@/components/CardMenu';
+import { BladeThumbnail } from '@/components/common/BladeThumbnail';
+import { CardMenu } from '@/components/common/CardMenu';
 import type { Composition } from '@/data/compositions';
 
 interface CompositionCardProps {

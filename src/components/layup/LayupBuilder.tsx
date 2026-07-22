@@ -3,10 +3,10 @@ import { ChevronDown, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlyStackViz } from '@/components/PlyStackViz';
-import { BufferedNumberInput } from '@/components/BufferedNumberInput';
+import { PlyStackViz } from '@/components/layup/PlyStackViz';
+import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
 import { nextLocalId } from '@/lib/utils';
-import { MaterialPickerDialog } from '@/components/MaterialPickerDialog';
+import { MaterialPickerDialog } from '@/components/layup/MaterialPickerDialog';
 import { MATERIALS } from '@/data/materials';
 
 const MATERIAL_TYPE_COLORS: Record<string, string> = {

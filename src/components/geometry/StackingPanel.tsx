@@ -3,7 +3,8 @@ import { ChevronDown, ChevronUp, FoldHorizontal, Plus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BezierEditor, type ControlPoint } from '@/components/BezierEditor';
+import { BezierEditor, type ControlPoint } from '@/components/common/BezierEditor';
+import { applyXConstraints, clamp } from '@/lib/bezierMath';
 
 type SectionKey = 'sweep' | 'dihedral' | 'twist' | 'chord';
 
@@ -70,18 +71,6 @@ const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
     { x: 1, y: 0.9 },
   ],
 };
-
-function applyXConstraints(points: ControlPoint[], idx: number, nextX: number): number {
-  if (idx === 0) return 0;
-  if (idx === points.length - 1) return 1;
-  const minX = points[idx - 1].x + 0.001;
-  const maxX = points[idx + 1].x - 0.001;
-  return Math.max(minX, Math.min(maxX, nextX));
-}
-
-function clamp(v: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, v));
-}
 
 interface StackingPanelProps {
   folded: boolean;

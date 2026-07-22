@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Layout } from '@/components/Layout';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { Layout } from '@/components/common/Layout';
 import { Home } from '@/pages/Home';
 import { Nurbs } from '@/pages/Nurbs';
 import { Composition } from '@/pages/Composition';

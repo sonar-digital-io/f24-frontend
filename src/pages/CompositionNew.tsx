@@ -1,102 +1,21 @@
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  GripVertical,
-  LayoutGrid,
-  List as ListIcon,
-  Plus,
-  Redo2,
-  Search,
-  Settings,
-  Spline,
-  Trash2,
-  Undo2,
-} from 'lucide-react';
-import { MainNav } from '@/components/MainNav';
-import { OccViewer } from '@/components/OccViewer';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Check, Redo2, Settings, Undo2 } from 'lucide-react';
+import { MainNav } from '@/components/common/MainNav';
+import { OccViewer } from '@/components/common/OccViewer';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GeometryCard } from '@/components/GeometryCard';
-import { LayupPickerDialog } from '@/components/LayupPickerDialog';
+import { LayupPickerDialog } from '@/components/composition/LayupPickerDialog';
 import {
   DEFAULT_MAPPING_POINTS,
   LayupMappingBezierDialog,
-} from '@/components/LayupMappingBezierDialog';
-import type { ControlPoint } from '@/components/BezierEditor';
-import { TransversalMappingSection } from '@/components/TransversalMappingSection';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipRoot, TooltipTrigger } from '@/components/ui/tooltip';
-import { GEOMETRIES } from '@/data/geometries';
-import { LAYUPS } from '@/data/layups';
+} from '@/components/composition/LayupMappingBezierDialog';
+import { TransversalMappingSection } from '@/components/composition/TransversalMappingSection';
+import { CoordinateGizmo, RenderToggle, type RenderMode } from '@/components/common/ViewerOverlayControls';
+import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
+import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
+import { LayupMappingTable, type LayupMapping } from '@/components/composition/LayupMappingTable';
 import { COMPOSITIONS, createComposition, updateComposition } from '@/data/compositions';
 import { nextLocalId } from '@/lib/utils';
-
-type RenderMode = 'solid' | 'wireframe';
-
-interface RenderToggleProps {
-  value: RenderMode;
-  onChange: (v: RenderMode) => void;
-}
-
-function CoordinateGizmo() {
-  return (
-    <svg viewBox="0 0 100 100" className="h-20 w-20" aria-hidden="true">
-      <line x1="50" y1="50" x2="50" y2="15" stroke="#16a34a" strokeWidth="2" />
-      <polygon points="50,10 46,18 54,18" fill="#16a34a" />
-      <text x="55" y="14" fontSize="9" fill="#16a34a">z</text>
-      <line x1="50" y1="50" x2="85" y2="50" stroke="#2563eb" strokeWidth="2" />
-      <polygon points="90,50 82,46 82,54" fill="#2563eb" />
-      <text x="80" y="64" fontSize="9" fill="#2563eb">y</text>
-      <line x1="50" y1="50" x2="22" y2="78" stroke="#dc2626" strokeWidth="2" />
-      <polygon points="18,82 26,80 22,72" fill="#dc2626" />
-      <text x="10" y="78" fontSize="9" fill="#dc2626">x</text>
-    </svg>
-  );
-}
-
-function RenderToggle({ value, onChange }: RenderToggleProps) {
-  return (
-    <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white/95 p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm">
-      {(['solid', 'wireframe'] as const).map((mode) => {
-        const active = value === mode;
-        return (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => onChange(mode)}
-            className={`inline-flex h-6 items-center gap-1 rounded px-2 text-[12px] font-medium capitalize ${
-              active ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-            }`}
-          >
-            {active && <Check className="h-3 w-3" strokeWidth={2.5} />}
-            {mode}
-          </button>
-        );
-      })}
-      <button
-        type="button"
-        aria-label="Render mode menu"
-        className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9]"
-      >
-        <ChevronDown className="h-3 w-3" strokeWidth={2} />
-      </button>
-    </div>
-  );
-}
-
-interface LayupMapping {
-  id: string;
-  name: string;
-  layupId: string | null;
-  /** Bezier curve edited in LayupMappingBezierDialog; undefined = default curve. */
-  points?: ControlPoint[];
-}
 
 const DEFAULT_UPPER_MAPPINGS: LayupMapping[] = [
   { id: 'u0', name: 'OUTER-SHELL', layupId: 'biax-skin-04' },
@@ -109,223 +28,6 @@ const DEFAULT_LOWER_MAPPINGS: LayupMapping[] = [
   { id: 'l1', name: 'MID-SHELL copy',   layupId: 'biax-skin-08' },
   { id: 'l2', name: 'INNER-SHELL copy', layupId: 'hyb-trans-12' },
 ];
-
-interface LayupMappingTableProps {
-  title: string;
-  copyLabel: string;
-  mappings: LayupMapping[];
-  activeMappingId?: string | null;
-  onAdd: () => void;
-  onDelete: (id: string) => void;
-  onUpdate: (id: string, next: Partial<LayupMapping>) => void;
-  onCopy: () => void;
-  onDuplicate: (id: string) => void;
-  onOpenBezier: (id: string) => void;
-  onReorder: (fromIdx: number, toIdx: number) => void;
-  onPickLayup: (mappingId: string) => void;
-}
-
-function LayupMappingTable({
-  title,
-  copyLabel,
-  mappings,
-  activeMappingId,
-  onAdd,
-  onDelete,
-  onUpdate,
-  onCopy,
-  onDuplicate,
-  onOpenBezier,
-  onReorder,
-  onPickLayup,
-}: LayupMappingTableProps) {
-  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
-  const [insertBeforeIdx, setInsertBeforeIdx] = useState<number | null>(null);
-  const dragFromHandleRef = useRef<string | null>(null);
-
-  function handleDragStart(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
-    setDraggingIdx(idx);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(idx));
-  }
-  function handleDragOver(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = e.currentTarget.getBoundingClientRect();
-    const newInsert = e.clientY < rect.top + rect.height / 2 ? idx : idx + 1;
-    if (insertBeforeIdx !== newInsert) setInsertBeforeIdx(newInsert);
-  }
-  function handleDragLeave() {
-    setInsertBeforeIdx(null);
-  }
-  function handleDrop(e: React.DragEvent<HTMLTableRowElement>) {
-    e.preventDefault();
-    const fromIdx = Number(e.dataTransfer.getData('text/plain'));
-    if (insertBeforeIdx !== null && !Number.isNaN(fromIdx) && insertBeforeIdx !== fromIdx && insertBeforeIdx !== fromIdx + 1) {
-      const toIdx = insertBeforeIdx > fromIdx ? insertBeforeIdx - 1 : insertBeforeIdx;
-      onReorder(fromIdx, toIdx);
-    }
-    setDraggingIdx(null);
-    setInsertBeforeIdx(null);
-  }
-  function handleDragEnd() {
-    dragFromHandleRef.current = null;
-    setDraggingIdx(null);
-    setInsertBeforeIdx(null);
-  }
-
-  return (
-    <TooltipProvider>
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[16px] font-semibold leading-6 text-[#0a0a0a]">{title}</h3>
-        <button
-          type="button"
-          onClick={onCopy}
-          className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
-        >
-          {copyLabel}
-        </button>
-      </div>
-      <table className="w-full border-collapse text-[13px]">
-        <thead>
-          <tr className="border-b border-[#e5e7eb]">
-            <th className="h-8 w-9 px-2" />
-            <th className="h-8 w-12 px-2 text-left font-medium text-[#6b7280]">Index</th>
-            <th className="h-8 px-2 text-left font-medium text-[#6b7280]">Name</th>
-            <th className="h-8 w-[150px] px-2 text-left font-medium text-[#6b7280]">Layup</th>
-            <th className="h-8 w-[120px] px-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {mappings.flatMap((m, idx) => {
-            const layupLabel = LAYUPS.find((l) => l.id === m.layupId)?.name;
-            const isDragging = draggingIdx === idx;
-            const insertLine = (key: string) => (
-              <tr key={key} className="pointer-events-none">
-                <td colSpan={5} className="p-0">
-                  <div className="mx-2 h-0.5 rounded-full bg-[#006496]" />
-                </td>
-              </tr>
-            );
-            const row = (
-              <tr
-                key={m.id}
-                draggable
-                onDragStart={(e) => {
-                  if (dragFromHandleRef.current !== m.id) {
-                    e.preventDefault();
-                    return;
-                  }
-                  handleDragStart(idx, e);
-                }}
-                onDragOver={(e) => handleDragOver(idx, e)}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onDragEnd={handleDragEnd}
-                className={`group border-b border-[#e5e7eb] last:border-b-0 transition-colors ${
-                  isDragging ? 'opacity-40' : ''
-                } ${activeMappingId === m.id ? 'bg-[#eef9ff]' : ''}`}
-              >
-                <td className="px-2 py-2 align-middle">
-                  <span
-                    aria-label="Drag handle"
-                    onMouseDown={() => { dragFromHandleRef.current = m.id; }}
-                    onMouseUp={() => { dragFromHandleRef.current = null; }}
-                    className="flex h-7 w-7 cursor-grab items-center justify-center text-[#cbd5e1] opacity-0 transition-opacity hover:text-[#0a0a0a] active:cursor-grabbing group-hover:opacity-100"
-                  >
-                    <GripVertical className="h-4 w-4" strokeWidth={2} />
-                  </span>
-                </td>
-                <td className="px-2 py-2 text-[#0a0a0a]">{idx}</td>
-                <td className="px-2 py-2">
-                  <TooltipRoot delayDuration={400}>
-                    <TooltipTrigger asChild>
-                      <Input
-                        value={m.name}
-                        onChange={(e) => onUpdate(m.id, { name: e.target.value })}
-                        placeholder="Placeholder"
-                        className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] text-ellipsis"
-                      />
-                    </TooltipTrigger>
-                    {m.name && <TooltipContent>{m.name}</TooltipContent>}
-                  </TooltipRoot>
-                </td>
-                <td className="px-2 py-2">
-                  <button
-                    type="button"
-                    onClick={() => onPickLayup(m.id)}
-                    className={`flex h-8 w-full items-center justify-between gap-2 rounded-md border border-[#e2e8f0] bg-white px-2 py-1 text-left text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f9fafb] ${
-                      layupLabel ? 'text-[#0a0a0a]' : 'text-[#6b7280]'
-                    }`}
-                  >
-                    <span className="truncate">{layupLabel ?? 'Select'}</span>
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={1.5} />
-                  </button>
-                </td>
-                <td className="px-2 py-2">
-                  <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                    <Tooltip content="Edit mapping">
-                      <button
-                        type="button"
-                        onClick={() => onOpenBezier(m.id)}
-                        aria-label="Open mapping bezier view"
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                      >
-                        <Spline className="h-3.5 w-3.5" strokeWidth={2} />
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="Duplicate">
-                      <button
-                        type="button"
-                        onClick={() => onDuplicate(m.id)}
-                        aria-label="Duplicate mapping"
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                      >
-                        <Copy className="h-3.5 w-3.5" strokeWidth={2} />
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="Delete">
-                      <button
-                        type="button"
-                        onClick={() => onDelete(m.id)}
-                        aria-label="Delete mapping"
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#fef2f2] hover:text-[#dc2626]"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
-                      </button>
-                    </Tooltip>
-                  </div>
-                </td>
-              </tr>
-            );
-            const result = [];
-            if (draggingIdx !== null && insertBeforeIdx === idx) result.push(insertLine(`insert-before-${idx}`));
-            result.push(row);
-            if (draggingIdx !== null && idx === mappings.length - 1 && insertBeforeIdx === mappings.length) result.push(insertLine('insert-end'));
-            return result;
-          })}
-          {mappings.length === 0 && (
-            <tr>
-              <td colSpan={5} className="px-2 py-4 text-center text-[12px] text-[#6b7280]">
-                No mappings yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      <button
-        type="button"
-        onClick={onAdd}
-        className="inline-flex h-8 items-center gap-2 self-start rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-      >
-        <Plus className="h-4 w-4" strokeWidth={2} />
-        Add layup mapping
-      </button>
-    </div>
-    </TooltipProvider>
-  );
-}
 
 export function CompositionNew() {
   const navigate = useNavigate();
@@ -438,13 +140,6 @@ export function CompositionNew() {
     }
     navigate('/composition');
   }
-
-  const filteredGeometries = GEOMETRIES.filter(
-    (g) =>
-      !geomQuery.trim() ||
-      g.name.toLowerCase().includes(geomQuery.trim().toLowerCase()) ||
-      g.description.toLowerCase().includes(geomQuery.trim().toLowerCase())
-  );
 
   function addUpper() {
     setUpperMappings((arr) => [
@@ -561,183 +256,28 @@ export function CompositionNew() {
            behind receives orbit/zoom events; each panel restores pointer-events */}
       <div className="pointer-events-none absolute bottom-4 left-4 right-4 top-[60px]">
         {activeTab === 'general' && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleGeneralSubmit();
-            }}
-            className="pointer-events-auto flex w-full max-w-[468px] flex-col gap-4 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm [max-height:calc(100vh-145px)]"
-          >
-            <div className="flex w-full flex-col gap-2">
-              <Label htmlFor="comp-name" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                Name<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Input
-                id="comp-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                placeholder="Name the composition"
-                className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-
-            <div className="flex w-full flex-col gap-2">
-              <Label htmlFor="comp-description" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                Description<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Textarea
-                id="comp-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                required
-                rows={3}
-                placeholder="Placeholder"
-                className="min-h-[76px] rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="comp-solid-core"
-                  checked={solidCore}
-                  onCheckedChange={(c) => setSolidCore(Boolean(c))}
-                  className="size-4 rounded border-[#e2e8f0] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
-                />
-                <Label htmlFor="comp-solid-core" className="cursor-pointer text-[14px] font-medium text-[#0a0a0a]">
-                  Solid core
-                </Label>
-              </div>
-              <button
-                type="button"
-                disabled={!solidCore}
-                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Select material
-                <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
-              </button>
-            </div>
-
-            <div className="flex w-full flex-col gap-2">
-              <Label htmlFor="comp-target-weight" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                Target weight (kg)
-              </Label>
-              <Input
-                id="comp-target-weight"
-                value={targetWeight}
-                onChange={(e) => setTargetWeight(e.target.value)}
-                placeholder="Placeholder"
-                className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-              <p className="text-[14px] leading-5 text-[#6b7280]">
-                Helper text: explain why is it important to add the target weight and what are the risks
-                of a miscalculated weight
-              </p>
-            </div>
-          </form>
+          <CompositionGeneralTab
+            name={name}
+            onNameChange={setName}
+            description={description}
+            onDescriptionChange={setDescription}
+            solidCore={solidCore}
+            onSolidCoreChange={setSolidCore}
+            targetWeight={targetWeight}
+            onTargetWeightChange={setTargetWeight}
+            onSubmit={handleGeneralSubmit}
+          />
         )}
 
         {activeTab === 'geometry' && (
-          <div className="pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Geometries</h2>
-              <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
-                <button
-                  type="button"
-                  onClick={() => setGeomView('list')}
-                  aria-label="List view"
-                  aria-pressed={geomView === 'list'}
-                  className={`flex h-7 w-7 items-center justify-center rounded ${
-                    geomView === 'list'
-                      ? 'bg-[#eef9ff] text-[#171717]'
-                      : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <ListIcon className="h-4 w-4" strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGeomView('grid')}
-                  aria-label="Grid view"
-                  aria-pressed={geomView === 'grid'}
-                  className={`flex h-7 w-7 items-center justify-center rounded ${
-                    geomView === 'grid'
-                      ? 'bg-[#eef9ff] text-[#171717]'
-                      : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <LayoutGrid className="h-4 w-4" strokeWidth={2} />
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 max-w-[384px]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
-                <Input
-                  value={geomQuery}
-                  onChange={(e) => setGeomQuery(e.target.value)}
-                  placeholder="Placeholder"
-                  className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
-                />
-              </div>
-            </div>
-
-            {geomView === 'grid' ? (
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                {filteredGeometries.map((g) => (
-                  <GeometryCard
-                    key={g.id}
-                    geometry={g}
-                    onClick={() => setSelectedGeometryId(g.id)}
-                    selected={selectedGeometryId === g.id}
-                    showMenu={false}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 overflow-hidden rounded-md border border-[#e5e7eb]">
-                <table className="w-full border-separate border-spacing-0 text-[14px]">
-                  <thead>
-                    <tr>
-                      <th className="h-10 w-[240px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                        Name
-                      </th>
-                      <th className="h-10 border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                        Description
-                      </th>
-                      <th className="h-10 w-[160px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                        Last updated
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredGeometries.map((g, idx) => {
-                      const isLast = idx === filteredGeometries.length - 1;
-                      const isSelected = selectedGeometryId === g.id;
-                      const cellBorder = isLast || isSelected ? '' : 'border-b border-[#e5e7eb]';
-                      return (
-                        <tr
-                          key={g.id}
-                          onClick={() => setSelectedGeometryId(g.id)}
-                          className={`cursor-pointer ${
-                            isSelected
-                              ? 'bg-[#eef9ff] shadow-[inset_2px_0_0_#006496]'
-                              : 'hover:bg-[#f9fafb]'
-                          }`}
-                        >
-                          <td className={`px-3 py-3 font-medium text-[#0a0a0a] ${cellBorder}`}>{g.name}</td>
-                          <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>{g.description}</td>
-                          <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>{g.lastUpdated}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <CompositionGeometryTab
+            geomQuery={geomQuery}
+            onGeomQueryChange={setGeomQuery}
+            geomView={geomView}
+            onGeomViewChange={setGeomView}
+            selectedGeometryId={selectedGeometryId}
+            onSelectGeometry={setSelectedGeometryId}
+          />
         )}
 
         {/* Always mounted — hidden instead of unmounted so mapping state survives tab switches */}

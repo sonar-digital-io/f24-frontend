@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { MainNav } from '@/components/MainNav';
-import { Footer } from '@/components/Footer';
+import { MainNav } from '@/components/common/MainNav';
+import { Footer } from '@/components/common/Footer';
 
 interface RecentItemProps {
   name: string;

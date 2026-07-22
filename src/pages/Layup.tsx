@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Copy, Download, Pencil, Search, Trash2 } from 'lucide-react';
-import { MainNav } from '@/components/MainNav';
-import { Footer } from '@/components/Footer';
+import { MainNav } from '@/components/common/MainNav';
+import { Footer } from '@/components/common/Footer';
 import {
   Pagination,
   SortableHeader,
   rowInteractionProps,
   toggleSort,
   type SortState,
-} from '@/components/ListTable';
+} from '@/components/common/ListTable';
 import { Input } from '@/components/ui/input';
 import { LAYUPS } from '@/data/layups';
 

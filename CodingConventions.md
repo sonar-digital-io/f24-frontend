@@ -53,28 +53,32 @@ Ez a dokumentum a projekt belső mérnöki kézikönyve — nem README, nem felh
 
 ```
 src/
-├── components/       # Újrahasználható UI komponensek és feature panelek
+├── components/
+│   ├── common/       # 2+ feature által ténylegesen használt, valóban megosztott komponensek
+│   ├── <feature>/    # pl. calculation/, load-group/, composition/, geometry/, layup/, material/, nurbs/
 │   └── ui/           # shadcn/ui primitívek — ne módosítsd közvetlenül
 ├── pages/            # Route-hoz kötött oldalak, egy route = egy fő komponens
 ├── data/             # Mock adat + a hozzá tartozó domain típusok (típusos export)
-├── lib/              # Framework-független segédkód (utils, OCC init)
+├── lib/              # Framework-független segédkód (utils, OCC init, geometria/bezier matek)
 ├── App.tsx           # Router konfiguráció
 ├── main.tsx          # Belépési pont
 └── index.css         # Tailwind direktívák + CSS változók
 ```
 
-- **`components/`**: bármely komponens, amit több page vagy több hely használ, vagy amit önmagában tisztább külön fájlban tartani (még ha jelenleg csak egy page hívja is, pl. `StackingPanel.tsx`).
-- **`components/ui/`**: kizárólag shadcn/ui generált primitívek — új elem `npx shadcn add <name>` paranccsal, kézi módosítás nélkül.
-- **`pages/`**: route-onként egy fájl, ami maga rendereli a saját layoutját (`MainNav` + `Footer`) — lásd `CLAUDE.md`.
+- **`components/<feature>/`**: egy adott route/domain (pl. `calculation/`, `geometry/`) komponensei — tab-tartalmak, dialógusok, panel-specifikus segédkomponensek (pl. egy panel privát `Select`/`Switch` másolata). Az, hogy egy komponens melyik feature-mappába kerül, a **tényleges fogyasztóján** (ki importálja) múlik, nem a fájlnéven — pl. `MaterialPickerDialog.tsx` a `layup/`-ban van, mert kizárólag a `LayupBuilder.tsx` használja, annak ellenére, hogy a neve "Material"-lal kezdődik.
+- **`components/common/`**: kizárólag azok a komponensek, amiket **2+ feature-mappa** ténylegesen importál (pl. `MainNav`, `Footer`, `OccViewer`, `BezierEditor`, `ListTable`, `GeometryCard`). Ha valami csak egyetlen feature-ön belül több fájl között oszlik meg, az a feature saját mappájában marad, nem a `common/`-ban.
+- **`components/ui/`**: kizárólag shadcn/ui generált primitívek, feature-mappáktól függetlenül — új elem `npx shadcn add <name>` paranccsal, kézi módosítás nélkül.
+- **`pages/`**: route-onként egy fájl, ami maga rendereli a saját layoutját (`MainNav` + `Footer`) — lásd `CLAUDE.md`. A `pages/` maga nem bontott feature-mappákra, mivel route-onként eleve egyértelmű a hovatartozás.
 - **`data/`**: mock adat típusos formában, API-hívásra cserélhető shape-pel — ez a projekt jelenlegi "adatréteg" helyettesítője.
-- **`lib/`**: tisztán funkcionális, React-független segédkód (`utils.ts`, `occ-init.ts`).
+- **`lib/`**: tisztán funkcionális, React-független segédkód (`utils.ts`, `occ-init.ts`, `bezierMath.ts`, `loftGeometry.ts`, `crossSectionGeometry.ts`).
 - Nincs külön `hooks/`, `services/`, `types/`, `three/` mappa — ha egy jövőbeli feladat során 3+ komponens osztozna egy custom hookon, vagy a domain típusok kinőnék a `data/`-t, ekkor érdemes ezeket a mappákat bevezetni, de **ne hozd létre előre, üresen**, csak amikor tényleges tartalom indokolja (YAGNI).
 
 ## Feature-szervezés
 
-- A jelenlegi lapos struktúra (nem `features/xyz/` almappák) tudatos döntés — egy route/feature komponensei a nevükön keresztül (prefix, pl. `Layup*`, `Composition*`) vannak logikailag összekötve, nem mappahatárral.
-- Ha egy feature annyira megnő, hogy 5+ komponens, saját hook-ok és saját típusok tartoznak hozzá, és **egyik eleme sem használt máshol**, fontold meg egy `features/<name>/` almappa bevezetését saját `components/`, `hooks/`, `types.ts` alstruktúrával — de ezt csak konkrét, már létező kód átrendezéseként tedd, ne előre üres vázként.
-- Amíg egy feature kicsi (1-3 komponens), maradjon a meglévő lapos `components/`/`pages/`/`data/` mintában — a korai szétaprózás plusz navigációs overheadet ad hozzáadott érték nélkül.
+- A `components/` feature-mappákra van bontva (`calculation/`, `load-group/`, `composition/`, `geometry/`, `layup/`, `material/`, `nurbs/`, `common/`) — ez tudatos, végrehajtott döntés, nem csak jövőbeli lehetőség. Új komponens létrehozásakor mindig döntsd el, melyik feature-mappába tartozik a **fogyasztója** alapján (grep-eld ki, ki importálja), ne a név alapján.
+- **Új komponens elhelyezése**: ha csak egy feature-ön belüli fájl(ok) használják, abba a feature-mappába kerül. Ha a létrehozáskor még bizonytalan, hogy 2+ feature fogja-e használni, kezdd a valószínűbb feature-mappában, és told át `common/`-ba csak akkor, amikor egy második feature ténylegesen importálni kezdi — ne tegyél előre mindent `common/`-ba "biztos, ami biztos" alapon (YAGNI).
+- Egy feature-mappán belül nincs további almappázás (pl. nincs `components/geometry/panels/`, `components/geometry/dialogs/`) — egy szint elég, amíg egy feature-mappa nem nő 15+ fájlra; ha ez bekövetkezik, az egy külön, tudatos döntést igénylő további bontás lenne, nem alapértelmezés.
+- `pages/` marad lapos — a route-hoz kötött oldalak (pl. `CalculationNew.tsx`, `GeometryEdit.tsx`) nem kerülnek a saját feature-mappájukba, mivel a fájlnév/route már egyértelművé teszi a hovatartozást, és a page mindig csak a saját feature-mappájából importál.
 
 ## Komponens irányelvek
 

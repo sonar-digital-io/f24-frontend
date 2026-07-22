@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Maximize2, Minimize2, Plus, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { LayupMappingChart, type ControlPoint } from '@/components/LayupMappingChart';
+import { LayupMappingChart, type ControlPoint } from '@/components/composition/LayupMappingChart';
+import { clamp } from '@/lib/bezierMath';
 
 /** Layup mapping bezier: longitudinal (m) along x, transversal (m) along y.
  *  X range 5..55 m, Y range -14..0 m (default — caller can override). */
@@ -34,10 +35,6 @@ const DIALOG_CHROME = 24 + 36 + 16 + 24; // p-6 top + title + gap-4 + p-6 bottom
 function calcMinH(rowCount: number) {
   const tableH = TABLE_HEAD_H + rowCount * TABLE_ROW_H + TABLE_ADD_BTN_H;
   return Math.max(MIN_H_FLOOR, DIALOG_CHROME + Math.max(BEZIER_H, tableH));
-}
-
-function clamp(v: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, v));
 }
 
 /** Keep a point's x between its neighbours (endpoints stay put) so the table

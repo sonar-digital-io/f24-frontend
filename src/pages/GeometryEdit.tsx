@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Settings, Check, Undo2, Redo2 } from 'lucide-react';
-import { MainNav } from '@/components/MainNav';
-import { OccViewer } from '@/components/OccViewer';
-import { ProfileDistributionPanel } from '@/components/ProfileDistributionPanel';
-import { ProfilesPanel } from '@/components/ProfilesPanel';
-import { StackingPanel } from '@/components/StackingPanel';
+import { Settings, Check, Undo2, Redo2 } from 'lucide-react';
+import { MainNav } from '@/components/common/MainNav';
+import { OccViewer } from '@/components/common/OccViewer';
+import { ProfileDistributionPanel } from '@/components/geometry/ProfileDistributionPanel';
+import { ProfilesPanel } from '@/components/geometry/ProfilesPanel';
+import { StackingPanel } from '@/components/geometry/StackingPanel';
+import { CoordinateGizmo, RenderToggle, type RenderMode } from '@/components/common/ViewerOverlayControls';
+import { Select, Tip, FormField } from '@/components/geometry/GeometryEditControls';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,174 +24,10 @@ const MANUFACTURING_TECHNOLOGIES = [
   'Resin transfer moulding',
 ];
 
-type RenderMode = 'solid' | 'wireframe';
-
 interface GlobalProperties {
   nominalRadius: string;
   rootRadius: string;
   stackingReference: string;
-}
-
-interface SelectProps {
-  value: string;
-  onChange: (value: string) => void;
-  options: readonly string[];
-  placeholder?: string;
-  disabled?: boolean;
-}
-
-function Select({ value, onChange, options, placeholder = 'Select', disabled = false }: SelectProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => !disabled && setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={disabled}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-[#e2e8f0] bg-white px-3 py-1 text-left text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <span className={value ? 'text-[#0a0a0a]' : 'text-[#6b7280]'}>{value || placeholder}</span>
-        <ChevronDown
-          className={`h-4 w-4 text-[#6b7280] transition-transform ${open ? 'rotate-180' : ''}`}
-          strokeWidth={2}
-        />
-      </button>
-      {open && (
-        <ul
-          role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-64 overflow-y-auto rounded-md border border-[#e5e7eb] bg-white py-1 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"
-        >
-          {options.map((opt) => {
-            const selected = opt === value;
-            return (
-              <li key={opt} role="option" aria-selected={selected}>
-                <button
-                  type="button"
-                  onClick={() => { onChange(opt); setOpen(false); }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-[14px] leading-5 ${
-                    selected ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <span>{opt}</span>
-                  {selected && <Check className="h-4 w-4" strokeWidth={2} />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function CoordinateGizmo() {
-  return (
-    <svg viewBox="0 0 100 100" className="h-20 w-20" aria-hidden="true">
-      {/* Z axis (up, green) */}
-      <line x1="50" y1="50" x2="50" y2="15" stroke="#16a34a" strokeWidth="2" />
-      <polygon points="50,10 46,18 54,18" fill="#16a34a" />
-      <text x="55" y="14" fontSize="9" fill="#16a34a">z</text>
-      {/* Y axis (right, blue) */}
-      <line x1="50" y1="50" x2="85" y2="50" stroke="#2563eb" strokeWidth="2" />
-      <polygon points="90,50 82,46 82,54" fill="#2563eb" />
-      <text x="80" y="64" fontSize="9" fill="#2563eb">y</text>
-      {/* X axis (lower-left, red) */}
-      <line x1="50" y1="50" x2="22" y2="78" stroke="#dc2626" strokeWidth="2" />
-      <polygon points="18,82 26,80 22,72" fill="#dc2626" />
-      <text x="10" y="78" fontSize="9" fill="#dc2626">x</text>
-    </svg>
-  );
-}
-
-interface RenderToggleProps {
-  value: RenderMode;
-  onChange: (v: RenderMode) => void;
-}
-
-function RenderToggle({ value, onChange }: RenderToggleProps) {
-  return (
-    <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white/95 p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm">
-      {(['solid', 'wireframe'] as const).map((mode) => {
-        const active = value === mode;
-        return (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => onChange(mode)}
-            className={`inline-flex h-6 items-center gap-1 rounded px-2 text-[12px] font-medium capitalize ${
-              active ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-            }`}
-          >
-            {active && <Check className="h-3 w-3" strokeWidth={2.5} />}
-            {mode}
-          </button>
-        );
-      })}
-      <button
-        type="button"
-        aria-label="Render mode menu"
-        className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9]"
-      >
-        <ChevronDown className="h-3 w-3" strokeWidth={2} />
-      </button>
-    </div>
-  );
-}
-
-function Tip({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="group/tip relative">
-      {children}
-      {label && (
-        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1.5 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100">
-          {label}
-        </span>
-      )}
-    </div>
-  );
-}
-
-interface FormFieldProps {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}
-
-function FormField({ label, value, onChange }: FormFieldProps) {
-  const inputId = `geometry-field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-  return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor={inputId} className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-        {label}
-      </Label>
-      <Input
-        id={inputId}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-      />
-    </div>
-  );
 }
 
 export function GeometryEdit() {

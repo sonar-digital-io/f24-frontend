@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Check, Undo2, Redo2 } from 'lucide-react';
-import { MainNav } from '@/components/MainNav';
+import { MainNav } from '@/components/common/MainNav';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LayupBuilder } from '@/components/LayupBuilder';
+import { LayupBuilder } from '@/components/layup/LayupBuilder';
 import { LAYUPS, createLayup, updateLayup } from '@/data/layups';
 
 type LaminateArchitecture = 'even-symmetrical' | 'odd-symmetrical' | 'asymmetrical';
