@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Minus, Plus } from 'lucide-react';
-import type { ControlPoint } from '@/components/common/BezierEditor';
+import type { ControlPoint } from '@/types';
 import {
   VB_WIDTH,
   VB_HEIGHT,
@@ -13,8 +13,6 @@ import {
   pxToData,
   clamp,
 } from '@/lib/bezierMath';
-
-export type { ControlPoint };
 
 /**
  * Layup mapping chart — closed straight-line polygon over a static blade

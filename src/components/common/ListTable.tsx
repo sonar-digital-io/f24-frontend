@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { SortState } from '@/types';
 
 /**
  * Shared building blocks for the list pages (Material, Geometry, Layup,
@@ -9,13 +10,6 @@ import { cn } from '@/lib/utils';
  */
 
 // ─── Sorting ──────────────────────────────────────────────────────────────────
-
-export type SortDirection = 'asc' | 'desc';
-
-export interface SortState<K extends string = string> {
-  key: K;
-  direction: SortDirection;
-}
 
 /** Standard toggle: clicking the active column flips direction, a new column starts asc. */
 export function toggleSort<K extends string>(prev: SortState<K>, key: K): SortState<K> {

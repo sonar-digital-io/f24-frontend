@@ -9,14 +9,12 @@ import {
   Pagination,
   SortableHeader,
   toggleSort,
-  type SortState,
 } from '@/components/common/ListTable';
+import type { SortState, CalculationSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { CALCULATIONS, timestampValue } from '@/data/calculations';
 
 const PAGE_SIZE = 10;
-
-type SortKey = 'timestamp' | 'name';
 
 // ─── Filter checkbox ──────────────────────────────────────────────────────────
 
@@ -42,7 +40,7 @@ export function Calculation() {
   const navigate = useNavigate();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<SortKey>>({ key: 'timestamp', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<CalculationSortKey>>({ key: 'timestamp', direction: 'desc' });
   const [page, setPage] = useState(1);
 
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
@@ -143,7 +141,7 @@ export function Calculation() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  function handleSort(key: SortKey) {
+  function handleSort(key: CalculationSortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
 

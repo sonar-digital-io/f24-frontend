@@ -1,6 +1,5 @@
 import { Check, ChevronDown } from 'lucide-react';
-
-export type RenderMode = 'solid' | 'wireframe';
+import type { RenderMode } from '@/types';
 
 export interface RenderToggleProps {
   value: RenderMode;

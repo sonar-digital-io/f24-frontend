@@ -13,16 +13,15 @@ import { GEOMETRIES } from '@/data/geometries';
 import { COMPOSITIONS } from '@/data/compositions';
 import { CALCULATIONS, createCalculation, updateCalculation } from '@/data/calculations';
 import { FATIGUE_LOAD_GROUPS, FATIGUE_PAGE_SIZE } from '@/data/calculationFatigueLoadGroups';
-
-// ─── Shared types (also imported by the CalculationXTab components) ─────────
-
-export type Tab = 'general' | 'composition' | 'configuration' | 'load-group' | 'fatigue-profile';
-export type CompositionSubTab = 'geometries' | 'compositions';
-export type ConfigSection = 'aero' | 'debug' | 'modal' | 'structural' | 'postprocessing';
-export type CompListSortKey = 'name' | 'lastUpdated' | 'nominalRadius';
-export interface CompListSort { key: CompListSortKey; dir: 'asc' | 'desc' }
-export type LGSortKey = 'name' | 'lastUpdated' | 'createdBy';
-export interface LGSort { key: LGSortKey; dir: 'asc' | 'desc' }
+import type {
+  Tab,
+  CompositionSubTab,
+  ConfigSection,
+  CompListSortKey,
+  CompListSort,
+  LGSortKey,
+  LGSort,
+} from '@/types';
 
 // ─── Main component ───────────────────────────────────────────────────────────
 

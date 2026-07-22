@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useClickOutside } from '@/hooks/useClickOutside';
 
 export interface SelectProps {
   value: string;
@@ -14,23 +15,7 @@ export interface SelectProps {
 /** Custom dropdown select used by the GeometryEdit sub-panels. */
 export function Select({ value, onChange, options, placeholder = 'Select', disabled = false }: SelectProps) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  const rootRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
 
   return (
     <div ref={rootRef} className="relative">

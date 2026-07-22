@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { NURBSSurface } from 'three/examples/jsm/curves/NURBSSurface.js';
-
-type GeometryType = 'nurbs-wave' | 'nurbs-dome' | 'nurbs-saddle';
+import type { NurbsGeometryType } from '@/types';
 
 interface NurbsViewerProps {
   subdivisionsU: number;
@@ -11,10 +10,10 @@ interface NurbsViewerProps {
   showWireframe: boolean;
   showSurface: boolean;
   showControlPoints: boolean;
-  geometryType: GeometryType;
+  geometryType: NurbsGeometryType;
 }
 
-function generateControlPoints(type: GeometryType): THREE.Vector4[][] {
+function generateControlPoints(type: NurbsGeometryType): THREE.Vector4[][] {
   const controlPoints: THREE.Vector4[][] = [];
   const cpRows = 5;
   const cpCols = 5;

@@ -19,23 +19,21 @@ import {
   SortableHeader,
   rowInteractionProps,
   toggleSort,
-  type SortState,
 } from '@/components/common/ListTable';
+import type { SortState, ViewMode, GeometrySortKey } from '@/types';
 import { FilterCheckbox, Tip } from '@/components/common/ListFilterControls';
 import { Input } from '@/components/ui/input';
 import { GeometryCard } from '@/components/common/GeometryCard';
 import { GEOMETRIES } from '@/data/geometries';
 
 const PAGE_SIZE = 10;
-type ViewMode = 'list' | 'grid';
-type SortKey = 'name' | 'nominalRadius' | 'lastUpdated';
 
 export function Geometry() {
   const navigate = useNavigate();
   const location = useLocation();
   const [view, setView] = useState<ViewMode>('list');
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<SortKey>>({ key: 'lastUpdated', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<GeometrySortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [typeOpen, setTypeOpen] = useState(false);
@@ -133,7 +131,7 @@ export function Geometry() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  function handleSort(key: SortKey) {
+  function handleSort(key: GeometrySortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
 

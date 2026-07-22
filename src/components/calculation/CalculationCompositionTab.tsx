@@ -6,7 +6,7 @@ import { GEOMETRIES } from '@/data/geometries';
 import { COMPOSITIONS } from '@/data/compositions';
 import type { Geometry } from '@/data/geometries';
 import type { Composition } from '@/data/compositions';
-import type { CompositionSubTab, CompListSort, CompListSortKey } from '@/pages/CalculationNew';
+import type { CompositionSubTab, CompListSort, CompListSortKey } from '@/types';
 
 interface CompListSortableHeaderProps {
   label: string;

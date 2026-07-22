@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
+import { useClickOutside } from '@/hooks/useClickOutside';
 
 export interface ProfilesPanelSelectProps {
   value: string;
@@ -10,23 +11,7 @@ export interface ProfilesPanelSelectProps {
 /** Custom dropdown select used by the ProfilesPanel detail popover (Type field). */
 export function ProfilesPanelSelect({ value, onChange, options }: ProfilesPanelSelectProps) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  const rootRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
 
   return (
     <div ref={rootRef} className="relative">

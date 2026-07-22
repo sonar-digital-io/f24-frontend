@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import type { ControlPoint } from '@/types';
 import { BezierZoomControls } from '@/components/common/BezierZoomControls';
 import {
   VB_WIDTH,
@@ -32,11 +33,6 @@ import {
  * - While dragging an anchor, the green dashed curve shows where the curve
  *   was BEFORE the drag started. It vanishes the moment you release.
  */
-
-export interface ControlPoint {
-  x: number; // data units
-  y: number; // data units
-}
 
 export interface BezierEditorProps {
   points: ControlPoint[];

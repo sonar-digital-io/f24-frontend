@@ -2,7 +2,7 @@ import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'reac
 import { ChevronDown } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { TagSelect } from '@/components/calculation/TagSelect';
-import type { ConfigSection } from '@/pages/CalculationNew';
+import type { ConfigSection } from '@/types';
 
 interface LimitsEnabled {
   thrust: boolean;

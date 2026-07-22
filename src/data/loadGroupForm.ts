@@ -1,4 +1,4 @@
-import type { ControlPoint } from '@/components/common/BezierEditor';
+import type { ControlPoint } from '@/types';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

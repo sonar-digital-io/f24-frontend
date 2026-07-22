@@ -8,14 +8,12 @@ import {
   SortableHeader,
   rowInteractionProps,
   toggleSort,
-  type SortState,
 } from '@/components/common/ListTable';
+import type { SortState, LayupSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { LAYUPS } from '@/data/layups';
 
 const PAGE_SIZE = 10;
-
-type SortKey = 'name' | 'lastUpdated';
 
 function Tip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -31,7 +29,7 @@ function Tip({ label, children }: { label: string; children: React.ReactNode }) 
 export function Layup() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<SortKey>>({ key: 'name', direction: 'asc' });
+  const [sort, setSort] = useState<SortState<LayupSortKey>>({ key: 'name', direction: 'asc' });
   const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
@@ -57,7 +55,7 @@ export function Layup() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  function handleSort(key: SortKey) {
+  function handleSort(key: LayupSortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
 

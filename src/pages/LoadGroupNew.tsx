@@ -8,7 +8,7 @@ import { LoadGroupLoadCasesTab } from '@/components/load-group/LoadGroupLoadCase
 import { LoadGroupLimitsTab } from '@/components/load-group/LoadGroupLimitsTab';
 import { LoadGroupFatigueProfilesTab } from '@/components/load-group/LoadGroupFatigueProfilesTab';
 import { LoadCasePickerDialog } from '@/components/load-group/LoadCasePickerDialog';
-import type { ControlPoint } from '@/components/common/BezierEditor';
+import type { ControlPoint } from '@/types';
 import { LOAD_GROUPS, createLoadGroup, updateLoadGroup } from '@/data/loadGroups';
 import {
   EXISTING_FATIGUE_PROFILES,

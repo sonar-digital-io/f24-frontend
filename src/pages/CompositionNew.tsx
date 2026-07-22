@@ -10,7 +10,8 @@ import {
   LayupMappingBezierDialog,
 } from '@/components/composition/LayupMappingBezierDialog';
 import { TransversalMappingSection } from '@/components/composition/TransversalMappingSection';
-import { CoordinateGizmo, RenderToggle, type RenderMode } from '@/components/common/ViewerOverlayControls';
+import { CoordinateGizmo, RenderToggle } from '@/components/common/ViewerOverlayControls';
+import type { RenderMode } from '@/types';
 import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
 import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
 import { LayupMappingTable, type LayupMapping } from '@/components/composition/LayupMappingTable';

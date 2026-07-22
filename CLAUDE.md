@@ -94,10 +94,21 @@ src/
 │   ├── layups.ts                # Layup[] mock — Layup list page data
 │   ├── compositions.ts          # Composition[] mock — Composition list page data
 │   ├── loadGroups.ts            # LoadGroup[] mock — Load group list page data
-│   └── calculations.ts          # Calculation[] mock — Calculation list page data
+│   ├── loadGroupForm.ts         # LoadGroupNew megosztott form-típusok + mock adat (load case, fatigue profil)
+│   ├── calculations.ts          # Calculation[] mock — Calculation list page data
+│   └── calculationFatigueLoadGroups.ts # CalculationNew fatigue tab mock adat + típusok
+├── hooks/
+│   └── useClickOutside.ts       # Kattintás-kívülre/Escape dismiss logika — dropdownok/popoverek 2+ helyen megosztva
+├── types.ts                     # Cross-cutting, nem-domain UI-állapot típusok EGY fájlban, szekciónként rendezve
+│                                 # (ControlPoint, RenderMode, ViewMode, SortDirection/SortState<K>, CalculationNew
+│                                 # tab/sort típusai, minden lista oldal saját <Feature>SortKey uniója, GeometryType/
+│                                 # NurbsGeometryType) — domain entitások (Material, Geometry stb.) változatlanul data/-ban
 ├── lib/
-│   ├── utils.ts                 # cn(), slugify, uniqueId, todayISO segédfüggvények
-│   └── occ-init.ts              # OpenCascade.js WASM singleton inicializálás
+│   ├── utils/                   # cn, slugify, todayISO, uniqueId/nextLocalId — külön fájlban, index.ts barrel (@/lib/utils import változatlan)
+│   ├── occ-init.ts              # OpenCascade.js WASM singleton inicializálás
+│   ├── bezierMath.ts            # Bézier-görbe koordináta-transzformáció + interpoláció segédfüggvényei
+│   ├── loftGeometry.ts          # Loft mesh építés (Three.js geometria) — LoftViewer segédfüggvényei
+│   └── crossSectionGeometry.ts  # NACA/SVG keresztmetszet-geometria segédfüggvényei — CrossSectionDialog
 ├── App.tsx                      # Router konfiguráció
 ├── main.tsx                     # Belépési pont
 └── index.css                    # Tailwind direktívák + CSS változók

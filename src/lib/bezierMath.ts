@@ -1,4 +1,4 @@
-import type { ControlPoint } from '@/components/common/BezierEditor';
+import type { ControlPoint } from '@/types';
 
 /** Pure, framework-independent math helpers for `BezierEditor`'s data <-> pixel
  *  mapping and Catmull-Rom curve construction. */

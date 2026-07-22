@@ -5,8 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { ToggleBtn, StatBadge } from '@/components/nurbs/NurbsControls';
 import { ProfileEditor } from '@/components/nurbs/ProfileEditor';
-
-type GeometryType = 'nurbs-wave' | 'nurbs-dome' | 'nurbs-saddle' | 'loft';
+import type { GeometryType } from '@/types';
 
 const GEOMETRIES: { value: GeometryType; label: string }[] = [
   { value: 'nurbs-wave', label: 'NURBS Wave Surface' },

@@ -1,6 +1,6 @@
 import { Check, Play, Redo2, Undo2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { Tab } from '@/pages/CalculationNew';
+import type { Tab } from '@/types';
 
 const TRIGGER_CLS =
   'h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]';

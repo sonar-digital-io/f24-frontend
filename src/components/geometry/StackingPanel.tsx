@@ -3,7 +3,8 @@ import { ChevronDown, ChevronUp, FoldHorizontal, Plus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BezierEditor, type ControlPoint } from '@/components/common/BezierEditor';
+import { BezierEditor } from '@/components/common/BezierEditor';
+import type { ControlPoint } from '@/types';
 import { applyXConstraints, clamp } from '@/lib/bezierMath';
 
 type SectionKey = 'sweep' | 'dihedral' | 'twist' | 'chord';

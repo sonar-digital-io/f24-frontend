@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, X } from 'lucide-react';
-import { Pagination, SortableHeader, toggleSort, type SortState } from '@/components/common/ListTable';
+import { Pagination, SortableHeader, toggleSort } from '@/components/common/ListTable';
+import type { SortState } from '@/types';
 import { Input } from '@/components/ui/input';
 import { MATERIALS } from '@/data/materials';
 

@@ -18,8 +18,8 @@ import {
   Pagination,
   SortableHeader,
   toggleSort,
-  type SortState,
 } from '@/components/common/ListTable';
+import type { SortState, ViewMode, CompositionSortKey } from '@/types';
 import { FilterCheckbox, Tip } from '@/components/common/ListFilterControls';
 import { Input } from '@/components/ui/input';
 import { CompositionCard } from '@/components/composition/CompositionCard';
@@ -27,14 +27,11 @@ import { COMPOSITIONS } from '@/data/compositions';
 
 const PAGE_SIZE = 10;
 
-type ViewMode = 'list' | 'grid';
-type SortKey = 'name' | 'lastUpdated' | 'nominalRadius';
-
 export function Composition() {
   const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>('list');
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<SortKey>>({ key: 'name', direction: 'asc' });
+  const [sort, setSort] = useState<SortState<CompositionSortKey>>({ key: 'name', direction: 'asc' });
   const [page, setPage] = useState(1);
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [typeOpen, setTypeOpen] = useState(false);
@@ -120,7 +117,7 @@ export function Composition() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  function handleSort(key: SortKey) {
+  function handleSort(key: CompositionSortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
 

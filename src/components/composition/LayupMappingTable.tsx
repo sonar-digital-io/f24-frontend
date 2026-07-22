@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { LAYUPS } from '@/data/layups';
-import type { ControlPoint } from '@/components/common/BezierEditor';
+import type { ControlPoint } from '@/types';
 
 export interface LayupMapping {
   id: string;

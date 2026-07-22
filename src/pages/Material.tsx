@@ -11,8 +11,8 @@ import {
   Pagination,
   SortableHeader,
   toggleSort,
-  type SortState,
 } from '@/components/common/ListTable';
+import type { SortState, MaterialSortKey } from '@/types';
 import { FilterCheckbox } from '@/components/common/ListFilterControls';
 import { Input } from '@/components/ui/input';
 import { MATERIALS, lastUpdatedSortKey } from '@/data/materials';
@@ -27,8 +27,6 @@ function formatDateLabel(d: Date): string {
 }
 
 const PAGE_SIZE = 10;
-
-type SortKey = 'name' | 'type' | 'source' | 'lastUpdated';
 
 function parseLastUpdated(s: string): Date | null {
   const vMatch = s.match(/^v(\d{4})\/(\d{2})$/);
@@ -60,7 +58,7 @@ export function Material() {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
-  const [sort, setSort] = useState<SortState<SortKey>>({ key: 'lastUpdated', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<MaterialSortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -189,7 +187,7 @@ export function Material() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  function handleSort(key: SortKey) {
+  function handleSort(key: MaterialSortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
 

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Maximize2, Minimize2, Plus, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { LayupMappingChart, type ControlPoint } from '@/components/composition/LayupMappingChart';
+import { LayupMappingChart } from '@/components/composition/LayupMappingChart';
+import type { ControlPoint } from '@/types';
 import { clamp } from '@/lib/bezierMath';
 
 /** Layup mapping bezier: longitudinal (m) along x, transversal (m) along y.

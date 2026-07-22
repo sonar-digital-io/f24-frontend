@@ -8,14 +8,12 @@ import {
   SortableHeader,
   rowInteractionProps,
   toggleSort,
-  type SortState,
 } from '@/components/common/ListTable';
+import type { SortState, LoadGroupSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { LOAD_GROUPS, type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
 
 const PAGE_SIZE = 10;
-
-type SortKey = 'name' | 'lastUpdated';
 
 function Tip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -92,7 +90,7 @@ function LoadGroupRow({ item, onEdit }: LoadGroupRowProps) {
 export function LoadGroup() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<SortKey>>({ key: 'lastUpdated', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<LoadGroupSortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
 
   const filtered = useMemo(() => {
@@ -118,7 +116,7 @@ export function LoadGroup() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  function handleSort(key: SortKey) {
+  function handleSort(key: LoadGroupSortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
 

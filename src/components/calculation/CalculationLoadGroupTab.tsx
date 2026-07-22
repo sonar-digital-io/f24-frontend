@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUpDown, ChevronDown, ChevronUp, Filter, Search } from '
 import { Input } from '@/components/ui/input';
 import { Pagination } from '@/components/common/ListTable';
 import type { FatigueLoadGroup } from '@/data/calculationFatigueLoadGroups';
-import type { LGSort, LGSortKey } from '@/pages/CalculationNew';
+import type { LGSort, LGSortKey } from '@/types';
 
 interface LGSortableHeaderProps {
   label: string;

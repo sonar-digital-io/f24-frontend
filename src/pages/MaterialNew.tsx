@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Check, Undo2, Redo2 } from 'lucide-react';
 import { MainNav } from '@/components/common/MainNav';
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MECHANICAL_SECTIONS, FATIGUE_SECTIONS } from '@/data/materialFormFields';
 import { MATERIALS, createMaterial, updateMaterial } from '@/data/materials';
+import { useClickOutside } from '@/hooks/useClickOutside';
 
 const MATERIAL_TYPES = [
   'UD ply',
@@ -30,25 +31,7 @@ interface SelectProps {
 
 function Select({ value, onChange, options, placeholder = 'Select…' }: SelectProps) {
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  const rootRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
 
   return (
     <div ref={rootRef} className="relative">

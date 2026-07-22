@@ -58,8 +58,10 @@ src/
 │   ├── <feature>/    # pl. calculation/, load-group/, composition/, geometry/, layup/, material/, nurbs/
 │   └── ui/           # shadcn/ui primitívek — ne módosítsd közvetlenül
 ├── pages/            # Route-hoz kötött oldalak, egy route = egy fő komponens
+├── hooks/            # 2+ komponens által ténylegesen megosztott custom hookok (pl. useClickOutside)
+├── types.ts          # Cross-cutting, nem-domain UI-állapot típusok EGY fájlban, szekciónként rendezve
 ├── data/             # Mock adat + a hozzá tartozó domain típusok (típusos export)
-├── lib/              # Framework-független segédkód (utils, OCC init, geometria/bezier matek)
+├── lib/              # Framework-független segédkód (utils/, OCC init, geometria/bezier matek)
 ├── App.tsx           # Router konfiguráció
 ├── main.tsx          # Belépési pont
 └── index.css         # Tailwind direktívák + CSS változók
@@ -70,8 +72,13 @@ src/
 - **`components/ui/`**: kizárólag shadcn/ui generált primitívek, feature-mappáktól függetlenül — új elem `npx shadcn add <name>` paranccsal, kézi módosítás nélkül.
 - **`pages/`**: route-onként egy fájl, ami maga rendereli a saját layoutját (`MainNav` + `Footer`) — lásd `CLAUDE.md`. A `pages/` maga nem bontott feature-mappákra, mivel route-onként eleve egyértelmű a hovatartozás.
 - **`data/`**: mock adat típusos formában, API-hívásra cserélhető shape-pel — ez a projekt jelenlegi "adatréteg" helyettesítője.
-- **`lib/`**: tisztán funkcionális, React-független segédkód (`utils.ts`, `occ-init.ts`, `bezierMath.ts`, `loftGeometry.ts`, `crossSectionGeometry.ts`).
-- Nincs külön `hooks/`, `services/`, `types/`, `three/` mappa — ha egy jövőbeli feladat során 3+ komponens osztozna egy custom hookon, vagy a domain típusok kinőnék a `data/`-t, ekkor érdemes ezeket a mappákat bevezetni, de **ne hozd létre előre, üresen**, csak amikor tényleges tartalom indokolja (YAGNI).
+- **`lib/`**: tisztán funkcionális, React-független segédkód. `utils/` almappa (`cn`, `slugify`, `todayISO`, `uniqueId`/`nextLocalId`, egy-egy fájlban, `index.ts` barrel-lel az `@/lib/utils` import változatlanul hagyásához), plusz `occ-init.ts`, `bezierMath.ts`, `loftGeometry.ts`, `crossSectionGeometry.ts`.
+- **`hooks/`**: React-hookok, amiket 2+ komponens ténylegesen megoszt (pl. `useClickOutside` — kattintás/Escape alapú dismiss logika dropdownokhoz/popoverekhez). Egy komponens saját, máshol nem használt hookja maradjon a komponens fájljában — a `hooks/` csak a ténylegesen megosztott eseteknek szól, ne szervezz át mindent ide preventívan.
+- **`types.ts`**: kizárólag olyan, nem-domain, cross-cutting UI-állapot típusok, amiket 2+ komponens/feature importál (pl. `ControlPoint`, `RenderMode`, `SortState<K>`), **plusz** az egyes lista oldalak saját `<Feature>SortKey` union típusai (pl. `MaterialSortKey`, `GeometrySortKey`) — ezek jelenleg csak egy fájlból importálódnak, de mivel a már megosztott `SortState<K>` generikus típus konkrét paraméterei, egy helyen a dokumentált "mivel rendezhető ez a lista" katalógust adják, nem szórva page fájlokban. **Egyetlen fájl, nem mappa** — a tartalom (10-15 kis, egymástól független típus) nem indokol egy fájlonkénti szétbontást, csak navigációs overheadet adna hozzáadott érték nélkül (YAGNI); belül `// ─── szekció ───` kommentekkel van csoportosítva feature szerint, hogy könnyű legyen benne keresni. Ha a fájl a jövőben ténylegesen nagyra nőne (pl. 300+ sor, sok, egymástól teljesen független típuscsoporttal), akkor indokolt lehet visszabontani — de ezt csak konkrét, akkori tartalom alapján döntsd el, ne előre.
+  - Ha egy union két oldalon **véletlenül** azonos értékkészletű (pl. `LayupSortKey` és `LoadGroupSortKey` mindkettő `'name' | 'lastUpdated'`), **ne vond össze** egyetlen közös típusba — a két feature független, csak épp jelenleg egybeesik az értékkészletük; az összevonás felesleges csatolást hozna létre, ami az egyik oldal jövőbeli bővítésekor (pl. egy harmadik sort-oszlop hozzáadása) a másikra is kihatna.
+  - A domain entitás típusok (`Material`, `Geometry`, `Composition` stb.) **változatlanul a `data/*.ts`-ben maradnak** — nem kerülnek át `types.ts`-be, mert a mock adatukhoz és a jövőbeli API shape-hez vannak kötve.
+  - Egy komponens saját `<Component>Props` interfésze is a komponens fájljában marad — a `types.ts` nem gyűjtőhely mindenre, csak a ténylegesen több helyről importált (vagy egy már megosztott generikus típus paramétereként dokumentált), nem-Props típusokra.
+- Nincs külön `services/`, `three/` mappa — ha egy jövőbeli feladat során ezekre ténylegesen szükség lesz (pl. valós API bevezetésekor a `services/` az [Adat- és API-réteg](#adat--és-api-réteg) szerint), ekkor érdemes bevezetni, de **ne hozd létre előre, üresen**, csak amikor tényleges tartalom indokolja (YAGNI).
 
 ## Feature-szervezés
 
@@ -143,7 +150,7 @@ src/
 - **Utility-first, inline JSX-ben** — nincs külön CSS modul/styled-components réteg.
 - Pixel-pontos Figma illesztéshez **hex literálokat** használj (`text-[#0a0a0a]`, `bg-[#f8fafc]`, `rounded-[14px]`), nem CSS-változó absztrakción keresztül, hacsak a `design.md` másképp nem definiál tokent.
 - **Ne duplikálj hosszú class-string-eket** több helyen — ha ugyanaz a class-kombináció 3+ helyen ismétlődik, emeld ki komponensbe vagy `cva` variant-ba, ne copy-paste-eld.
-- Class-ok összefésüléséhez/feltételes class-okhoz mindig `cn()` (`src/lib/utils.ts`) — ne konkatenálj template stringgel.
+- Class-ok összefésüléséhez/feltételes class-okhoz mindig `cn()` (`src/lib/utils/cn.ts`, re-exportálva `src/lib/utils/index.ts`-ből) — ne konkatenálj template stringgel.
 - Variant-alapú komponens stílushoz `class-variance-authority` (`cva`) mintát követünk, ahogy a `src/components/ui/` shadcn komponensekben.
 - **Inline `style` attribútumot kerüld**, kivéve dinamikusan számított értéket (pl. Three.js canvas méret, drag pozíció), amit Tailwind statikus class-szal nem lehet kifejezni.
 - `tailwindcss-animate` plugin elérhető animációkhoz — ne vezess be külön animációs libet.
@@ -210,7 +217,7 @@ src/
   - **Vitest** unit/integrációs teszthez (util függvények, adat-transzformáló logika, custom hookok).
   - **React Testing Library** komponens teszthez — felhasználói interakció alapján tesztelj (`getByRole`, `userEvent`), ne implementációs részletet (belső state) assertálj.
   - **Playwright** kritikus end-to-end user flow-khoz (pl. "új geometria létrehozása és mentése").
-- **Prioritási sorrend** teszt hiányában induláskor: 1) tiszta util függvények (`src/lib/utils.ts`), 2) komplex, hibalehetőséges logika (bezier számítás, NACA profil generálás), 3) kritikus user flow-k, 4) UI komponensek renderelése.
+- **Prioritási sorrend** teszt hiányában induláskor: 1) tiszta util függvények (`src/lib/utils/`), 2) komplex, hibalehetőséges logika (bezier számítás, NACA profil generálás), 3) kritikus user flow-k, 4) UI komponensek renderelése.
 - **Kerüld a felesleges snapshot tesztet** — egy nagy JSX fát lefotózó snapshot teszt gyakran csak zajt termel (minden apró stílusváltás töri), és nem mond semmit a viselkedésről; preferáld a viselkedés-alapú assertiont.
 
 ## Kódstílus

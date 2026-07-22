@@ -4,8 +4,8 @@ import {
   Pagination,
   SortableHeader,
   toggleSort,
-  type SortState,
 } from '@/components/common/ListTable';
+import type { SortState } from '@/types';
 import { Input } from '@/components/ui/input';
 import { LAYUPS } from '@/data/layups';
 
