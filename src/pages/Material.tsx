@@ -9,9 +9,12 @@ import { MaterialRow } from '@/components/material/MaterialRow';
 import { MaterialDateFilterPopover } from '@/components/material/MaterialDateFilterPopover';
 import { Pagination } from '@/components/common/list/Pagination';
 import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
+import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
+import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
+import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { toggleSort } from '@/lib/listTable';
 import type { SortState, MaterialSortKey } from '@/types';
-import { FilterCheckbox } from '@/components/common/list/FilterCheckbox';
 import { Input } from '@/components/ui/input';
 import { MATERIALS, lastUpdatedSortKey } from '@/data/materials';
 
@@ -38,12 +41,6 @@ export function Material() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
-  const [typeOpen, setTypeOpen] = useState(false);
-  const [typePos, setTypePos] = useState<{ top: number; left: number } | null>(null);
-  const [typeQuery, setTypeQuery] = useState('');
-  const typeBtnRef = useRef<HTMLButtonElement>(null);
-  const typeDropRef = useRef<HTMLDivElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterPos, setFilterPos] = useState<{ top: number; left: number } | null>(null);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
@@ -70,48 +67,6 @@ export function Material() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [filterOpen]);
 
-  useEffect(() => {
-    if (!typeOpen) { setTypeQuery(''); return; }
-    function onDown(e: MouseEvent) {
-      const t = e.target as Node;
-      if (typeBtnRef.current?.contains(t) || typeDropRef.current?.contains(t)) return;
-      setTypeOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [typeOpen]);
-
-  function openTypeFilter() {
-    if (!typeOpen && typeBtnRef.current) {
-      const r = typeBtnRef.current.getBoundingClientRect();
-      setTypePos({ top: r.bottom + window.scrollY + 6, left: r.left + window.scrollX });
-    }
-    setTypeOpen((o) => !o);
-  }
-
-  function toggleType(type: string) {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      next.has(type) ? next.delete(type) : next.add(type);
-      return next;
-    });
-    setPage(1);
-  }
-
-  function toggleSelectAll() {
-    const allVisible = visibleTypes.every((t) => typeFilter.has(t));
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (allVisible) {
-        visibleTypes.forEach((t) => next.delete(t));
-      } else {
-        visibleTypes.forEach((t) => next.add(t));
-      }
-      return next;
-    });
-    setPage(1);
-  }
-
   function goPrev() {
     setLeftMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1));
     setRightMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1));
@@ -131,15 +86,8 @@ export function Material() {
     setFilterOpen((o) => !o);
   }
 
-  const allTypes = useMemo(
-    () => [...new Set(MATERIALS.map((m) => m.type))].sort(),
-    []
-  );
-
-  const visibleTypes = useMemo(() => {
-    const q = typeQuery.trim().toLowerCase();
-    return q ? allTypes.filter((t) => t.toLowerCase().includes(q)) : allTypes;
-  }, [allTypes, typeQuery]);
+  const allTypes = useMemo(() => [...new Set(MATERIALS.map((m) => m.type))].sort(), []);
+  const typeFilter = useColumnFilter(allTypes, () => setPage(1));
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -151,7 +99,7 @@ export function Material() {
         !m.description.toLowerCase().includes(q)
       )
         return false;
-      if (typeFilter.size > 0 && !typeFilter.has(m.type)) return false;
+      if (typeFilter.selected.size > 0 && !typeFilter.selected.has(m.type)) return false;
       if (dateRange?.from || dateRange?.to) {
         const d = parseLastUpdated(m.lastUpdated);
         if (d) {
@@ -161,7 +109,7 @@ export function Material() {
       }
       return true;
     });
-  }, [query, typeFilter, dateRange]);
+  }, [query, typeFilter.selected, dateRange]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -227,28 +175,11 @@ export function Material() {
                 />
               </div>
 
-              {(typeFilter.size > 0 || dateRange?.from || dateRange?.to) && (
+              {(typeFilter.selected.size > 0 || dateRange?.from || dateRange?.to) && (
                 <span className="text-[13px] font-medium text-[#6b7280]">Filtered by</span>
               )}
 
-              {typeFilter.size > 0 && (() => {
-                const sortedTypes = [...typeFilter].sort();
-                const label = sortedTypes[0] + (typeFilter.size > 1 ? ` +${typeFilter.size - 1}` : '');
-                return (
-                  <div className="flex items-center gap-1 rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-3 py-1.5 text-[13px]">
-                    <span className="text-[#9ca3af]">Type</span>
-                    <span className="font-semibold text-[#0a0a0a]">{label}</span>
-                    <button
-                      type="button"
-                      aria-label="Clear type filter"
-                      onClick={() => { setTypeFilter(new Set()); setPage(1); }}
-                      className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[#9ca3af] hover:bg-[#e5e7eb] hover:text-[#0a0a0a]"
-                    >
-                      <X className="h-3 w-3" strokeWidth={2.5} />
-                    </button>
-                  </div>
-                );
-              })()}
+              <ActiveFilterChip label="Type" selected={typeFilter.selected} onClear={typeFilter.clear} />
 
               {(dateRange?.from || dateRange?.to) && (
                 <div className="flex items-center gap-1 rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-3 py-1.5 text-[13px]">
@@ -290,17 +221,12 @@ export function Material() {
                       onClick={handleSort}
                       className="w-[240px]"
                       action={
-                        <button
-                          ref={typeBtnRef}
-                          type="button"
-                          aria-label="Filter by type"
-                          onClick={openTypeFilter}
-                          className={`flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-[#f1f5f9] ${
-                            typeFilter.size > 0 ? 'text-[#006496]' : 'text-[#9ca3af]'
-                          }`}
-                        >
-                          <Filter className="h-3.5 w-3.5" strokeWidth={2} />
-                        </button>
+                        <ColumnFilterButton
+                          ariaLabel="Filter by type"
+                          active={typeFilter.selected.size > 0}
+                          onClick={typeFilter.openDropdown}
+                          buttonRef={typeFilter.btnRef}
+                        />
                       }
                     />
                     <SortableHeader
@@ -371,63 +297,17 @@ export function Material() {
 
       <Footer />
 
-      {typeOpen &&
-        typePos &&
-        createPortal(
-          <div
-            ref={typeDropRef}
-            style={{ top: typePos.top, left: typePos.left }}
-            className="absolute z-[200] w-[234px] overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)]"
-          >
-            {/* Search */}
-            <div className="flex items-center gap-2 border-b border-[#e5e7eb] px-3 py-2">
-              <Search className="h-4 w-4 shrink-0 text-[#9ca3af]" />
-              <input
-                autoFocus
-                value={typeQuery}
-                onChange={(e) => setTypeQuery(e.target.value)}
-                placeholder="Search"
-                className="flex-1 bg-transparent text-[14px] text-[#0a0a0a] outline-none placeholder:text-[#9ca3af]"
-              />
-            </div>
-
-            {/* Select all */}
-            <button
-              type="button"
-              onClick={toggleSelectAll}
-              className="flex w-full items-center gap-3 px-3 py-2.5 hover:bg-[#f9fafb]"
-            >
-              <FilterCheckbox
-                checked={visibleTypes.length > 0 && visibleTypes.every((t) => typeFilter.has(t))}
-                indeterminate={
-                  visibleTypes.some((t) => typeFilter.has(t)) &&
-                  !visibleTypes.every((t) => typeFilter.has(t))
-                }
-              />
-              <span className="text-[14px] font-medium text-[#0a0a0a]">Select all</span>
-            </button>
-            <div className="border-b border-[#e5e7eb]" />
-
-            {/* Type options */}
-            <div className="overflow-y-auto" style={{ maxHeight: 7 * 40 }}>
-              {visibleTypes.map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => toggleType(type)}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 hover:bg-[#f9fafb]"
-                >
-                  <FilterCheckbox checked={typeFilter.has(type)} />
-                  <span className="truncate text-[14px] text-[#0a0a0a]">{type}</span>
-                </button>
-              ))}
-              {visibleTypes.length === 0 && (
-                <p className="px-3 py-4 text-center text-[13px] text-[#9ca3af]">No results</p>
-              )}
-            </div>
-          </div>,
-          document.body
-        )}
+      <ColumnFilterPanel
+        open={typeFilter.open}
+        pos={typeFilter.pos}
+        dropRef={typeFilter.dropRef}
+        query={typeFilter.query}
+        onQueryChange={typeFilter.setQuery}
+        options={typeFilter.visibleOptions}
+        selected={typeFilter.selected}
+        onToggle={typeFilter.toggle}
+        onToggleAll={typeFilter.toggleSelectAll}
+      />
 
       {filterOpen &&
         filterPos &&

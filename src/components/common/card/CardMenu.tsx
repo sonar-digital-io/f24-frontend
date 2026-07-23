@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Copy, Download, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { useClickOutside } from '@/hooks/useClickOutside';
 
 interface CardMenuProps {
   onEdit: () => void;
@@ -7,18 +8,7 @@ interface CardMenuProps {
 
 export function CardMenu({ onEdit }: CardMenuProps) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open]);
+  const containerRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
 
   return (
     <div ref={containerRef} className="relative" onClick={(e) => e.stopPropagation()}>

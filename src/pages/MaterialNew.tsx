@@ -1,15 +1,20 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Check, Undo2, Redo2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
+import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
 import { PropertyFormTab } from '@/components/material/PropertyFormTab';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DropdownSelect as Select } from '@/components/common/form/DropdownSelect';
 import { MECHANICAL_SECTIONS, FATIGUE_SECTIONS } from '@/data/materialFormFields';
 import { MATERIALS, createMaterial, updateMaterial } from '@/data/materials';
-import { useClickOutside } from '@/hooks/useClickOutside';
+
+const TABS = [
+  { value: 'general', label: 'General' },
+  { value: 'mechanical', label: 'Mechanical properties' },
+  { value: 'fatigue', label: 'Fatigue properties' },
+];
 
 const MATERIAL_TYPES = [
   'UD ply',
@@ -21,65 +26,6 @@ const MATERIAL_TYPES = [
   'Core (PET Foam)',
   'Core (Balsa)',
 ];
-
-interface SelectProps {
-  value: string;
-  onChange: (value: string) => void;
-  options: string[];
-  placeholder?: string;
-}
-
-function Select({ value, onChange, options, placeholder = 'Select…' }: SelectProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-[#e2e8f0] bg-white px-3 py-1 text-left text-[14px] font-normal text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#f9fafb] focus:outline-none focus:ring-2 focus:ring-[#006496] focus:ring-offset-1"
-      >
-        <span className={value ? 'text-[#0a0a0a]' : 'text-[#6b7280]'}>
-          {value || placeholder}
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 text-[#6b7280] transition-transform ${open ? 'rotate-180' : ''}`}
-          strokeWidth={2}
-        />
-      </button>
-      {open && (
-        <ul
-          role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-64 overflow-y-auto rounded-md border border-[#e5e7eb] bg-white py-1 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"
-        >
-          {options.map((opt) => {
-            const selected = opt === value;
-            return (
-              <li key={opt} role="option" aria-selected={selected}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange(opt);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-[14px] leading-5 ${
-                    selected ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <span>{opt}</span>
-                  {selected && <Check className="h-4 w-4" strokeWidth={2} />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 export function MaterialNew() {
   const navigate = useNavigate();
@@ -125,65 +71,14 @@ export function MaterialNew() {
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f8fafc]">
       <MainNav />
 
-      {/* Sub-toolbar row: tabs + title + actions */}
-      <div className="relative flex h-[52px] w-full shrink-0 items-center justify-between bg-[#f8fafc] px-4 py-2">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-9 shrink-0">
-          <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
-            <TabsTrigger
-              value="general"
-              className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
-            >
-              General
-            </TabsTrigger>
-            <TabsTrigger
-              value="mechanical"
-              className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
-            >
-              Mechanical properties
-            </TabsTrigger>
-            <TabsTrigger
-              value="fatigue"
-              className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
-            >
-              Fatigue properties
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <h1 className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
-          {titleText}
-        </h1>
-
-        <div className="flex shrink-0 items-center gap-4">
-          <div className="flex items-center gap-[6px]">
-            <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-            <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Undo"
-              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9] text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-            >
-              <Undo2 className="h-4 w-4" strokeWidth={2} />
-            </button>
-            <button
-              type="button"
-              aria-label="Redo"
-              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9] text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-            >
-              <Redo2 className="h-4 w-4" strokeWidth={2} />
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={handleExit}
-            className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
-          >
-            Back to Materials
-          </button>
-        </div>
-      </div>
+      <EditPageToolbar
+        tabs={TABS}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        title={titleText}
+        backLabel="Back to Materials"
+        onBack={handleExit}
+      />
 
       {/* Main content area */}
       <main className="flex-1 overflow-hidden px-4 pb-6 pt-4">

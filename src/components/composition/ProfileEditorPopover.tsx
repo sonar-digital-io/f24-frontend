@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { AirfoilPreview } from '@/components/common/AirfoilPreview';
 import { SelectField } from '@/components/composition/SelectField';
 import type { Profile } from '@/data/profiles';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 const LOCK_OPTIONS = ['Unlocked', 'Locked to profile start', 'Locked to profile end'];
 
@@ -36,13 +37,7 @@ export function ProfileEditorPopover({
 }: ProfileEditorPopoverProps) {
   const [showAllLayups, setShowAllLayups] = useState(false);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   return (
     <div className="flex w-[560px] flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white p-4 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]">

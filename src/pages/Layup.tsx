@@ -5,23 +5,13 @@ import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { Pagination } from '@/components/common/list/Pagination';
 import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { rowInteractionProps, toggleSort } from '@/lib/listTable';
 import type { SortState, LayupSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { LAYUPS } from '@/data/layups';
 
 const PAGE_SIZE = 10;
-
-function Tip({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="group/tip relative">
-      {children}
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100">
-        {label}
-      </span>
-    </div>
-  );
-}
 
 export function Layup() {
   const navigate = useNavigate();
@@ -135,43 +125,14 @@ export function Layup() {
                       </td>
                       <td className="px-3 py-4">
                         <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                          <Tip label="Edit">
-                            <button
-                              type="button"
-                              aria-label="Edit layup"
-                              onClick={() => navigate(`/layup/${l.id}`)}
-                              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                            >
-                              <Pencil className="h-4 w-4" strokeWidth={2} />
-                            </button>
-                          </Tip>
-                          <Tip label="Export">
-                            <button
-                              type="button"
-                              aria-label="Export layup"
-                              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                            >
-                              <Download className="h-4 w-4" strokeWidth={2} />
-                            </button>
-                          </Tip>
-                          <Tip label="Duplicate">
-                            <button
-                              type="button"
-                              aria-label="Duplicate layup"
-                              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                            >
-                              <Copy className="h-4 w-4" strokeWidth={2} />
-                            </button>
-                          </Tip>
-                          <Tip label="Delete">
-                            <button
-                              type="button"
-                              aria-label="Delete layup"
-                              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#fee2e2] hover:text-[#dc2626]"
-                            >
-                              <Trash2 className="h-4 w-4" strokeWidth={2} />
-                            </button>
-                          </Tip>
+                          <RowIconButton
+                            label="Edit layup"
+                            icon={Pencil}
+                            onClick={() => navigate(`/layup/${l.id}`)}
+                          />
+                          <RowIconButton label="Export layup" icon={Download} onClick={() => {}} />
+                          <RowIconButton label="Duplicate layup" icon={Copy} onClick={() => {}} />
+                          <RowIconButton label="Delete layup" icon={Trash2} onClick={() => {}} variant="danger" />
                         </div>
                       </td>
                     </tr>

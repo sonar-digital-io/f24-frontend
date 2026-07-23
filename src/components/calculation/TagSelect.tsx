@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Check, ChevronDown, X } from 'lucide-react';
+import { useClickOutside } from '@/hooks/useClickOutside';
 
 interface TagSelectProps {
   options: string[];
@@ -12,7 +13,7 @@ interface TagSelectProps {
 export function TagSelect({ options, defaultValue = [], value, onChange, placeholder }: TagSelectProps) {
   const [internal, setInternal] = useState<string[]>(defaultValue);
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
 
   const selected = value ?? internal;
 
@@ -30,16 +31,6 @@ export function TagSelect({ options, defaultValue = [], value, onChange, placeho
     if (onChange) onChange(next);
     else setInternal(next);
   }
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   return (
     <div ref={containerRef} className="relative">

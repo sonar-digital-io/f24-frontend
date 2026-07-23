@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import type { Profile } from '@/data/profiles';
 import { LAYUPS } from '@/data/layups';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 import {
   CROSS_SECTION_N as N,
   buildAllPts,
@@ -88,13 +89,7 @@ export function CrossSectionDialog({
 }: CrossSectionDialogProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   const baseM = profile.maxCamber / 100;
   const baseP = Math.max(0.001, Math.min(0.999, profile.maxCamberPosition / 100));

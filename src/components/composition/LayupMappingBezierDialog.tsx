@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { LayupMappingChart } from '@/components/composition/LayupMappingChart';
 import type { ControlPoint } from '@/types';
 import { clamp } from '@/lib/bezierMath';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 /** Layup mapping bezier: longitudinal (m) along x, transversal (m) along y.
  *  X range 5..55 m, Y range -14..0 m (default — caller can override). */
@@ -114,15 +115,7 @@ export function LayupMappingBezierDialog({
     setExpanded(false);
   }
 
-  // ESC closes
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  useEscapeKey(onClose, open);
 
   function startDrag(e: React.MouseEvent) {
     e.preventDefault();

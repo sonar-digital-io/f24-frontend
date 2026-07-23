@@ -2,21 +2,24 @@ import { useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { useClickOutside } from '@/hooks/useClickOutside';
 
-/** Private dropdown for `ProfileDistributionPanel` — not shared with other
- *  pages' own `Select` implementations (each page keeps its own copy). */
-export interface ProfileDistributionSelectProps {
+export interface DropdownSelectProps {
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: readonly string[];
+  placeholder?: string;
+  disabled?: boolean;
   className?: string;
 }
 
-export function ProfileDistributionSelect({
+/** Custom dropdown select shared by the Geometry/Material edit panels. */
+export function DropdownSelect({
   value,
   onChange,
   options,
+  placeholder = 'Select',
+  disabled = false,
   className,
-}: ProfileDistributionSelectProps) {
+}: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
 
@@ -24,12 +27,13 @@ export function ProfileDistributionSelect({
     <div ref={rootRef} className={`relative ${className ?? ''}`}>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => !disabled && setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-[#e2e8f0] bg-white px-3 py-1 text-left text-[14px] font-normal text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#f9fafb] focus:outline-none focus:ring-2 focus:ring-[#006496] focus:ring-offset-1"
+        disabled={disabled}
+        className="flex h-9 w-full items-center justify-between rounded-md border border-[#e2e8f0] bg-white px-3 py-1 text-left text-[14px] font-normal shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#f9fafb] focus:outline-none focus:ring-2 focus:ring-[#006496] focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <span>{value}</span>
+        <span className={value ? 'text-[#0a0a0a]' : 'text-[#6b7280]'}>{value || placeholder}</span>
         <ChevronDown
           className={`h-4 w-4 text-[#6b7280] transition-transform ${open ? 'rotate-180' : ''}`}
           strokeWidth={2}

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface LoadCasePickerDialogProps {
   open: boolean;
@@ -19,20 +21,12 @@ export function LoadCasePickerDialog({
 }: LoadCasePickerDialogProps) {
   const [query, setQuery] = useState('');
 
+  useBodyScrollLock(open);
+  useEscapeKey(onClose, open);
+
   useEffect(() => {
-    if (!open) return;
-    setQuery('');
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open, onClose]);
+    if (open) setQuery('');
+  }, [open]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

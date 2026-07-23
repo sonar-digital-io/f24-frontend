@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { AirfoilPreview } from '@/components/common/AirfoilPreview';
 import { PROFILE_TYPES, type Profile } from '@/data/profiles';
-import { ProfilesPanelSelect } from '@/components/geometry/ProfilesPanelSelect';
+import { DropdownSelect } from '@/components/common/form/DropdownSelect';
 import { Field, NumberField } from '@/components/geometry/ProfileFormFields';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 export interface ProfileDetailPopoverProps {
   profile: Profile;
@@ -23,14 +24,7 @@ export function ProfileDetailPopover({ profile, onChange, onClose, onSort }: Pro
   const dragging = useRef(false);
   const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
 
-  // ESC closes
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeKey(onClose);
 
   function startDrag(e: React.MouseEvent) {
     if ((e.target as HTMLElement).closest('button')) return;
@@ -117,7 +111,7 @@ export function ProfileDetailPopover({ profile, onChange, onClose, onSort }: Pro
             />
             <div className="flex flex-col gap-2">
               <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Type</Label>
-              <ProfilesPanelSelect
+              <DropdownSelect
                 value={profile.type}
                 onChange={(v) => update('type', v)}
                 options={PROFILE_TYPES}

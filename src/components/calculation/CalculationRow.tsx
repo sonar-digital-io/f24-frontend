@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
-  ChevronDown,
-  ChevronUp,
   Clock,
   Copy,
   Download,
@@ -16,6 +14,10 @@ import {
   Trash2,
 } from 'lucide-react';
 import { BladeThumbnail } from '@/components/common/card/BladeThumbnail';
+import { Tip } from '@/components/common/list/Tip';
+import { DetailRow } from '@/components/common/list/DetailRow';
+import { RowIconButton } from '@/components/common/list/RowIconButton';
+import { ExpandToggleCell } from '@/components/common/list/ExpandToggleCell';
 import { rowInteractionProps } from '@/lib/listTable';
 import { type Calculation, type CalculationStatus } from '@/data/calculations';
 
@@ -65,15 +67,6 @@ function StatusBadge({ status, timestamp }: { status: CalculationStatus; timesta
 
 // ─── Detail grid ──────────────────────────────────────────────────────────────
 
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-4 py-[5px]">
-      <span className="w-[140px] shrink-0 text-[14px] leading-5 text-[#6b7280]">{label}</span>
-      <span className="text-[14px] font-semibold leading-5 text-[#0a0a0a]">{value}</span>
-    </div>
-  );
-}
-
 function CalculationDetailGrid({ details }: { details: Calculation['details'] }) {
   return (
     <div className="flex flex-col">
@@ -87,40 +80,6 @@ function CalculationDetailGrid({ details }: { details: Calculation['details'] })
 }
 
 // ─── Row actions ──────────────────────────────────────────────────────────────
-
-function Tip({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="group/tip relative">
-      {children}
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function IconBtn({
-  label,
-  icon: Icon,
-  onClick,
-}: {
-  label: string;
-  icon: React.ElementType;
-  onClick: (e: React.MouseEvent) => void;
-}) {
-  return (
-    <Tip label={label}>
-      <button
-        type="button"
-        aria-label={label}
-        onClick={(e) => { e.stopPropagation(); onClick(e); }}
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-      >
-        <Icon className="h-4 w-4" strokeWidth={2} />
-      </button>
-    </Tip>
-  );
-}
 
 function MoreMenu({ itemId: _itemId }: { itemId: string }) {
   const [open, setOpen] = useState(false);
@@ -204,14 +163,14 @@ function RowActions({ item }: { item: Calculation }) {
     <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
       {isRunning ? (
         <>
-          <IconBtn label="Pause" icon={Pause} onClick={() => {}} />
-          <IconBtn label="Stop" icon={Square} onClick={() => {}} />
-          <IconBtn label="Restart" icon={RotateCcw} onClick={() => {}} />
+          <RowIconButton label="Pause" icon={Pause} onClick={() => {}} />
+          <RowIconButton label="Stop" icon={Square} onClick={() => {}} />
+          <RowIconButton label="Restart" icon={RotateCcw} onClick={() => {}} />
         </>
       ) : (
         <>
-          <IconBtn label="Edit" icon={Pencil} onClick={() => navigate(`/calculation/${item.id}`)} />
-          <IconBtn label="Start" icon={Play} onClick={() => {}} />
+          <RowIconButton label="Edit" icon={Pencil} onClick={() => navigate(`/calculation/${item.id}`)} />
+          <RowIconButton label="Start" icon={Play} onClick={() => {}} />
           <MoreMenu itemId={item.id} />
         </>
       )}
@@ -236,20 +195,7 @@ export function CalculationRow({ item, expanded, onToggle }: CalculationRowProps
           expanded ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'
         }`}
       >
-        <td className="w-[52px] px-3 py-4 align-top">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onToggle(); }}
-            aria-expanded={expanded}
-            className="flex h-7 w-7 items-center justify-center rounded text-[#0a0a0a] hover:bg-[#e5e7eb]"
-          >
-            {expanded ? (
-              <ChevronUp className="h-4 w-4" strokeWidth={2} />
-            ) : (
-              <ChevronDown className="h-4 w-4" strokeWidth={2} />
-            )}
-          </button>
-        </td>
+        <ExpandToggleCell expanded={expanded} onToggle={onToggle} controls={`calculation-detail-${item.id}`} />
         <td className="w-[260px] px-3 py-4 align-top text-[14px] font-medium leading-5 text-[#0a0a0a]">
           {item.name}
         </td>

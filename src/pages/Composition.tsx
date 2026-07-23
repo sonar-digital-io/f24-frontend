@@ -1,25 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  Copy,
-  Download,
-  Filter,
-  LayoutGrid,
-  List as ListIcon,
-  Pencil,
-  Search,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { Copy, Download, Pencil, Search, Trash2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { Pagination } from '@/components/common/list/Pagination';
 import { SortableHeader } from '@/components/common/list/SortableHeader';
 import { toggleSort } from '@/lib/listTable';
 import type { SortState, ViewMode, CompositionSortKey } from '@/types';
-import { FilterCheckbox } from '@/components/common/list/FilterCheckbox';
-import { Tip } from '@/components/common/list/Tip';
+import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
+import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
+import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
+import { ViewModeToggle } from '@/components/common/list/ViewModeToggle';
+import { RowIconButton } from '@/components/common/list/RowIconButton';
+import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { Input } from '@/components/ui/input';
 import { CompositionCard } from '@/components/composition/CompositionCard';
 import { COMPOSITIONS } from '@/data/compositions';
@@ -32,74 +25,19 @@ export function Composition() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortState<CompositionSortKey>>({ key: 'name', direction: 'asc' });
   const [page, setPage] = useState(1);
-  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
-  const [typeOpen, setTypeOpen] = useState(false);
-  const [typePos, setTypePos] = useState<{ top: number; left: number } | null>(null);
-  const [typeQuery, setTypeQuery] = useState('');
-  const typeBtnRef = useRef<HTMLButtonElement>(null);
-  const typeDropRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!typeOpen) { setTypeQuery(''); return; }
-    function onDown(e: MouseEvent) {
-      const t = e.target as Node;
-      if (typeBtnRef.current?.contains(t) || typeDropRef.current?.contains(t)) return;
-      setTypeOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [typeOpen]);
-
-  function openTypeFilter() {
-    if (!typeOpen && typeBtnRef.current) {
-      const r = typeBtnRef.current.getBoundingClientRect();
-      setTypePos({ top: r.bottom + window.scrollY + 6, left: r.left + window.scrollX });
-    }
-    setTypeOpen((o) => !o);
-  }
-
-  function toggleType(type: string) {
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      next.has(type) ? next.delete(type) : next.add(type);
-      return next;
-    });
-    setPage(1);
-  }
-
-  function toggleSelectAll() {
-    const allVisible = visibleTypes.every((t) => typeFilter.has(t));
-    setTypeFilter((prev) => {
-      const next = new Set(prev);
-      if (allVisible) {
-        visibleTypes.forEach((t) => next.delete(t));
-      } else {
-        visibleTypes.forEach((t) => next.add(t));
-      }
-      return next;
-    });
-    setPage(1);
-  }
-
-  const allTypes = useMemo(
-    () => [...new Set(COMPOSITIONS.map((c) => c.type))].sort(),
-    []
-  );
-
-  const visibleTypes = useMemo(() => {
-    const q = typeQuery.trim().toLowerCase();
-    return q ? allTypes.filter((t) => t.toLowerCase().includes(q)) : allTypes;
-  }, [allTypes, typeQuery]);
+  const allTypes = useMemo(() => [...new Set(COMPOSITIONS.map((c) => c.type))].sort(), []);
+  const typeFilter = useColumnFilter(allTypes, () => setPage(1));
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return COMPOSITIONS.filter((c) => {
       if (q && !c.name.toLowerCase().includes(q) && !c.description.toLowerCase().includes(q))
         return false;
-      if (typeFilter.size > 0 && !typeFilter.has(c.type)) return false;
+      if (typeFilter.selected.size > 0 && !typeFilter.selected.has(c.type)) return false;
       return true;
     });
-  }, [query, typeFilter]);
+  }, [query, typeFilter.selected]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -162,56 +100,15 @@ export function Composition() {
                   />
                 </div>
 
-                {typeFilter.size > 0 && (
+                {typeFilter.selected.size > 0 && (
                   <>
                     <span className="text-[13px] font-medium text-[#6b7280]">Filtered by</span>
-                    {(() => {
-                      const sorted = [...typeFilter].sort();
-                      const label = sorted[0] + (typeFilter.size > 1 ? ` +${typeFilter.size - 1}` : '');
-                      return (
-                        <div className="flex items-center gap-1 rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-3 py-1.5 text-[13px]">
-                          <span className="text-[#9ca3af]">Type</span>
-                          <span className="font-semibold text-[#0a0a0a]">{label}</span>
-                          <button
-                            type="button"
-                            aria-label="Clear type filter"
-                            onClick={() => { setTypeFilter(new Set()); setPage(1); }}
-                            className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[#9ca3af] hover:bg-[#e5e7eb] hover:text-[#0a0a0a]"
-                          >
-                            <X className="h-3 w-3" strokeWidth={2.5} />
-                          </button>
-                        </div>
-                      );
-                    })()}
+                    <ActiveFilterChip label="Type" selected={typeFilter.selected} onClear={typeFilter.clear} />
                   </>
                 )}
               </div>
 
-              {/* View toggle */}
-              <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
-                <button
-                  type="button"
-                  onClick={() => setView('list')}
-                  aria-label="List view"
-                  aria-pressed={view === 'list'}
-                  className={`flex h-7 w-7 items-center justify-center rounded ${
-                    view === 'list' ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <ListIcon className="h-4 w-4" strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView('grid')}
-                  aria-label="Grid view"
-                  aria-pressed={view === 'grid'}
-                  className={`flex h-7 w-7 items-center justify-center rounded ${
-                    view === 'grid' ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <LayoutGrid className="h-4 w-4" strokeWidth={2} />
-                </button>
-              </div>
+              <ViewModeToggle value={view} onChange={setView} />
             </div>
 
             {/* List view */}
@@ -244,17 +141,12 @@ export function Composition() {
                           <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
                             Type
                           </span>
-                          <button
-                            ref={typeBtnRef}
-                            type="button"
-                            aria-label="Filter by type"
-                            onClick={openTypeFilter}
-                            className={`flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-[#f1f5f9] ${
-                              typeFilter.size > 0 ? 'text-[#006496]' : 'text-[#9ca3af]'
-                            }`}
-                          >
-                            <Filter className="h-3.5 w-3.5" strokeWidth={2} />
-                          </button>
+                          <ColumnFilterButton
+                            ariaLabel="Filter by type"
+                            active={typeFilter.selected.size > 0}
+                            onClick={typeFilter.openDropdown}
+                            buttonRef={typeFilter.btnRef}
+                          />
                         </div>
                       </th>
                       <SortableHeader
@@ -290,43 +182,19 @@ export function Composition() {
                         </td>
                         <td className="px-3 py-4">
                           <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                            <Tip label="Edit">
-                              <button
-                                type="button"
-                                aria-label="Edit composition"
-                                onClick={() => navigate(`/composition/${c.id}`)}
-                                className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                              >
-                                <Pencil className="h-4 w-4" strokeWidth={2} />
-                              </button>
-                            </Tip>
-                            <Tip label="Export">
-                              <button
-                                type="button"
-                                aria-label="Export composition"
-                                className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                              >
-                                <Download className="h-4 w-4" strokeWidth={2} />
-                              </button>
-                            </Tip>
-                            <Tip label="Duplicate">
-                              <button
-                                type="button"
-                                aria-label="Duplicate composition"
-                                className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                              >
-                                <Copy className="h-4 w-4" strokeWidth={2} />
-                              </button>
-                            </Tip>
-                            <Tip label="Delete">
-                              <button
-                                type="button"
-                                aria-label="Delete composition"
-                                className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#fee2e2] hover:text-[#dc2626]"
-                              >
-                                <Trash2 className="h-4 w-4" strokeWidth={2} />
-                              </button>
-                            </Tip>
+                            <RowIconButton
+                              label="Edit composition"
+                              icon={Pencil}
+                              onClick={() => navigate(`/composition/${c.id}`)}
+                            />
+                            <RowIconButton label="Export composition" icon={Download} onClick={() => {}} />
+                            <RowIconButton label="Duplicate composition" icon={Copy} onClick={() => {}} />
+                            <RowIconButton
+                              label="Delete composition"
+                              icon={Trash2}
+                              onClick={() => {}}
+                              variant="danger"
+                            />
                           </div>
                         </td>
                       </tr>
@@ -373,58 +241,17 @@ export function Composition() {
 
       <Footer />
 
-      {typeOpen &&
-        typePos &&
-        createPortal(
-          <div
-            ref={typeDropRef}
-            style={{ top: typePos.top, left: typePos.left }}
-            className="absolute z-[200] w-[234px] overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)]"
-          >
-            <div className="flex items-center gap-2 border-b border-[#e5e7eb] px-3 py-2">
-              <Search className="h-4 w-4 shrink-0 text-[#9ca3af]" />
-              <input
-                autoFocus
-                value={typeQuery}
-                onChange={(e) => setTypeQuery(e.target.value)}
-                placeholder="Search"
-                className="flex-1 bg-transparent text-[14px] text-[#0a0a0a] outline-none placeholder:text-[#9ca3af]"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={toggleSelectAll}
-              className="flex w-full items-center gap-3 px-3 py-2.5 hover:bg-[#f9fafb]"
-            >
-              <FilterCheckbox
-                checked={visibleTypes.length > 0 && visibleTypes.every((t) => typeFilter.has(t))}
-                indeterminate={
-                  visibleTypes.some((t) => typeFilter.has(t)) &&
-                  !visibleTypes.every((t) => typeFilter.has(t))
-                }
-              />
-              <span className="text-[14px] font-medium text-[#0a0a0a]">Select all</span>
-            </button>
-            <div className="border-b border-[#e5e7eb]" />
-            <div className="overflow-y-auto" style={{ maxHeight: 7 * 40 }}>
-              {visibleTypes.map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => toggleType(type)}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 hover:bg-[#f9fafb]"
-                >
-                  <FilterCheckbox checked={typeFilter.has(type)} />
-                  <span className="truncate text-[14px] text-[#0a0a0a]">{type}</span>
-                </button>
-              ))}
-              {visibleTypes.length === 0 && (
-                <p className="px-3 py-4 text-center text-[13px] text-[#9ca3af]">No results</p>
-              )}
-            </div>
-          </div>,
-          document.body
-        )}
+      <ColumnFilterPanel
+        open={typeFilter.open}
+        pos={typeFilter.pos}
+        dropRef={typeFilter.dropRef}
+        query={typeFilter.query}
+        onQueryChange={typeFilter.setQuery}
+        options={typeFilter.visibleOptions}
+        selected={typeFilter.selected}
+        onToggle={typeFilter.toggle}
+        onToggleAll={typeFilter.toggleSelectAll}
+      />
     </div>
   );
 }
