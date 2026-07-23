@@ -13,10 +13,12 @@ import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
 import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
 import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
-import { toggleSort } from '@/lib/listTable';
+import { paginate, toggleSetMember, toggleSort } from '@/lib/listTable';
 import type { SortState, MaterialSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { MATERIALS, lastUpdatedSortKey } from '@/data/materials';
+
+const PAGE_SIZE = 10;
 
 function formatDateLabel(d: Date): string {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -27,7 +29,6 @@ function formatDateLabel(d: Date): string {
   return `${months[d.getMonth()]} ${day}${s}, ${d.getFullYear()}`;
 }
 
-const PAGE_SIZE = 10;
 
 function parseLastUpdated(s: string): Date | null {
   const vMatch = s.match(/^v(\d{4})\/(\d{2})$/);
@@ -130,19 +131,14 @@ export function Material() {
     return copy;
   }, [filtered, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
 
   function handleSort(key: MaterialSortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
 
   function toggleExpand(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setExpandedIds((prev) => toggleSetMember(prev, id));
   }
 
   return (

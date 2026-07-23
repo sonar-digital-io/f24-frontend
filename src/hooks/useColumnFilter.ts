@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { toggleSetMember } from '@/lib/listTable';
 
 /**
  * State/logic for a table-column "Filter by …" control: a small button (in the
@@ -42,11 +43,7 @@ export function useColumnFilter(options: string[], onSelectionChange?: () => voi
   }
 
   function toggle(value: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(value) ? next.delete(value) : next.add(value);
-      return next;
-    });
+    setSelected((prev) => toggleSetMember(prev, value));
     onSelectionChange?.();
   }
 

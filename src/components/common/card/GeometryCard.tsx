@@ -1,4 +1,4 @@
-import { BladeThumbnail } from '@/components/common/card/BladeThumbnail';
+import { CardThumbnail } from '@/components/common/card/CardThumbnail';
 import { CardMenu } from '@/components/common/card/CardMenu';
 import type { Geometry } from '@/data/geometries';
 
@@ -36,11 +36,7 @@ export function GeometryCard({ geometry, onClick, selected, showMenu = true }: G
         {showMenu && <CardMenu onEdit={onClick} />}
       </div>
       <button type="button" onClick={onClick} className="text-left">
-        <div className="flex h-[160px] items-center justify-center px-[10px] py-[10px]">
-          <div className="flex h-full w-full items-center justify-center rounded-md bg-[#f8fafc]">
-            <BladeThumbnail />
-          </div>
-        </div>
+        <CardThumbnail />
         <div className="flex flex-col gap-[10px] px-[10px] pb-[10px]">
           <div className="flex items-center justify-between">
             <span className="text-[12px] leading-4 text-[#0a0a0a]">{geometry.type}</span>

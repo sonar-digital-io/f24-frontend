@@ -13,6 +13,7 @@ import { GEOMETRIES } from '@/data/geometries';
 import { COMPOSITIONS } from '@/data/compositions';
 import { CALCULATIONS, createCalculation, updateCalculation } from '@/data/calculations';
 import { FATIGUE_LOAD_GROUPS, FATIGUE_PAGE_SIZE } from '@/data/calculationFatigueLoadGroups';
+import { useScrollSpy } from '@/hooks/useScrollSpy';
 import type {
   Tab,
   CompositionSubTab,
@@ -22,6 +23,8 @@ import type {
   LGSortKey,
   LGSort,
 } from '@/types';
+
+const CONFIG_SECTION_IDS: ConfigSection[] = ['aero', 'modal', 'structural', 'postprocessing', 'debug'];
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -54,7 +57,13 @@ export function CalculationNew() {
   const isStaticStructural = analysisMethod.startsWith('Static structural');
 
   // ── Configuration ─────────────────────────────────────────────────────────
-  const [activeConfigSection, setActiveConfigSection] = useState<ConfigSection>('aero');
+  const {
+    activeId: activeConfigSection,
+    setActiveId: setActiveConfigSection,
+    containerRef: configScrollRef,
+    sectionRefs: configSectionRefs,
+    jumpTo: jumpToConfigSection,
+  } = useScrollSpy(CONFIG_SECTION_IDS, 'aero');
   const [aerofoilModel, setAerofoilModel] = useState('NACA 4 digit');
   const [aeroCorrection, setAeroCorrection] = useState('None');
   const [limitsEnabled, setLimitsEnabled] = useState({ thrust: true, torque: true, power: true });
@@ -73,50 +82,12 @@ export function CalculationNew() {
   const [irfLimit, setIrfLimit] = useState('');
   const [irfLimitError, setIrfLimitError] = useState('');
   const [maxFatigueLife, setMaxFatigueLife] = useState('1e10');
-  const configScrollRef = useRef<HTMLDivElement>(null);
-  const configSectionRefs = useRef<Record<string, HTMLElement | null>>({});
-  const configLastClickedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isModalMethod) setActiveConfigSection('modal');
     else if (analysisMethod === 'Static structural (RPM)') setActiveConfigSection('structural');
     else setActiveConfigSection('aero');
-  }, [analysisMethod]);
-
-  useEffect(() => {
-    const container = configScrollRef.current;
-    if (!container) return;
-    function handleScroll() {
-      const containerTop = container!.getBoundingClientRect().top;
-      const offsets = (['aero', 'modal', 'structural', 'postprocessing', 'debug'] as const)
-        .map((id) => {
-          const el = configSectionRefs.current[id];
-          return el ? { id, top: el.getBoundingClientRect().top - containerTop } : null;
-        })
-        .filter((x): x is { id: ConfigSection; top: number } => x !== null);
-      const aboveOrAt = offsets.filter((o) => o.top <= 100);
-      const detected = aboveOrAt.length > 0 ? aboveOrAt[aboveOrAt.length - 1].id : offsets[0]?.id;
-      if (!detected) return;
-      if (configLastClickedRef.current && configLastClickedRef.current !== detected) {
-        const el = configSectionRefs.current[configLastClickedRef.current];
-        if (el && el.getBoundingClientRect().top - containerTop > 100) return;
-      }
-      configLastClickedRef.current = null;
-      setActiveConfigSection(detected);
-    }
-    handleScroll();
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  function jumpToConfigSection(id: ConfigSection) {
-    setActiveConfigSection(id);
-    configLastClickedRef.current = id;
-    const container = configScrollRef.current;
-    const el = configSectionRefs.current[id];
-    if (!container || !el) return;
-    container.scrollBy({ top: el.getBoundingClientRect().top - container.getBoundingClientRect().top - 16 });
-  }
+  }, [analysisMethod, setActiveConfigSection]);
 
   // ── Load group tab ────────────────────────────────────────────────────────
   const [lgSearch, setLgSearch] = useState('');

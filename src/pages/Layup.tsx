@@ -6,7 +6,7 @@ import { Footer } from '@/components/common/layout/Footer';
 import { Pagination } from '@/components/common/list/Pagination';
 import { SortableHeader } from '@/components/common/list/SortableHeader';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
-import { rowInteractionProps, toggleSort } from '@/lib/listTable';
+import { paginate, rowInteractionProps, toggleSort } from '@/lib/listTable';
 import type { SortState, LayupSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { LAYUPS } from '@/data/layups';
@@ -39,8 +39,7 @@ export function Layup() {
     return copy;
   }, [filtered, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
 
   function handleSort(key: LayupSortKey) {
     setSort((prev) => toggleSort(prev, key));

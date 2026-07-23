@@ -1,4 +1,3 @@
-import { useRef, useState } from 'react';
 import { ChevronRight, Copy, GripVertical, Plus, Spline, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
@@ -10,6 +9,7 @@ import {
 } from '@/components/ui/tooltip';
 import { LAYUPS } from '@/data/layups';
 import type { ControlPoint } from '@/types';
+import { useDragReorder } from '@/hooks/useDragReorder';
 
 export interface LayupMapping {
   id: string;
@@ -48,40 +48,7 @@ export function LayupMappingTable({
   onReorder,
   onPickLayup,
 }: LayupMappingTableProps) {
-  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
-  const [insertBeforeIdx, setInsertBeforeIdx] = useState<number | null>(null);
-  const dragFromHandleRef = useRef<string | null>(null);
-
-  function handleDragStart(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
-    setDraggingIdx(idx);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(idx));
-  }
-  function handleDragOver(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = e.currentTarget.getBoundingClientRect();
-    const newInsert = e.clientY < rect.top + rect.height / 2 ? idx : idx + 1;
-    if (insertBeforeIdx !== newInsert) setInsertBeforeIdx(newInsert);
-  }
-  function handleDragLeave() {
-    setInsertBeforeIdx(null);
-  }
-  function handleDrop(e: React.DragEvent<HTMLTableRowElement>) {
-    e.preventDefault();
-    const fromIdx = Number(e.dataTransfer.getData('text/plain'));
-    if (insertBeforeIdx !== null && !Number.isNaN(fromIdx) && insertBeforeIdx !== fromIdx && insertBeforeIdx !== fromIdx + 1) {
-      const toIdx = insertBeforeIdx > fromIdx ? insertBeforeIdx - 1 : insertBeforeIdx;
-      onReorder(fromIdx, toIdx);
-    }
-    setDraggingIdx(null);
-    setInsertBeforeIdx(null);
-  }
-  function handleDragEnd() {
-    dragFromHandleRef.current = null;
-    setDraggingIdx(null);
-    setInsertBeforeIdx(null);
-  }
+  const { draggingIdx, insertBeforeIdx, getHandleProps, getRowDragProps } = useDragReorder(onReorder);
 
   return (
     <TooltipProvider>
@@ -120,18 +87,7 @@ export function LayupMappingTable({
             const row = (
               <tr
                 key={m.id}
-                draggable
-                onDragStart={(e) => {
-                  if (dragFromHandleRef.current !== m.id) {
-                    e.preventDefault();
-                    return;
-                  }
-                  handleDragStart(idx, e);
-                }}
-                onDragOver={(e) => handleDragOver(idx, e)}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onDragEnd={handleDragEnd}
+                {...getRowDragProps(m.id, idx)}
                 className={`group border-b border-[#e5e7eb] last:border-b-0 transition-colors ${
                   isDragging ? 'opacity-40' : ''
                 } ${activeMappingId === m.id ? 'bg-[#eef9ff]' : ''}`}
@@ -139,8 +95,7 @@ export function LayupMappingTable({
                 <td className="px-2 py-2 align-middle">
                   <span
                     aria-label="Drag handle"
-                    onMouseDown={() => { dragFromHandleRef.current = m.id; }}
-                    onMouseUp={() => { dragFromHandleRef.current = null; }}
+                    {...getHandleProps(m.id)}
                     className="flex h-7 w-7 cursor-grab items-center justify-center text-[#cbd5e1] opacity-0 transition-opacity hover:text-[#0a0a0a] active:cursor-grabbing group-hover:opacity-100"
                   >
                     <GripVertical className="h-4 w-4" strokeWidth={2} />

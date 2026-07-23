@@ -39,6 +39,21 @@ export function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+/** Evenly-spaced axis tick values in [min, max], starting at the first multiple of `step` >= min. */
+export function computeTicks(min: number, max: number, step: number): number[] {
+  const ticks: number[] = [];
+  const first = Math.ceil(min / step) * step;
+  for (let v = first; v <= max + 1e-9; v += step) {
+    ticks.push(Math.round(v / step) * step);
+  }
+  return ticks;
+}
+
+/** Decimal places to display for a tick step (0 for whole-number steps). */
+export function decimalsForStep(step: number): number {
+  return step >= 1 ? 0 : Math.max(0, -Math.floor(Math.log10(step)));
+}
+
 /**
  * Constrains a control point's x drag to stay within its neighbors (with a
  * small margin), while locking the first/last point to the 0..1 domain ends.

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
 import { nextLocalId } from '@/lib/utils';
 import { MaterialPickerDialog } from '@/components/layup/MaterialPickerDialog';
 import { MATERIALS } from '@/data/materials';
+import { useDragReorder } from '@/hooks/useDragReorder';
 
 const MATERIAL_TYPE_COLORS: Record<string, string> = {
   'UD Carbon Ply':      '#0066cc',
@@ -63,10 +64,18 @@ const INITIAL_PLIES: Ply[] = [
 export function LayupBuilder() {
   const [plies, setPlies] = useState<Ply[]>(INITIAL_PLIES);
   const [unifiedVisualization, setUnifiedVisualization] = useState(true);
-  const dragFromHandleRef = useRef<string | null>(null);
-  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
-  const [insertBeforeIdx, setInsertBeforeIdx] = useState<number | null>(null);
   const [materialPickerPlyId, setMaterialPickerPlyId] = useState<string | null>(null);
+
+  function reorderPlies(fromIdx: number, toIdx: number) {
+    setPlies((current) => {
+      const next = [...current];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next;
+    });
+  }
+
+  const { draggingIdx, insertBeforeIdx, getHandleProps, getRowDragProps } = useDragReorder(reorderPlies);
 
   function updatePly<K extends keyof Ply>(idx: number, key: K, value: Ply[K]) {
     setPlies((current) =>
@@ -91,42 +100,6 @@ export function LayupBuilder() {
       color: FALLBACK_COLOR,
     };
     setPlies((current) => [...current, newPly]);
-  }
-
-  // --- DnD handlers ---
-  function handleDragStart(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
-    setDraggingIdx(idx);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(idx));
-  }
-  function handleDragOver(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = e.currentTarget.getBoundingClientRect();
-    const newInsert = e.clientY < rect.top + rect.height / 2 ? idx : idx + 1;
-    if (insertBeforeIdx !== newInsert) setInsertBeforeIdx(newInsert);
-  }
-  function handleDragLeave() {
-    setInsertBeforeIdx(null);
-  }
-  function handleDrop(e: React.DragEvent<HTMLTableRowElement>) {
-    e.preventDefault();
-    const fromIdx = Number(e.dataTransfer.getData('text/plain'));
-    setPlies((current) => {
-      if (insertBeforeIdx === null || Number.isNaN(fromIdx)) return current;
-      if (insertBeforeIdx === fromIdx || insertBeforeIdx === fromIdx + 1) return current;
-      const next = [...current];
-      const [moved] = next.splice(fromIdx, 1);
-      const adjustedIdx = insertBeforeIdx > fromIdx ? insertBeforeIdx - 1 : insertBeforeIdx;
-      next.splice(adjustedIdx, 0, moved);
-      return next;
-    });
-    setDraggingIdx(null);
-    setInsertBeforeIdx(null);
-  }
-  function handleDragEnd() {
-    setDraggingIdx(null);
-    setInsertBeforeIdx(null);
   }
 
   return (
@@ -176,18 +149,7 @@ export function LayupBuilder() {
                 const row = (
                   <tr
                     key={ply.id}
-                    draggable
-                    onDragStart={(e) => {
-                      if (dragFromHandleRef.current !== ply.id) {
-                        e.preventDefault();
-                        return;
-                      }
-                      handleDragStart(idx, e);
-                    }}
-                    onDragOver={(e) => handleDragOver(idx, e)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onDragEnd={() => { dragFromHandleRef.current = null; handleDragEnd(); }}
+                    {...getRowDragProps(ply.id, idx)}
                     className={`border-b border-[#e5e7eb] transition-colors last:border-b-0 ${
                       isDragging ? 'opacity-40' : ''
                     }`}
@@ -196,8 +158,7 @@ export function LayupBuilder() {
                       <span
                         data-drag-handle
                         aria-label="Drag handle"
-                        onMouseDown={() => { dragFromHandleRef.current = ply.id; }}
-                        onMouseUp={() => { dragFromHandleRef.current = null; }}
+                        {...getHandleProps(ply.id)}
                         className="flex h-7 w-7 cursor-grab items-center justify-center text-[#6b7280] hover:text-[#0a0a0a] active:cursor-grabbing"
                       >
                         <GripVertical className="h-4 w-4" strokeWidth={2} />

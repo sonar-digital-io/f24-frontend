@@ -1,5 +1,6 @@
-import { Check, Play, Redo2, Undo2 } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { EditPageToolbarActions } from '@/components/common/layout/EditPageToolbarActions';
 import type { Tab } from '@/types';
 
 const TRIGGER_CLS =
@@ -79,38 +80,7 @@ export function CalculationSubToolbar({
         </TabsList>
       </Tabs>
 
-      <h1 className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
-        {titleText}
-      </h1>
-
-      <div className="flex shrink-0 items-center gap-4">
-        <div className="flex items-center gap-[6px]">
-          <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-          <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            aria-label="Undo"
-            className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9] text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-          >
-            <Undo2 className="h-4 w-4" strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            aria-label="Redo"
-            className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9] text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-          >
-            <Redo2 className="h-4 w-4" strokeWidth={2} />
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={onExit}
-          className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
-        >
-          Back to Calculations
-        </button>
+      <EditPageToolbarActions title={titleText} backLabel="Back to Calculations" onBack={onExit}>
         <button
           type="button"
           onClick={onRunCalculation}
@@ -120,7 +90,7 @@ export function CalculationSubToolbar({
           Run calculation
           <Play className="h-3.5 w-3.5 fill-current" strokeWidth={0} />
         </button>
-      </div>
+      </EditPageToolbarActions>
     </div>
   );
 }

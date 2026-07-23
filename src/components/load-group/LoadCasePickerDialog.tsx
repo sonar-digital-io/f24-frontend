@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { DialogHeader } from '@/components/common/dialog/DialogHeader';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
@@ -48,23 +49,7 @@ export function LoadCasePickerDialog({
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[calc(100vh-4rem)] w-full max-w-[480px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <h2
-            id="load-case-picker-title"
-            className="text-[20px] font-bold leading-7 text-[#181c20]"
-          >
-            Load cases
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
-          >
-            <X className="h-4 w-4" strokeWidth={2} />
-          </button>
-        </div>
+        <DialogHeader title="Load cases" titleId="load-case-picker-title" onClose={onClose} />
 
         {/* Search */}
         <div className="relative">

@@ -10,7 +10,7 @@ import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
 import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
 import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
-import { toggleSort } from '@/lib/listTable';
+import { paginate, toggleSetMember, toggleSort } from '@/lib/listTable';
 import type { SortState, CalculationSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { CALCULATIONS, timestampValue } from '@/data/calculations';
@@ -30,11 +30,7 @@ export function Calculation() {
   const statusFilter = useColumnFilter(allStatuses, () => setPage(1));
 
   function toggleExpand(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setExpandedIds((prev) => toggleSetMember(prev, id));
   }
 
   const filtered = useMemo(() => {
@@ -65,8 +61,7 @@ export function Calculation() {
     return copy;
   }, [filtered, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
 
   function handleSort(key: CalculationSortKey) {
     setSort((prev) => toggleSort(prev, key));

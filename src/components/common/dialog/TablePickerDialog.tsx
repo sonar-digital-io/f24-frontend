@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Search, X } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Pagination } from '@/components/common/list/Pagination';
 import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { DialogHeader } from '@/components/common/dialog/DialogHeader';
 import { toggleSort } from '@/lib/listTable';
 import type { SortState } from '@/types';
 import { Input } from '@/components/ui/input';
@@ -115,20 +116,7 @@ export function TablePickerDialog<T>({
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[calc(100vh-4rem)] w-full max-w-[931px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <h2 id={titleId} className="text-[20px] font-bold leading-7 text-[#181c20]">
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
-          >
-            <X className="h-4 w-4" strokeWidth={2} />
-          </button>
-        </div>
+        <DialogHeader title={title} titleId={titleId} onClose={onClose} />
 
         {/* Search */}
         <div className="max-w-[384px]">

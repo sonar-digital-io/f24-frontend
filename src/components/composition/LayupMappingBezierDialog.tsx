@@ -5,6 +5,7 @@ import { LayupMappingChart } from '@/components/composition/LayupMappingChart';
 import type { ControlPoint } from '@/types';
 import { clamp } from '@/lib/bezierMath';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useDraggablePosition } from '@/hooks/useDraggablePosition';
 
 /** Layup mapping bezier: longitudinal (m) along x, transversal (m) along y.
  *  X range 5..55 m, Y range -14..0 m (default — caller can override). */
@@ -74,13 +75,11 @@ export function LayupMappingBezierDialog({
   anchorLeft,
 }: LayupMappingBezierDialogProps) {
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
-  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const { pos, setPos, startDrag } = useDraggablePosition({ x: 0, y: 0 });
   const [size, setSize] = useState({ w: INIT_W, h: calcMinH(points.length) });
   const [expanded, setExpanded] = useState(false);
   const savedPosSize = useRef<{ pos: { x: number; y: number }; size: { w: number; h: number } } | null>(null);
 
-  const dragging = useRef(false);
-  const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
   const resizing = useRef(false);
   const resizeStart = useRef({ mx: 0, my: 0, w: 0, h: 0 });
 
@@ -116,26 +115,6 @@ export function LayupMappingBezierDialog({
   }
 
   useEscapeKey(onClose, open);
-
-  function startDrag(e: React.MouseEvent) {
-    e.preventDefault();
-    dragging.current = true;
-    dragStart.current = { mx: e.clientX, my: e.clientY, px: pos.x, py: pos.y };
-    function onMove(ev: MouseEvent) {
-      if (!dragging.current) return;
-      setPos({
-        x: dragStart.current.px + ev.clientX - dragStart.current.mx,
-        y: dragStart.current.py + ev.clientY - dragStart.current.my,
-      });
-    }
-    function onUp() {
-      dragging.current = false;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }
 
   function startResize(e: React.MouseEvent) {
     e.preventDefault();

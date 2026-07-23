@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { FormSection } from '@/data/materialFormFields';
+import { useScrollSpy } from '@/hooks/useScrollSpy';
 
 interface PropertyFormTabProps {
   sections: FormSection[];
@@ -17,63 +18,13 @@ export function PropertyFormTab({
   onChange,
   optionalAfterIndex = 0,
 }: PropertyFormTabProps) {
-  const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id ?? '');
-  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  // After a nav click, keep the clicked section active until the user manually scrolls it
-  // into the detection zone (or scrolls away from it in the other direction).
-  const lastClickedRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    function handleScroll() {
-      const el = scrollContainerRef.current;
-      if (!el) return;
-      const containerTop = el.getBoundingClientRect().top;
-      const offsets = sections
-        .map((s) => {
-          const el = sectionRefs.current[s.id];
-          return el ? { id: s.id, top: el.getBoundingClientRect().top - containerTop } : null;
-        })
-        .filter((x): x is { id: string; top: number } => x !== null);
-
-      const aboveOrAt = offsets.filter((o) => o.top <= 100);
-      const detected =
-        aboveOrAt.length > 0 ? aboveOrAt[aboveOrAt.length - 1].id : offsets[0]?.id;
-      if (!detected) return;
-
-      // If the user clicked a nav item that can't reach the top threshold (e.g. last
-      // section in a short list), keep it active until the user scrolls past it.
-      if (lastClickedRef.current && lastClickedRef.current !== detected) {
-        const clickedEl = sectionRefs.current[lastClickedRef.current];
-        if (clickedEl) {
-          const clickedTop = clickedEl.getBoundingClientRect().top - containerTop;
-          if (clickedTop > 100) return; // section is still below threshold — keep it active
-        }
-      }
-      lastClickedRef.current = null;
-      setActiveSectionId(detected);
-    }
-
-    handleScroll();
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [sections]);
-
-  function jumpTo(id: string) {
-    setActiveSectionId(id);
-    lastClickedRef.current = id;
-
-    const container = scrollContainerRef.current;
-    const el = sectionRefs.current[id];
-    if (!container || !el) return;
-    const containerTop = container.getBoundingClientRect().top;
-    const elTop = el.getBoundingClientRect().top;
-    // Instant scroll avoids timing races with the scroll-spy.
-    container.scrollBy({ top: elTop - containerTop - 16 });
-  }
+  const sectionIds = useMemo(() => sections.map((s) => s.id), [sections]);
+  const {
+    activeId: activeSectionId,
+    containerRef: scrollContainerRef,
+    sectionRefs,
+    jumpTo,
+  } = useScrollSpy(sectionIds, sections[0]?.id ?? '');
 
   return (
     <div className="flex h-full w-full max-w-[1200px] overflow-hidden rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] lg:flex-row">

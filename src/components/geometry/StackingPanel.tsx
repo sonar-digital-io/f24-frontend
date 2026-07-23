@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, FoldHorizontal } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FoldHorizontal } from 'lucide-react';
 import { BezierEditor } from '@/components/common/viewer/BezierEditor';
 import { BezierPointsTable } from '@/components/common/viewer/BezierPointsTable';
 import type { ControlPoint } from '@/types';
+import { SectionTabs } from '@/components/geometry/SectionTabs';
+import { FoldableSectionList } from '@/components/geometry/FoldableSectionList';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
 
 type SectionKey = 'sweep' | 'dihedral' | 'twist' | 'chord';
@@ -141,19 +142,12 @@ export function StackingPanel({ folded, onFoldToggle }: StackingPanelProps) {
       {/* Header: sub-tabs (expanded mode) + toggle button */}
       <div className="flex items-center justify-between gap-4 p-6 pb-4">
         {!folded ? (
-          <Tabs value={subTab} onValueChange={(v) => setSubTab(v as SectionKey)}>
-            <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
-              {SECTION_KEYS.map((key) => (
-                <TabsTrigger
-                  key={key}
-                  value={key}
-                  className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
-                >
-                  {SECTION_LABELS[key]}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+          <SectionTabs
+            sectionKeys={SECTION_KEYS}
+            sectionLabels={SECTION_LABELS}
+            value={subTab}
+            onValueChange={setSubTab}
+          />
         ) : (
           <div />
         )}
@@ -168,43 +162,15 @@ export function StackingPanel({ folded, onFoldToggle }: StackingPanelProps) {
         </button>
       </div>
 
-      {/* Scrollable content */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
-        {folded ? (
-          <div className="flex flex-col gap-3">
-            {SECTION_KEYS.map((key) => {
-              const open = openSections[key];
-              return (
-                <div
-                  key={key}
-                  className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white"
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(key)}
-                    aria-expanded={open}
-                    className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-[#f9fafb]"
-                  >
-                    <span className="text-[16px] font-semibold leading-6 text-[#0a0a0a]">
-                      {SECTION_LABELS[key]}
-                    </span>
-                    {open ? (
-                      <ChevronUp className="h-4 w-4 text-[#6b7280]" strokeWidth={2} />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-[#6b7280]" strokeWidth={2} />
-                    )}
-                  </button>
-                  {open && (
-                    <div className="border-t border-[#e5e7eb] p-4">{renderSectionBody(key)}</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          renderSectionBody(subTab)
-        )}
-      </div>
+      <FoldableSectionList
+        folded={folded}
+        sectionKeys={SECTION_KEYS}
+        sectionLabels={SECTION_LABELS}
+        openSections={openSections}
+        onToggleSection={toggleSection}
+        activeTab={subTab}
+        renderSectionBody={renderSectionBody}
+      />
     </div>
   );
 }

@@ -1,12 +1,12 @@
-import { useRef, useState } from 'react';
-import { X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { AirfoilPreview } from '@/components/common/AirfoilPreview';
 import { PROFILE_TYPES, type Profile } from '@/data/profiles';
 import { DropdownSelect } from '@/components/common/form/DropdownSelect';
+import { DialogHeader } from '@/components/common/dialog/DialogHeader';
 import { Field, NumberField } from '@/components/geometry/ProfileFormFields';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useDraggablePosition } from '@/hooks/useDraggablePosition';
 
 export interface ProfileDetailPopoverProps {
   profile: Profile;
@@ -17,35 +17,12 @@ export interface ProfileDetailPopoverProps {
 
 /** Draggable floating popover for editing a single profile's parameters. */
 export function ProfileDetailPopover({ profile, onChange, onClose, onSort }: ProfileDetailPopoverProps) {
-  const [pos, setPos] = useState(() => ({
+  const { pos, startDrag } = useDraggablePosition(() => ({
     x: window.innerWidth / 2,
     y: window.innerHeight / 2,
   }));
-  const dragging = useRef(false);
-  const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
 
   useEscapeKey(onClose);
-
-  function startDrag(e: React.MouseEvent) {
-    if ((e.target as HTMLElement).closest('button')) return;
-    e.preventDefault();
-    dragging.current = true;
-    dragStart.current = { mx: e.clientX, my: e.clientY, px: pos.x, py: pos.y };
-    function onMove(ev: MouseEvent) {
-      if (!dragging.current) return;
-      setPos({
-        x: dragStart.current.px + ev.clientX - dragStart.current.mx,
-        y: dragStart.current.py + ev.clientY - dragStart.current.my,
-      });
-    }
-    function onUp() {
-      dragging.current = false;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }
 
   function update<K extends keyof Profile>(key: K, value: Profile[K]) {
     onChange({ ...profile, [key]: value });
@@ -63,18 +40,12 @@ export function ProfileDetailPopover({ profile, onChange, onClose, onSort }: Pro
           startDrag(e);
         }}
       >
-        {/* Header */}
-        <div className="flex cursor-move items-start justify-between gap-4">
-          <h2 className="text-[18px] font-semibold leading-7 text-[#0a0a0a]">{profile.name}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9] hover:text-[#0a0a0a]"
-          >
-            <X className="h-4 w-4" strokeWidth={2} />
-          </button>
-        </div>
+        <DialogHeader
+          title={profile.name}
+          onClose={onClose}
+          containerClassName="flex cursor-move items-start justify-between gap-4"
+          titleClassName="text-[18px] font-semibold leading-7 text-[#0a0a0a]"
+        />
 
         {/* Show 2D checkbox */}
         <div className="flex items-center gap-2">

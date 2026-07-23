@@ -14,6 +14,20 @@ export function toggleSort<K extends string>(prev: SortState<K>, key: K): SortSt
     : { key, direction: 'asc' };
 }
 
+/** Toggles `value`'s membership in a Set, returning a new Set (immutable update for React state). */
+export function toggleSetMember<T>(prev: Set<T>, value: T): Set<T> {
+  const next = new Set(prev);
+  next.has(value) ? next.delete(value) : next.add(value);
+  return next;
+}
+
+/** Slices `sorted` into the current page, and the page count it took to get there. */
+export function paginate<T>(sorted: T[], page: number, pageSize: number): { totalPages: number; pageRows: T[] } {
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const pageRows = sorted.slice((page - 1) * pageSize, page * pageSize);
+  return { totalPages, pageRows };
+}
+
 /** Spread onto a clickable <tr> so keyboard users can open rows too. */
 export function rowInteractionProps(onOpen: () => void) {
   return {
