@@ -8,12 +8,12 @@ import { Footer } from '@/components/common/layout/Footer';
 import { MaterialRow } from '@/components/material/MaterialRow';
 import { MaterialDateFilterPopover } from '@/components/material/MaterialDateFilterPopover';
 import { Pagination } from '@/components/common/list/Pagination';
-import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
 import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
 import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
 import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
-import { paginate, toggleSetMember, toggleSort } from '@/lib/listTable';
+import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
 import type { SortState, MaterialSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { MATERIALS, lastUpdatedSortKey } from '@/data/materials';
@@ -91,15 +91,8 @@ export function Material() {
   const typeFilter = useColumnFilter(allTypes, () => setPage(1));
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
     return MATERIALS.filter((m) => {
-      if (
-        q &&
-        !m.name.toLowerCase().includes(q) &&
-        !m.type.toLowerCase().includes(q) &&
-        !m.description.toLowerCase().includes(q)
-      )
-        return false;
+      if (!matchesQuery(query, [m.name, m.type, m.description])) return false;
       if (typeFilter.selected.size > 0 && !typeFilter.selected.has(m.type)) return false;
       if (dateRange?.from || dateRange?.to) {
         const d = parseLastUpdated(m.lastUpdated);
@@ -112,24 +105,14 @@ export function Material() {
     });
   }, [query, typeFilter.selected, dateRange]);
 
-  const sorted = useMemo(() => {
-    const copy = [...filtered];
-    copy.sort((a, b) => {
-      // lastUpdated mixes vYYYY/MM (library) and YYYY-MM-DD (own) — normalize before comparing.
-      const aVal =
-        sort.key === 'lastUpdated'
-          ? lastUpdatedSortKey(a.lastUpdated)
-          : a[sort.key].toLowerCase();
-      const bVal =
-        sort.key === 'lastUpdated'
-          ? lastUpdatedSortKey(b.lastUpdated)
-          : b[sort.key].toLowerCase();
-      if (aVal === bVal) return 0;
-      const cmp = aVal < bVal ? -1 : 1;
-      return sort.direction === 'asc' ? cmp : -cmp;
-    });
-    return copy;
-  }, [filtered, sort]);
+  // lastUpdated mixes vYYYY/MM (library) and YYYY-MM-DD (own) — normalize before comparing.
+  const sorted = useMemo(
+    () =>
+      sortItems(filtered, sort, (m, key) =>
+        key === 'lastUpdated' ? lastUpdatedSortKey(m.lastUpdated) : m[key]
+      ),
+    [filtered, sort]
+  );
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
 
@@ -140,6 +123,43 @@ export function Material() {
   function toggleExpand(id: string) {
     setExpandedIds((prev) => toggleSetMember(prev, id));
   }
+
+  const COLUMNS: ListTableHeadColumn<MaterialSortKey>[] = [
+    { label: 'Name', sortKey: 'name', className: 'w-[240px]' },
+    {
+      label: 'Type',
+      sortKey: 'type',
+      className: 'w-[240px]',
+      action: (
+        <ColumnFilterButton
+          ariaLabel="Filter by type"
+          active={typeFilter.selected.size > 0}
+          onClick={typeFilter.openDropdown}
+          buttonRef={typeFilter.btnRef}
+        />
+      ),
+    },
+    { label: 'Source', sortKey: 'source', className: 'w-[110px]' },
+    { label: 'Description' },
+    {
+      label: 'Last updated',
+      sortKey: 'lastUpdated',
+      className: 'w-[160px]',
+      action: (
+        <button
+          ref={filterBtnRef}
+          type="button"
+          aria-label="Filter by last updated"
+          onClick={openFilter}
+          className={`flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-[#f1f5f9] ${
+            dateRange?.from || dateRange?.to ? 'text-[#006496]' : 'text-[#9ca3af]'
+          }`}
+        >
+          <Filter className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+      ),
+    },
+  ];
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
@@ -200,68 +220,12 @@ export function Material() {
             {/* Table */}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full table-fixed border-collapse" style={{ minWidth: 1100 }}>
-                <thead>
-                  <tr className="border-b border-[#e5e7eb]">
-                    <th className="h-10 w-[52px] px-3 text-left" />
-                    <SortableHeader
-                      label="Name"
-                      sortKey="name"
-                      currentSort={sort}
-                      onClick={handleSort}
-                      className="w-[240px]"
-                    />
-                    <SortableHeader
-                      label="Type"
-                      sortKey="type"
-                      currentSort={sort}
-                      onClick={handleSort}
-                      className="w-[240px]"
-                      action={
-                        <ColumnFilterButton
-                          ariaLabel="Filter by type"
-                          active={typeFilter.selected.size > 0}
-                          onClick={typeFilter.openDropdown}
-                          buttonRef={typeFilter.btnRef}
-                        />
-                      }
-                    />
-                    <SortableHeader
-                      label="Source"
-                      sortKey="source"
-                      currentSort={sort}
-                      onClick={handleSort}
-                      className="w-[110px]"
-                    />
-                    <th className="h-10 px-3 text-left">
-                      <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
-                        Description
-                      </span>
-                    </th>
-                    <SortableHeader
-                      label="Last updated"
-                      sortKey="lastUpdated"
-                      currentSort={sort}
-                      onClick={handleSort}
-                      className="w-[160px]"
-                      action={
-                        <button
-                          ref={filterBtnRef}
-                          type="button"
-                          aria-label="Filter by last updated"
-                          onClick={openFilter}
-                          className={`flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-[#f1f5f9] ${
-                            dateRange?.from || dateRange?.to
-                              ? 'text-[#006496]'
-                              : 'text-[#9ca3af]'
-                          }`}
-                        >
-                          <Filter className="h-3.5 w-3.5" strokeWidth={2} />
-                        </button>
-                      }
-                    />
-                    <th className="h-10 w-[208px] px-3 text-left" />
-                  </tr>
-                </thead>
+                <ListTableHead
+                  columns={COLUMNS}
+                  sort={sort}
+                  onSort={handleSort}
+                  leadingWidthClassName="w-[52px]"
+                />
                 <tbody>
                   {pageRows.map((material) => (
                     <MaterialRow

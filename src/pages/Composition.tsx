@@ -4,8 +4,8 @@ import { Copy, Download, Pencil, Search, Trash2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { Pagination } from '@/components/common/list/Pagination';
-import { SortableHeader } from '@/components/common/list/SortableHeader';
-import { paginate, toggleSort } from '@/lib/listTable';
+import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
+import { matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, ViewMode, CompositionSortKey } from '@/types';
 import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
 import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
@@ -29,33 +29,45 @@ export function Composition() {
   const allTypes = useMemo(() => [...new Set(COMPOSITIONS.map((c) => c.type))].sort(), []);
   const typeFilter = useColumnFilter(allTypes, () => setPage(1));
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return COMPOSITIONS.filter((c) => {
-      if (q && !c.name.toLowerCase().includes(q) && !c.description.toLowerCase().includes(q))
-        return false;
-      if (typeFilter.selected.size > 0 && !typeFilter.selected.has(c.type)) return false;
-      return true;
-    });
-  }, [query, typeFilter.selected]);
+  const filtered = useMemo(
+    () =>
+      COMPOSITIONS.filter(
+        (c) =>
+          matchesQuery(query, [c.name, c.description]) &&
+          (typeFilter.selected.size === 0 || typeFilter.selected.has(c.type))
+      ),
+    [query, typeFilter.selected]
+  );
 
-  const sorted = useMemo(() => {
-    const copy = [...filtered];
-    copy.sort((a, b) => {
-      const dir = sort.direction === 'asc' ? 1 : -1;
-      if (sort.key === 'nominalRadius') return (a.nominalRadius - b.nominalRadius) * dir;
-      const aVal = a[sort.key].toLowerCase();
-      const bVal = b[sort.key].toLowerCase();
-      return (aVal < bVal ? -1 : aVal > bVal ? 1 : 0) * dir;
-    });
-    return copy;
-  }, [filtered, sort]);
+  const sorted = useMemo(
+    () => sortItems(filtered, sort, (c, key) => (key === 'nominalRadius' ? c.nominalRadius : c[key])),
+    [filtered, sort]
+  );
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
 
   function handleSort(key: CompositionSortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
+
+  const COLUMNS: ListTableHeadColumn<CompositionSortKey>[] = [
+    { label: 'Name', sortKey: 'name', className: 'w-[240px]' },
+    { label: 'Description' },
+    { label: 'Nominal radius', sortKey: 'nominalRadius', className: 'w-[140px]' },
+    {
+      label: 'Type',
+      className: 'w-[180px]',
+      action: (
+        <ColumnFilterButton
+          ariaLabel="Filter by type"
+          active={typeFilter.selected.size > 0}
+          onClick={typeFilter.openDropdown}
+          buttonRef={typeFilter.btnRef}
+        />
+      ),
+    },
+    { label: 'Last updated', sortKey: 'lastUpdated', className: 'w-[160px] whitespace-nowrap' },
+  ];
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
@@ -114,50 +126,7 @@ export function Composition() {
             {view === 'list' && (
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b border-[#e5e7eb]">
-                      <SortableHeader
-                        label="Name"
-                        sortKey="name"
-                        currentSort={sort}
-                        onClick={handleSort}
-                        className="w-[240px]"
-                      />
-                      <th className="h-10 px-3 text-left">
-                        <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
-                          Description
-                        </span>
-                      </th>
-                      <SortableHeader
-                        label="Nominal radius"
-                        sortKey="nominalRadius"
-                        currentSort={sort}
-                        onClick={handleSort}
-                        className="w-[140px]"
-                      />
-                      <th className="h-10 w-[180px] px-3 text-left">
-                        <div className="flex items-center gap-1">
-                          <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
-                            Type
-                          </span>
-                          <ColumnFilterButton
-                            ariaLabel="Filter by type"
-                            active={typeFilter.selected.size > 0}
-                            onClick={typeFilter.openDropdown}
-                            buttonRef={typeFilter.btnRef}
-                          />
-                        </div>
-                      </th>
-                      <SortableHeader
-                        label="Last updated"
-                        sortKey="lastUpdated"
-                        currentSort={sort}
-                        onClick={handleSort}
-                        className="w-[160px] whitespace-nowrap"
-                      />
-                      <th className="h-10 w-[208px] px-3 text-left" />
-                    </tr>
-                  </thead>
+                  <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
                   <tbody>
                     {pageRows.map((c) => (
                       <tr

@@ -28,6 +28,36 @@ export function paginate<T>(sorted: T[], page: number, pageSize: number): { tota
   return { totalPages, pageRows };
 }
 
+/** True when `query` is empty, or found (case-insensitively) in any of `fields`. */
+export function matchesQuery(query: string, fields: string[]): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return fields.some((f) => f.toLowerCase().includes(q));
+}
+
+/**
+ * Sorts a copy of `items` by `sort`, using `getValue` to pull the comparable
+ * value for the active column — numbers compare numerically, everything else
+ * compares as a case-insensitive string. Shared by every list page's sorting
+ * (each page's `getValue` handles its own special-cased columns, e.g.
+ * Material's mixed-format `lastUpdated` or Calculation's parsed timestamps).
+ */
+export function sortItems<T, K extends string>(
+  items: T[],
+  sort: SortState<K>,
+  getValue: (item: T, key: K) => string | number
+): T[] {
+  const dir = sort.direction === 'asc' ? 1 : -1;
+  return [...items].sort((a, b) => {
+    const aVal = getValue(a, sort.key);
+    const bVal = getValue(b, sort.key);
+    if (typeof aVal === 'number' && typeof bVal === 'number') return (aVal - bVal) * dir;
+    const aStr = String(aVal).toLowerCase();
+    const bStr = String(bVal).toLowerCase();
+    return (aStr < bStr ? -1 : aStr > bStr ? 1 : 0) * dir;
+  });
+}
+
 /** Spread onto a clickable <tr> so keyboard users can open rows too. */
 export function rowInteractionProps(onOpen: () => void) {
   return {

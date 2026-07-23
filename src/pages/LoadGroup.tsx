@@ -4,9 +4,9 @@ import { Copy, Download, Pencil, Search, Trash2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { Pagination } from '@/components/common/list/Pagination';
-import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
-import { paginate, rowInteractionProps, toggleSort } from '@/lib/listTable';
+import { matchesQuery, paginate, rowInteractionProps, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, LoadGroupSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { LOAD_GROUPS, type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
@@ -47,31 +47,24 @@ export function LoadGroup() {
   const [sort, setSort] = useState<SortState<LoadGroupSortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return LOAD_GROUPS;
-    return LOAD_GROUPS.filter(
-      (g) => g.name.toLowerCase().includes(q) || g.description.toLowerCase().includes(q)
-    );
-  }, [query]);
+  const filtered = useMemo(
+    () => LOAD_GROUPS.filter((g) => matchesQuery(query, [g.name, g.description])),
+    [query]
+  );
 
-  const sorted = useMemo(() => {
-    const copy = [...filtered];
-    copy.sort((a, b) => {
-      const aVal = a[sort.key].toLowerCase();
-      const bVal = b[sort.key].toLowerCase();
-      if (aVal === bVal) return 0;
-      const cmp = aVal < bVal ? -1 : 1;
-      return sort.direction === 'asc' ? cmp : -cmp;
-    });
-    return copy;
-  }, [filtered, sort]);
+  const sorted = useMemo(() => sortItems(filtered, sort, (g, key) => g[key]), [filtered, sort]);
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
 
   function handleSort(key: LoadGroupSortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
+
+  const COLUMNS: ListTableHeadColumn<LoadGroupSortKey>[] = [
+    { label: 'Name', sortKey: 'name', className: 'w-[260px]' },
+    { label: 'Description' },
+    { label: 'Last updated', sortKey: 'lastUpdated', className: 'w-[160px]' },
+  ];
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
@@ -119,30 +112,7 @@ export function LoadGroup() {
             {/* Table */}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b border-[#e5e7eb]">
-                    <SortableHeader
-                      label="Name"
-                      sortKey="name"
-                      currentSort={sort}
-                      onClick={handleSort}
-                      className="w-[260px]"
-                    />
-                    <th className="h-10 px-3 text-left">
-                      <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
-                        Description
-                      </span>
-                    </th>
-                    <SortableHeader
-                      label="Last updated"
-                      sortKey="lastUpdated"
-                      currentSort={sort}
-                      onClick={handleSort}
-                      className="w-[160px]"
-                    />
-                    <th className="h-10 w-[208px] px-3 text-left" />
-                  </tr>
-                </thead>
+                <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
                 <tbody>
                   {pageRows.map((item) => (
                     <LoadGroupRow

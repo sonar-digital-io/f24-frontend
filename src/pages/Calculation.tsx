@@ -5,12 +5,12 @@ import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { CalculationRow } from '@/components/calculation/CalculationRow';
 import { Pagination } from '@/components/common/list/Pagination';
-import { SortableHeader } from '@/components/common/list/SortableHeader';
+import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
 import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
 import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
 import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
-import { paginate, toggleSetMember, toggleSort } from '@/lib/listTable';
+import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
 import type { SortState, CalculationSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
 import { CALCULATIONS, timestampValue } from '@/data/calculations';
@@ -33,39 +33,47 @@ export function Calculation() {
     setExpandedIds((prev) => toggleSetMember(prev, id));
   }
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return CALCULATIONS.filter((c) => {
-      if (q && !c.name.toLowerCase().includes(q) && !c.description.toLowerCase().includes(q))
-        return false;
-      if (statusFilter.selected.size > 0 && !statusFilter.selected.has(c.status)) return false;
-      return true;
-    });
-  }, [query, statusFilter.selected]);
+  const filtered = useMemo(
+    () =>
+      CALCULATIONS.filter(
+        (c) =>
+          matchesQuery(query, [c.name, c.description]) &&
+          (statusFilter.selected.size === 0 || statusFilter.selected.has(c.status))
+      ),
+    [query, statusFilter.selected]
+  );
 
-  const sorted = useMemo(() => {
-    const copy = [...filtered];
-    copy.sort((a, b) => {
-      // Timestamps are '2026-04-13 1:43 PM' strings — 12-hour times don't sort
-      // lexically, so compare them as parsed values.
-      const cmp =
-        sort.key === 'timestamp'
-          ? timestampValue(a.timestamp) - timestampValue(b.timestamp)
-          : a.name.toLowerCase() < b.name.toLowerCase()
-            ? -1
-            : a.name.toLowerCase() > b.name.toLowerCase()
-              ? 1
-              : 0;
-      return sort.direction === 'asc' ? cmp : -cmp;
-    });
-    return copy;
-  }, [filtered, sort]);
+  // Timestamps are '2026-04-13 1:43 PM' strings — 12-hour times don't sort
+  // lexically, so compare them as parsed values.
+  const sorted = useMemo(
+    () =>
+      sortItems(filtered, sort, (c, key) => (key === 'timestamp' ? timestampValue(c.timestamp) : c[key])),
+    [filtered, sort]
+  );
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
 
   function handleSort(key: CalculationSortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
+
+  const COLUMNS: ListTableHeadColumn<CalculationSortKey>[] = [
+    { label: 'Name', sortKey: 'name', className: 'w-[260px]' },
+    { label: 'Description' },
+    { label: 'Start time', sortKey: 'timestamp', className: 'w-[200px]' },
+    {
+      label: 'Status',
+      className: 'w-[180px]',
+      action: (
+        <ColumnFilterButton
+          ariaLabel="Filter by status"
+          active={statusFilter.selected.size > 0}
+          onClick={statusFilter.openDropdown}
+          buttonRef={statusFilter.btnRef}
+        />
+      ),
+    },
+  ];
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
@@ -109,44 +117,13 @@ export function Calculation() {
             {/* Table */}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b border-[#e5e7eb]">
-                    <th className="h-10 w-[52px] px-3 text-left" />
-                    <SortableHeader
-                      label="Name"
-                      sortKey="name"
-                      currentSort={sort}
-                      onClick={handleSort}
-                      className="w-[260px]"
-                    />
-                    <th className="h-10 px-3 text-left">
-                      <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
-                        Description
-                      </span>
-                    </th>
-                    <SortableHeader
-                      label="Start time"
-                      sortKey="timestamp"
-                      currentSort={sort}
-                      onClick={handleSort}
-                      className="w-[200px]"
-                    />
-                    <th className="h-10 w-[180px] px-3 text-left">
-                      <div className="flex items-center gap-1">
-                        <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
-                          Status
-                        </span>
-                        <ColumnFilterButton
-                          ariaLabel="Filter by status"
-                          active={statusFilter.selected.size > 0}
-                          onClick={statusFilter.openDropdown}
-                          buttonRef={statusFilter.btnRef}
-                        />
-                      </div>
-                    </th>
-                    <th className="h-10 w-[148px] px-3 text-left" />
-                  </tr>
-                </thead>
+                <ListTableHead
+                  columns={COLUMNS}
+                  sort={sort}
+                  onSort={handleSort}
+                  leadingWidthClassName="w-[52px]"
+                  actionsWidthClassName="w-[148px]"
+                />
                 <tbody>
                   {pageRows.map((item) => (
                     <CalculationRow
