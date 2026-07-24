@@ -1,13 +1,14 @@
 import { apiClient } from './client';
 import type {
   MaterialPayload,
+  MaterialCreateResponse,
   Material,
   MaterialMechanicalPropertiesPayload,
   MaterialFatiguePropertiesPayload,
 } from './types/materials';
 
-export async function createMaterial(payload: MaterialPayload): Promise<Material> {
-  const { data } = await apiClient.post<Material>('/material/', payload);
+export async function createMaterial(payload: MaterialPayload): Promise<MaterialCreateResponse> {
+  const { data } = await apiClient.post<MaterialCreateResponse>('/material/', payload);
   return data;
 }
 

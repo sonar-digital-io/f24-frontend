@@ -7,11 +7,18 @@ export interface MaterialPayload {
   fatigue_properties: KeyValuePair[];
 }
 
+export interface MaterialCreateResponse {
+  id: number;
+}
+
 export interface Material {
   id: number;
+  user: string;
+  last_modified: string;
   name: string;
+  date: string;
   description?: string;
-  [key: string]: unknown;
+  type: string;
 }
 
 export interface MaterialMechanicalPropertiesPayload {
