@@ -1,6 +1,7 @@
 import { apiClient } from './client';
 import type {
   GeometryPayload,
+  GeometryCreateResponse,
   Geometry,
   GeometrySettingsPayload,
   GeometryEdgesPayload,
@@ -8,11 +9,13 @@ import type {
   GeometryProfilePreviewPayload,
   GeometryProfileQuery,
   GeometrySparsPayload,
+  GeometryTopView,
   ProfileGeneratorPayload,
+  ProfileGeneratorResponse,
 } from './types/geometry';
 
-export async function createGeometry(payload: GeometryPayload): Promise<Geometry> {
-  const { data } = await apiClient.post<Geometry>('/geometry/', payload);
+export async function createGeometry(payload: GeometryPayload): Promise<GeometryCreateResponse> {
+  const { data } = await apiClient.post<GeometryCreateResponse>('/geometry/', payload);
   return data;
 }
 
@@ -50,9 +53,10 @@ export async function updateGeometryEdges(geometryId: number, payload: GeometryE
   return data;
 }
 
-export async function getGeometryEdgesPreview(geometryId: number, resolution: number): Promise<unknown> {
+export async function getGeometryEdgesPreview(geometryId: number, resolution: number): Promise<Blob> {
   const { data } = await apiClient.get(`/geometry/${geometryId}/edges/preview/`, {
     params: { resolution },
+    responseType: 'blob',
   });
   return data;
 }
@@ -67,13 +71,13 @@ export async function updateGeometryProfiles(geometryId: number, payload: Geomet
   return data;
 }
 
-export async function previewGeometryProfile(geometryId: number, payload: GeometryProfilePreviewPayload): Promise<unknown> {
-  const { data } = await apiClient.post(`/geometry/${geometryId}/profiles/preview/`, payload);
+export async function previewGeometryProfile(geometryId: number, payload: GeometryProfilePreviewPayload): Promise<number[][]> {
+  const { data } = await apiClient.post<number[][]>(`/geometry/${geometryId}/profiles/preview/`, payload);
   return data;
 }
 
-export async function getGeometryProfile(geometryId: number, profileId: number, query?: GeometryProfileQuery): Promise<unknown> {
-  const { data } = await apiClient.get(`/geometry/${geometryId}/profiles/${profileId}/`, { params: query });
+export async function getGeometryProfile(geometryId: number, profileId: number, query?: GeometryProfileQuery): Promise<number[][]> {
+  const { data } = await apiClient.get<number[][]>(`/geometry/${geometryId}/profiles/${profileId}/`, { params: query });
   return data;
 }
 
@@ -92,23 +96,23 @@ export async function updateGeometrySpars(geometryId: number, payload: GeometryS
   return data;
 }
 
-export async function getGeometrySparsPreview(geometryId: number): Promise<unknown> {
-  const { data } = await apiClient.get(`/geometry/${geometryId}/spars/preview/`);
+export async function getGeometrySparsPreview(geometryId: number): Promise<Blob> {
+  const { data } = await apiClient.get(`/geometry/${geometryId}/spars/preview/`, { responseType: 'blob' });
   return data;
 }
 
-export async function getGeometryTopView(geometryId: number): Promise<unknown> {
-  const { data } = await apiClient.get(`/geometry/${geometryId}/top-view/`);
+export async function getGeometryTopView(geometryId: number): Promise<GeometryTopView> {
+  const { data } = await apiClient.get<GeometryTopView>(`/geometry/${geometryId}/top-view/`);
   return data;
 }
 
-export async function runProfileGenerator(geometryId: number, payload: ProfileGeneratorPayload): Promise<unknown> {
-  const { data } = await apiClient.post(`/geometry/${geometryId}/tools/profile-generator/`, payload);
+export async function runProfileGenerator(geometryId: number, payload: ProfileGeneratorPayload): Promise<ProfileGeneratorResponse> {
+  const { data } = await apiClient.post<ProfileGeneratorResponse>(`/geometry/${geometryId}/tools/profile-generator/`, payload);
   return data;
 }
 
-export async function updateProfileGenerator(geometryId: number, payload: ProfileGeneratorPayload): Promise<unknown> {
-  const { data } = await apiClient.put(`/geometry/${geometryId}/tools/profile-generator/`, payload);
+export async function updateProfileGenerator(geometryId: number, payload: ProfileGeneratorPayload): Promise<ProfileGeneratorResponse> {
+  const { data } = await apiClient.put<ProfileGeneratorResponse>(`/geometry/${geometryId}/tools/profile-generator/`, payload);
   return data;
 }
 

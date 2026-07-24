@@ -5,11 +5,18 @@ export interface GeometryPayload {
   description?: string;
 }
 
+export interface GeometryCreateResponse {
+  id: number;
+}
+
 export interface Geometry {
   id: number;
   name: string;
+  user: string;
   description?: string;
-  [key: string]: unknown;
+  created_at: string;
+  last_modified: string;
+  valid: boolean;
 }
 
 export interface GeometrySettingsPayload {
@@ -64,12 +71,26 @@ export interface GeometrySparsPayload {
   spars: unknown[];
 }
 
-export interface ProfileGeneratorParameters {
-  start_position: number;
-  end_position: number;
-  profile_count: number;
+export interface GeometryTopView {
+  leading_edge: number[][];
+  trailing_edge: number[][];
+  profiles: unknown[];
+  nominal_radius: number;
 }
 
 export interface ProfileGeneratorPayload {
-  profile_generator_parameters: ProfileGeneratorParameters;
+  start_position: number;
+  end_position: number;
+  parameters: GeometryProfileParameter[];
+}
+
+export interface GeneratedProfile {
+  name: string;
+  position: number;
+  type: string;
+  parameters: GeometryProfileParameter[];
+}
+
+export interface ProfileGeneratorResponse {
+  profiles: GeneratedProfile[];
 }
