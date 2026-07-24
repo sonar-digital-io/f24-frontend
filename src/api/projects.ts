@@ -1,6 +1,7 @@
 import { apiClient } from './client';
 import type {
   ProjectPayload,
+  ProjectCreateResponse,
   Project,
   ProjectSettingsPayload,
   ProjectCompositionPayload,
@@ -9,10 +10,11 @@ import type {
   ProjectFatiguePayload,
   ProjectStatePayload,
   ProjectLogQuery,
+  ProjectLogResponse,
 } from './types/projects';
 
-export async function createProject(payload: ProjectPayload): Promise<Project> {
-  const { data } = await apiClient.post<Project>('/project/', payload);
+export async function createProject(payload: ProjectPayload): Promise<ProjectCreateResponse> {
+  const { data } = await apiClient.post<ProjectCreateResponse>('/project/', payload);
   return data;
 }
 
@@ -26,8 +28,8 @@ export async function getProject(projectId: string): Promise<Project> {
   return data;
 }
 
-export async function updateProject(projectId: string, payload: ProjectPayload): Promise<Project> {
-  const { data } = await apiClient.put<Project>(`/project/${projectId}/`, payload);
+export async function updateProject(projectId: string, payload: ProjectPayload): Promise<unknown> {
+  const { data } = await apiClient.put(`/project/${projectId}/`, payload);
   return data;
 }
 
@@ -75,7 +77,7 @@ export async function exportProject(projectId: string): Promise<Blob> {
   return data;
 }
 
-export async function getProjectLog(projectId: string, query?: ProjectLogQuery): Promise<unknown> {
-  const { data } = await apiClient.get(`/project/${projectId}/log/`, { params: query });
+export async function getProjectLog(projectId: string, query?: ProjectLogQuery): Promise<ProjectLogResponse> {
+  const { data } = await apiClient.get<ProjectLogResponse>(`/project/${projectId}/log/`, { params: query });
   return data;
 }

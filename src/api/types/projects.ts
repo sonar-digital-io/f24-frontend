@@ -5,11 +5,20 @@ export interface ProjectPayload {
   description?: string;
 }
 
+export interface ProjectCreateResponse {
+  uuid: string;
+}
+
+export type ProjectState = 'RUNNING' | 'STOPPED' | (string & {});
+
 export interface Project {
-  id: string;
+  uuid: string;
   name: string;
   description?: string;
-  [key: string]: unknown;
+  state: ProjectState;
+  created_at: string;
+  last_modified: string;
+  user: string;
 }
 
 export interface ProjectSettingsPayload {
@@ -32,8 +41,6 @@ export interface ProjectFatiguePayload {
   fatigue_profile: number;
 }
 
-export type ProjectState = 'RUNNING' | 'STOPPED' | (string & {});
-
 export interface ProjectStatePayload {
   state: ProjectState;
 }
@@ -41,4 +48,20 @@ export interface ProjectStatePayload {
 export interface ProjectLogQuery {
   from?: string;
   limit?: number;
+}
+
+export interface ProjectLogEntry {
+  level: string;
+  logger: string;
+  message: string;
+  module: string;
+  function_name: string;
+  line_number: number;
+  created: number;
+  process: number;
+  thread: number;
+}
+
+export interface ProjectLogResponse {
+  log: ProjectLogEntry[];
 }
