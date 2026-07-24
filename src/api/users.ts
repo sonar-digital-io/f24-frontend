@@ -1,16 +1,24 @@
 import { apiClient } from './client';
 import type { KeyValuePair } from './types/common';
-import type { UserSettings, UserRolePayload, UserLevelPayload, UserBlockPayload } from './types/users';
+import type {
+  UserSettings,
+  UserRolePayload,
+  UserLevelPayload,
+  UserBlockPayload,
+  HistoryEntry,
+  SoftwareVersion,
+  User,
+} from './types/users';
 
-export async function getHistory(startDate: string, endDate: string): Promise<unknown> {
-  const { data } = await apiClient.get('/history/', {
+export async function getHistory(startDate: string, endDate: string): Promise<HistoryEntry[]> {
+  const { data } = await apiClient.get<HistoryEntry[]>('/history/', {
     params: { 'start-date': startDate, 'end-date': endDate },
   });
   return data;
 }
 
-export async function getSoftwareVersion(): Promise<unknown> {
-  const { data } = await apiClient.get('/software/version/');
+export async function getSoftwareVersion(): Promise<SoftwareVersion> {
+  const { data } = await apiClient.get<SoftwareVersion>('/software/version/');
   return data;
 }
 
@@ -24,13 +32,13 @@ export async function updateUserSettings(userId: number, parameters: KeyValuePai
   return data;
 }
 
-export async function getUserList(): Promise<unknown[]> {
-  const { data } = await apiClient.get('/user/list/');
+export async function getUserList(): Promise<User[]> {
+  const { data } = await apiClient.get<User[]>('/user/list/');
   return data;
 }
 
-export async function getUser(userId: number): Promise<unknown> {
-  const { data } = await apiClient.get(`/user/${userId}/`);
+export async function getUser(userId: number): Promise<User> {
+  const { data } = await apiClient.get<User>(`/user/${userId}/`);
   return data;
 }
 
