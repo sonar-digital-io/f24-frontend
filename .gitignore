@@ -48,5 +48,9 @@ Thumbs.db
 
 .vercel
 
+# Env vars (see .env.example)
+.env
+.env.local
+
 # OpenCascade WASM binary (too large for git)
 public/wasm/*.wasm

@@ -166,6 +166,15 @@ src/
 - **Path alias**: `@` = `src/` (vite.config.ts-ben konfigurálva)
 - **Prettier**: 100 char szélesség, single quotes (package.json-ben)
 
+## AI agent munkamódszer (ponytail + caveman)
+
+Ebben a projektben minden prompt írásakor és minden válaszadáskor az alábbi két konvenciót kell követni ([ponytail](https://github.com/DietrichGebert/ponytail) és [caveman](https://github.com/juliusbrussee/caveman) filozófiája alapján):
+
+- **Minimális kód (ponytail)**: kód írása előtt végig kell menni a döntési létrán — kell egyáltalán? már megvan a kódbázisban? standard library/natív platform feature megoldja? már telepített dependency tartalmazza? egy sorban megoldható? — és csak ezután jöhet az egyedi implementáció, azt is a lehető legkisebb terjedelemben. Kerülendő a túlbiztosítás, felesleges absztrakció, nem használt konfigurálhatóság.
+- **Tömör kommunikáció (caveman)**: a válaszok legyenek tömörek, felesleges körítés nélkül — ugyanaz a technikai pontosság, kevesebb szóval. Kód, parancsok, hibaüzenetek változatlanul, szó szerint maradnak; csak a magyarázó szöveg tömörödik.
+
+Ha a Claude Code plugin verziók telepítve vannak (`/plugin install ponytail@ponytail`, `/plugin install caveman@caveman`), ez a két szabály automatikusan érvényesül; egyébként is ez az elvárt írásmód ebben a projektben.
+
 ## Fontos konfigurációs részletek
 
 - **Vite**: CORS fejlécek WebAssembly-hez (`Cross-Origin-Opener-Policy`, `Cross-Origin-Embedder-Policy`), `opencascade.js` kizárva a dep optimizalasbol
