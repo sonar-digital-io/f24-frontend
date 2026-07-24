@@ -1,14 +1,19 @@
 import axios from 'axios';
+import { getAuthState, clearAuthState } from './authStorage';
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
+  withCredentials: true,
   timeout: 10_000,
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  const method = config.method?.toLowerCase();
+  if (method && method !== 'get') {
+    const auth = getAuthState();
+    if (auth?.csrfToken) {
+      config.headers['X-CSRFToken'] = auth.csrfToken;
+    }
   }
   return config;
 });
@@ -17,7 +22,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      console.warn('API request unauthorized (401):', error.config?.url);
+      clearAuthState();
     }
     return Promise.reject(error);
   }
