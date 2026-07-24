@@ -1,12 +1,12 @@
 import { apiClient } from './client';
-import type { FileUploadPayload, FileRecord, FileUpdatePayload } from './types/files';
+import type { FileUploadPayload, FileUploadResponse, FileRecord, FileUpdatePayload } from './types/files';
 
-export async function uploadFile(payload: FileUploadPayload): Promise<FileRecord> {
+export async function uploadFile(payload: FileUploadPayload): Promise<FileUploadResponse> {
   const formData = new FormData();
   formData.append('file', payload.file);
   if (payload.name) formData.append('name', payload.name);
   if (payload.description) formData.append('description', payload.description);
-  const { data } = await apiClient.post<FileRecord>('/file/', formData, {
+  const { data } = await apiClient.post<FileUploadResponse>('/file/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return data;

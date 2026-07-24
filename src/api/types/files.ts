@@ -4,6 +4,10 @@ export interface FileUploadPayload {
   description?: string;
 }
 
+export interface FileUploadResponse {
+  uuid: string;
+}
+
 export interface FileRecord {
   id: string;
   name?: string;
