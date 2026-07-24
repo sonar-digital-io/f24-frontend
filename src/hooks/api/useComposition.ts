@@ -20,7 +20,11 @@ export function useCompositionList() {
 }
 
 export function useCompositionDetail(compositionId: number) {
-  return useQuery({ queryKey: compositionKeys.detail(compositionId), queryFn: () => compositionApi.getComposition(compositionId) });
+  return useQuery({
+    queryKey: compositionKeys.detail(compositionId),
+    queryFn: () => compositionApi.getComposition(compositionId),
+    enabled: Number.isFinite(compositionId),
+  });
 }
 
 export function useCreateComposition() {
@@ -55,11 +59,17 @@ export function useUpdateCompositionSettings(compositionId: number) {
   });
 }
 
+function invalidateCompositionDerivedQueries(queryClient: ReturnType<typeof useQueryClient>, compositionId: number) {
+  queryClient.invalidateQueries({ queryKey: compositionKeys.detail(compositionId) });
+  queryClient.invalidateQueries({ queryKey: compositionKeys.intersections(compositionId) });
+  queryClient.invalidateQueries({ queryKey: compositionKeys.preview(compositionId) });
+}
+
 export function useUpdateCompositionGeometry(compositionId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CompositionGeometryPayload) => compositionApi.updateCompositionGeometry(compositionId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: compositionKeys.detail(compositionId) }),
+    onSuccess: () => invalidateCompositionDerivedQueries(queryClient, compositionId),
   });
 }
 
@@ -67,7 +77,7 @@ export function useUpdateCompositionLayup(compositionId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CompositionLayupPayload) => compositionApi.updateCompositionLayup(compositionId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: compositionKeys.detail(compositionId) }),
+    onSuccess: () => invalidateCompositionDerivedQueries(queryClient, compositionId),
   });
 }
 
@@ -75,7 +85,7 @@ export function useUpdateCompositionMappingLongitudinal(compositionId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: unknown) => compositionApi.updateCompositionMappingLongitudinal(compositionId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: compositionKeys.detail(compositionId) }),
+    onSuccess: () => invalidateCompositionDerivedQueries(queryClient, compositionId),
   });
 }
 
@@ -83,7 +93,7 @@ export function useUpdateCompositionMappingTransversal(compositionId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: unknown) => compositionApi.updateCompositionMappingTransversal(compositionId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: compositionKeys.detail(compositionId) }),
+    onSuccess: () => invalidateCompositionDerivedQueries(queryClient, compositionId),
   });
 }
 
@@ -91,6 +101,7 @@ export function useCompositionIntersections(compositionId: number) {
   return useQuery({
     queryKey: compositionKeys.intersections(compositionId),
     queryFn: () => compositionApi.getCompositionIntersections(compositionId),
+    enabled: Number.isFinite(compositionId),
   });
 }
 
@@ -98,10 +109,14 @@ export function useUpdateCompositionCoreMaterial(compositionId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CompositionCoreMaterialPayload) => compositionApi.updateCompositionCoreMaterial(compositionId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: compositionKeys.detail(compositionId) }),
+    onSuccess: () => invalidateCompositionDerivedQueries(queryClient, compositionId),
   });
 }
 
 export function useCompositionPreview(compositionId: number) {
-  return useQuery({ queryKey: compositionKeys.preview(compositionId), queryFn: () => compositionApi.getCompositionPreview(compositionId) });
+  return useQuery({
+    queryKey: compositionKeys.preview(compositionId),
+    queryFn: () => compositionApi.getCompositionPreview(compositionId),
+    enabled: Number.isFinite(compositionId),
+  });
 }

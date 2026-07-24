@@ -29,6 +29,7 @@ export function useUserSettings(userId: number) {
   return useQuery({
     queryKey: userKeys.settings(userId),
     queryFn: () => usersApi.getUserSettings(userId),
+    enabled: Number.isFinite(userId),
   });
 }
 
@@ -51,6 +52,7 @@ export function useUser(userId: number) {
   return useQuery({
     queryKey: userKeys.detail(userId),
     queryFn: () => usersApi.getUser(userId),
+    enabled: Number.isFinite(userId),
   });
 }
 

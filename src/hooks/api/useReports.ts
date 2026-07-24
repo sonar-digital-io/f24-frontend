@@ -12,7 +12,11 @@ export function useReportList() {
 }
 
 export function useReportDetail(reportId: number) {
-  return useQuery({ queryKey: reportKeys.detail(reportId), queryFn: () => reportsApi.getReport(reportId) });
+  return useQuery({
+    queryKey: reportKeys.detail(reportId),
+    queryFn: () => reportsApi.getReport(reportId),
+    enabled: Number.isFinite(reportId),
+  });
 }
 
 export function useDeleteReport() {
@@ -30,5 +34,9 @@ export function useExportReport() {
 }
 
 export function useReportFileList(reportId: number) {
-  return useQuery({ queryKey: reportKeys.fileList(reportId), queryFn: () => reportsApi.getReportFileList(reportId) });
+  return useQuery({
+    queryKey: reportKeys.fileList(reportId),
+    queryFn: () => reportsApi.getReportFileList(reportId),
+    enabled: Number.isFinite(reportId),
+  });
 }

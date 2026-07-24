@@ -16,7 +16,11 @@ export function useMaterialList() {
 }
 
 export function useMaterialDetail(materialId: number) {
-  return useQuery({ queryKey: materialKeys.detail(materialId), queryFn: () => materialsApi.getMaterial(materialId) });
+  return useQuery({
+    queryKey: materialKeys.detail(materialId),
+    queryFn: () => materialsApi.getMaterial(materialId),
+    enabled: Number.isFinite(materialId),
+  });
 }
 
 export function useCreateMaterial() {

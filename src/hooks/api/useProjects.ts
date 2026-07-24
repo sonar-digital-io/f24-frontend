@@ -29,6 +29,7 @@ export function useProject(projectId: string) {
   return useQuery({
     queryKey: projectKeys.detail(projectId),
     queryFn: () => projectsApi.getProject(projectId),
+    enabled: Boolean(projectId),
   });
 }
 
@@ -100,6 +101,7 @@ export function useProjectState(projectId: string) {
   return useQuery({
     queryKey: projectKeys.state(projectId),
     queryFn: () => projectsApi.getProjectState(projectId),
+    enabled: Boolean(projectId),
   });
 }
 
@@ -121,5 +123,6 @@ export function useProjectLog(projectId: string, query?: ProjectLogQuery) {
   return useQuery({
     queryKey: projectKeys.log(projectId, query),
     queryFn: () => projectsApi.getProjectLog(projectId, query),
+    enabled: Boolean(projectId),
   });
 }

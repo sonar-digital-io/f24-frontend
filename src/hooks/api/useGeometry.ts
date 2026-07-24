@@ -29,7 +29,11 @@ export function useGeometryList() {
 }
 
 export function useGeometryDetail(geometryId: number) {
-  return useQuery({ queryKey: geometryKeys.detail(geometryId), queryFn: () => geometryApi.getGeometry(geometryId) });
+  return useQuery({
+    queryKey: geometryKeys.detail(geometryId),
+    queryFn: () => geometryApi.getGeometry(geometryId),
+    enabled: Number.isFinite(geometryId),
+  });
 }
 
 export function useCreateGeometry() {
@@ -65,14 +69,21 @@ export function useUpdateGeometrySettings(geometryId: number) {
 }
 
 export function useGeometryEdges(geometryId: number) {
-  return useQuery({ queryKey: geometryKeys.edges(geometryId), queryFn: () => geometryApi.getGeometryEdges(geometryId) });
+  return useQuery({
+    queryKey: geometryKeys.edges(geometryId),
+    queryFn: () => geometryApi.getGeometryEdges(geometryId),
+    enabled: Number.isFinite(geometryId),
+  });
 }
 
 export function useUpdateGeometryEdges(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: GeometryEdgesPayload) => geometryApi.updateGeometryEdges(geometryId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: geometryKeys.edges(geometryId) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: geometryKeys.edges(geometryId) });
+      queryClient.invalidateQueries({ queryKey: ['geometry', 'edges-preview', geometryId] });
+    },
   });
 }
 
@@ -80,18 +91,26 @@ export function useGeometryEdgesPreview(geometryId: number, resolution: number) 
   return useQuery({
     queryKey: geometryKeys.edgesPreview(geometryId, resolution),
     queryFn: () => geometryApi.getGeometryEdgesPreview(geometryId, resolution),
+    enabled: Number.isFinite(geometryId),
   });
 }
 
 export function useGeometryProfiles(geometryId: number) {
-  return useQuery({ queryKey: geometryKeys.profiles(geometryId), queryFn: () => geometryApi.getGeometryProfiles(geometryId) });
+  return useQuery({
+    queryKey: geometryKeys.profiles(geometryId),
+    queryFn: () => geometryApi.getGeometryProfiles(geometryId),
+    enabled: Number.isFinite(geometryId),
+  });
 }
 
 export function useUpdateGeometryProfiles(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: GeometryProfilesPayload) => geometryApi.updateGeometryProfiles(geometryId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: geometryKeys.profiles(geometryId) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: geometryKeys.profiles(geometryId) });
+      queryClient.invalidateQueries({ queryKey: ['geometry', 'profile', geometryId] });
+    },
   });
 }
 
@@ -106,6 +125,7 @@ export function useGeometryProfile(geometryId: number, profileId: number, query?
   return useQuery({
     queryKey: geometryKeys.profile(geometryId, profileId, query),
     queryFn: () => geometryApi.getGeometryProfile(geometryId, profileId, query),
+    enabled: Number.isFinite(geometryId) && Number.isFinite(profileId),
   });
 }
 
@@ -116,7 +136,11 @@ export function useGeometryResult() {
 }
 
 export function useGeometrySpars(geometryId: number) {
-  return useQuery({ queryKey: geometryKeys.spars(geometryId), queryFn: () => geometryApi.getGeometrySpars(geometryId) });
+  return useQuery({
+    queryKey: geometryKeys.spars(geometryId),
+    queryFn: () => geometryApi.getGeometrySpars(geometryId),
+    enabled: Number.isFinite(geometryId),
+  });
 }
 
 export function useUpdateGeometrySpars(geometryId: number) {
@@ -128,11 +152,19 @@ export function useUpdateGeometrySpars(geometryId: number) {
 }
 
 export function useGeometrySparsPreview(geometryId: number) {
-  return useQuery({ queryKey: geometryKeys.sparsPreview(geometryId), queryFn: () => geometryApi.getGeometrySparsPreview(geometryId) });
+  return useQuery({
+    queryKey: geometryKeys.sparsPreview(geometryId),
+    queryFn: () => geometryApi.getGeometrySparsPreview(geometryId),
+    enabled: Number.isFinite(geometryId),
+  });
 }
 
 export function useGeometryTopView(geometryId: number) {
-  return useQuery({ queryKey: geometryKeys.topView(geometryId), queryFn: () => geometryApi.getGeometryTopView(geometryId) });
+  return useQuery({
+    queryKey: geometryKeys.topView(geometryId),
+    queryFn: () => geometryApi.getGeometryTopView(geometryId),
+    enabled: Number.isFinite(geometryId),
+  });
 }
 
 export function useRunProfileGenerator() {

@@ -14,7 +14,11 @@ export function useLoadGroupList() {
 }
 
 export function useLoadGroupDetail(loadGroupId: number) {
-  return useQuery({ queryKey: loadGroupKeys.detail(loadGroupId), queryFn: () => loadGroupsApi.getLoadGroup(loadGroupId) });
+  return useQuery({
+    queryKey: loadGroupKeys.detail(loadGroupId),
+    queryFn: () => loadGroupsApi.getLoadGroup(loadGroupId),
+    enabled: Number.isFinite(loadGroupId),
+  });
 }
 
 export function useCreateLoadGroup() {
@@ -50,7 +54,11 @@ export function useUpdateLoadGroupLimits(loadGroupId: number) {
 }
 
 export function useLoadCases(loadGroupId: number) {
-  return useQuery({ queryKey: loadGroupKeys.loadCases(loadGroupId), queryFn: () => loadGroupsApi.getLoadCases(loadGroupId) });
+  return useQuery({
+    queryKey: loadGroupKeys.loadCases(loadGroupId),
+    queryFn: () => loadGroupsApi.getLoadCases(loadGroupId),
+    enabled: Number.isFinite(loadGroupId),
+  });
 }
 
 export function useUpdateLoadCases(loadGroupId: number) {
@@ -65,6 +73,7 @@ export function useFatigueProfiles(loadGroupId: number) {
   return useQuery({
     queryKey: loadGroupKeys.fatigueProfiles(loadGroupId),
     queryFn: () => loadGroupsApi.getFatigueProfiles(loadGroupId),
+    enabled: Number.isFinite(loadGroupId),
   });
 }
 

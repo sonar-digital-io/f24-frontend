@@ -9,6 +9,9 @@ export async function login(payload: LoginRequest): Promise<LoginResponse> {
 }
 
 export async function logout(): Promise<void> {
-  await apiClient.post('/auth/logout/');
-  clearAuthState();
+  try {
+    await apiClient.post('/auth/logout/');
+  } finally {
+    clearAuthState();
+  }
 }

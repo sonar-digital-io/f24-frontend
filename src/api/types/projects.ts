@@ -32,7 +32,7 @@ export interface ProjectFatiguePayload {
   fatigue_profile: number;
 }
 
-export type ProjectState = 'RUNNING' | 'STOPPED';
+export type ProjectState = 'RUNNING' | 'STOPPED' | (string & {});
 
 export interface ProjectStatePayload {
   state: ProjectState;
