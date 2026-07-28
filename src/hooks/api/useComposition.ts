@@ -24,6 +24,9 @@ export function useCompositionDetail(compositionId: number) {
     queryKey: compositionKeys.detail(compositionId),
     queryFn: () => compositionApi.getComposition(compositionId),
     enabled: Number.isFinite(compositionId),
+    // Never show a stale cached copy when reopening the edit page right after a save.
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }
 
@@ -39,7 +42,10 @@ export function useUpdateComposition(compositionId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CompositionPayload) => compositionApi.updateComposition(compositionId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: compositionKeys.detail(compositionId) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: compositionKeys.detail(compositionId) });
+      queryClient.invalidateQueries({ queryKey: compositionKeys.list() });
+    },
   });
 }
 

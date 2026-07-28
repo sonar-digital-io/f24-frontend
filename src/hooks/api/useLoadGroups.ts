@@ -18,6 +18,9 @@ export function useLoadGroupDetail(loadGroupId: number) {
     queryKey: loadGroupKeys.detail(loadGroupId),
     queryFn: () => loadGroupsApi.getLoadGroup(loadGroupId),
     enabled: Number.isFinite(loadGroupId),
+    // Never show a stale cached copy when reopening the edit page right after a save.
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }
 
@@ -33,7 +36,10 @@ export function useUpdateLoadGroup(loadGroupId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: LoadGroupPayload) => loadGroupsApi.updateLoadGroup(loadGroupId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: loadGroupKeys.detail(loadGroupId) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: loadGroupKeys.detail(loadGroupId) });
+      queryClient.invalidateQueries({ queryKey: loadGroupKeys.list() });
+    },
   });
 }
 

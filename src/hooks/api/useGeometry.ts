@@ -33,6 +33,9 @@ export function useGeometryDetail(geometryId: number) {
     queryKey: geometryKeys.detail(geometryId),
     queryFn: () => geometryApi.getGeometry(geometryId),
     enabled: Number.isFinite(geometryId),
+    // Never show a stale cached copy when reopening the edit page right after a save.
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }
 
@@ -48,7 +51,10 @@ export function useUpdateGeometry(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: GeometryPayload) => geometryApi.updateGeometry(geometryId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: geometryKeys.detail(geometryId) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: geometryKeys.detail(geometryId) });
+      queryClient.invalidateQueries({ queryKey: geometryKeys.list() });
+    },
   });
 }
 
@@ -64,7 +70,10 @@ export function useUpdateGeometrySettings(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: GeometrySettingsPayload) => geometryApi.updateGeometrySettings(geometryId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: geometryKeys.detail(geometryId) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: geometryKeys.detail(geometryId) });
+      queryClient.invalidateQueries({ queryKey: geometryKeys.list() });
+    },
   });
 }
 
