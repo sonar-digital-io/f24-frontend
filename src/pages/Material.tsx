@@ -7,6 +7,7 @@ import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { MaterialRow } from '@/components/material/MaterialRow';
 import { MaterialDateFilterPopover } from '@/components/material/MaterialDateFilterPopover';
+import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
 import { Pagination } from '@/components/common/list/Pagination';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
 import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
@@ -16,9 +17,29 @@ import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
 import type { SortState, MaterialSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
-import { MATERIALS, lastUpdatedSortKey } from '@/data/materials';
+import { lastUpdatedSortKey, type Material } from '@/data/materials';
+import { useDeleteMaterial, useMaterialList } from '@/hooks/api/useMaterials';
+import type { Material as BackendMaterial } from '@/api/types/materials';
 
 const PAGE_SIZE = 10;
+
+function toUiMaterial(m: BackendMaterial): Material {
+  return {
+    id: String(m.id),
+    name: m.name,
+    type: m.type,
+    description: m.description ?? '',
+    lastUpdated: m.last_modified,
+    source: 'own',
+    details: {
+      reinforcement: '—',
+      matrix: '—',
+      modulusTensile: '—',
+      density: '—',
+      tdsRef: '—',
+    },
+  };
+}
 
 function formatDateLabel(d: Date): string {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -57,6 +78,22 @@ export function Material() {
   const [sort, setSort] = useState<SortState<MaterialSortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
 
+  const { data: backendMaterials, isLoading, isError } = useMaterialList();
+  const materials = useMemo(() => (backendMaterials ?? []).map(toUiMaterial), [backendMaterials]);
+
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const deleteMutation = useDeleteMaterial();
+
+  function handleDuplicate(material: Material) {
+    navigate(`/material/new?duplicateFrom=${material.id}`);
+  }
+
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    await deleteMutation.mutateAsync(Number(pendingDelete.id));
+    setPendingDelete(null);
+  }
+
   useEffect(() => {
     if (!filterOpen) return;
     function onDown(e: MouseEvent) {
@@ -87,11 +124,11 @@ export function Material() {
     setFilterOpen((o) => !o);
   }
 
-  const allTypes = useMemo(() => [...new Set(MATERIALS.map((m) => m.type))].sort(), []);
+  const allTypes = useMemo(() => [...new Set(materials.map((m) => m.type))].sort(), [materials]);
   const typeFilter = useColumnFilter(allTypes, () => setPage(1));
 
   const filtered = useMemo(() => {
-    return MATERIALS.filter((m) => {
+    return materials.filter((m) => {
       if (!matchesQuery(query, [m.name, m.type, m.description])) return false;
       if (typeFilter.selected.size > 0 && !typeFilter.selected.has(m.type)) return false;
       if (dateRange?.from || dateRange?.to) {
@@ -103,7 +140,7 @@ export function Material() {
       }
       return true;
     });
-  }, [query, typeFilter.selected, dateRange]);
+  }, [materials, query, typeFilter.selected, dateRange]);
 
   // lastUpdated mixes vYYYY/MM (library) and YYYY-MM-DD (own) — normalize before comparing.
   const sorted = useMemo(
@@ -227,16 +264,34 @@ export function Material() {
                   leadingWidthClassName="w-[52px]"
                 />
                 <tbody>
-                  {pageRows.map((material) => (
-                    <MaterialRow
-                      key={material.id}
-                      material={material}
-                      expanded={expandedIds.has(material.id)}
-                      onToggle={() => toggleExpand(material.id)}
-                      onOpen={() => navigate(`/material/${material.id}`)}
-                    />
-                  ))}
-                  {pageRows.length === 0 && (
+                  {isLoading && (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                        Loading materials…
+                      </td>
+                    </tr>
+                  )}
+                  {isError && (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-8 text-center text-[14px] text-[#dc2626]">
+                        Failed to load materials from the server.
+                      </td>
+                    </tr>
+                  )}
+                  {!isLoading &&
+                    !isError &&
+                    pageRows.map((material) => (
+                      <MaterialRow
+                        key={material.id}
+                        material={material}
+                        expanded={expandedIds.has(material.id)}
+                        onToggle={() => toggleExpand(material.id)}
+                        onOpen={() => navigate(`/material/${material.id}`)}
+                        onDuplicate={() => handleDuplicate(material)}
+                        onDelete={() => setPendingDelete({ id: material.id, name: material.name })}
+                      />
+                    ))}
+                  {!isLoading && !isError && pageRows.length === 0 && (
                     <tr>
                       <td colSpan={7} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
                         No materials match your search.
@@ -291,6 +346,17 @@ export function Material() {
           />,
           document.body
         )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete material"
+        message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
+        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+        confirmDisabled={deleteMutation.isPending}
+        danger
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

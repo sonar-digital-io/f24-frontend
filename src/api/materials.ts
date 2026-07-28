@@ -3,6 +3,8 @@ import type {
   MaterialPayload,
   MaterialCreateResponse,
   Material,
+  MaterialDetail,
+  MaterialGeneralPayload,
   MaterialMechanicalPropertiesPayload,
   MaterialFatiguePropertiesPayload,
 } from './types/materials';
@@ -17,13 +19,13 @@ export async function getMaterialList(): Promise<Material[]> {
   return data;
 }
 
-export async function getMaterial(materialId: number): Promise<Material> {
-  const { data } = await apiClient.get<Material>(`/material/${materialId}/`);
+export async function getMaterial(materialId: number): Promise<MaterialDetail> {
+  const { data } = await apiClient.get<MaterialDetail>(`/material/${materialId}/`);
   return data;
 }
 
-export async function updateMaterial(materialId: number, payload: MaterialPayload): Promise<Material> {
-  const { data } = await apiClient.put<Material>(`/material/${materialId}/`, payload);
+export async function updateMaterial(materialId: number, payload: MaterialGeneralPayload): Promise<MaterialDetail> {
+  const { data } = await apiClient.put<MaterialDetail>(`/material/${materialId}/`, payload);
   return data;
 }
 

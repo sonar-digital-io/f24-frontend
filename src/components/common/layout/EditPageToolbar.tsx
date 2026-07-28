@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EditPageToolbarActions } from '@/components/common/layout/EditPageToolbarActions';
 
@@ -16,6 +17,8 @@ interface EditPageToolbarProps {
   title: string;
   backLabel: string;
   onBack: () => void;
+  /** Extra button(s) rendered after the "Back to …" button, e.g. MaterialNew's "Create material". */
+  actions?: ReactNode;
 }
 
 /**
@@ -31,6 +34,7 @@ export function EditPageToolbar({
   title,
   backLabel,
   onBack,
+  actions,
 }: EditPageToolbarProps) {
   return (
     <div className="relative flex h-[52px] w-full shrink-0 items-center justify-between bg-[#f8fafc] px-4 py-2">
@@ -44,7 +48,9 @@ export function EditPageToolbar({
         </TabsList>
       </Tabs>
 
-      <EditPageToolbarActions title={title} backLabel={backLabel} onBack={onBack} />
+      <EditPageToolbarActions title={title} backLabel={backLabel} onBack={onBack}>
+        {actions}
+      </EditPageToolbarActions>
     </div>
   );
 }

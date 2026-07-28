@@ -33,9 +33,11 @@ export interface MaterialRowProps {
   expanded: boolean;
   onToggle: () => void;
   onOpen: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }
 
-export function MaterialRow({ material, expanded, onToggle, onOpen }: MaterialRowProps) {
+export function MaterialRow({ material, expanded, onToggle, onOpen, onDuplicate, onDelete }: MaterialRowProps) {
   const isOwn = material.source === 'own';
 
   return (
@@ -78,9 +80,9 @@ export function MaterialRow({ material, expanded, onToggle, onOpen }: MaterialRo
           >
             {isOwn && <RowIconButton label="Edit material" icon={Pencil} onClick={onOpen} />}
             <RowIconButton label="Export material" icon={Download} onClick={() => {}} />
-            <RowIconButton label="Duplicate material" icon={Copy} onClick={() => {}} />
+            <RowIconButton label="Duplicate material" icon={Copy} onClick={onDuplicate} />
             {isOwn && (
-              <RowIconButton label="Delete material" icon={Trash2} onClick={() => {}} variant="danger" />
+              <RowIconButton label="Delete material" icon={Trash2} onClick={onDelete} variant="danger" />
             )}
           </div>
         </td>

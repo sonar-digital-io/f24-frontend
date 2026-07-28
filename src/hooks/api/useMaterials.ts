@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as materialsApi from '@/api/materials';
 import type {
   MaterialPayload,
+  MaterialGeneralPayload,
   MaterialMechanicalPropertiesPayload,
   MaterialFatiguePropertiesPayload,
 } from '@/api/types/materials';
@@ -20,6 +21,10 @@ export function useMaterialDetail(materialId: number) {
     queryKey: materialKeys.detail(materialId),
     queryFn: () => materialsApi.getMaterial(materialId),
     enabled: Number.isFinite(materialId),
+    // The edit form must never show a stale cached copy (e.g. reopening right after
+    // a previous edit) — always hit the network on mount instead of trusting staleTime.
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 }
 
@@ -34,8 +39,11 @@ export function useCreateMaterial() {
 export function useUpdateMaterial(materialId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: MaterialPayload) => materialsApi.updateMaterial(materialId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) }),
+    mutationFn: (payload: MaterialGeneralPayload) => materialsApi.updateMaterial(materialId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) });
+      queryClient.invalidateQueries({ queryKey: materialKeys.list() });
+    },
   });
 }
 
@@ -51,7 +59,11 @@ export function useUpdateMechanicalProperties(materialId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: MaterialMechanicalPropertiesPayload) => materialsApi.updateMechanicalProperties(materialId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) });
+      // Also refresh the list — `type` lives on this endpoint and is shown there.
+      queryClient.invalidateQueries({ queryKey: materialKeys.list() });
+    },
   });
 }
 
