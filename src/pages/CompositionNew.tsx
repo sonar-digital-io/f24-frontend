@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Check, Redo2, Settings, Undo2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { OccViewer } from '@/components/common/viewer/OccViewer';
@@ -16,8 +16,8 @@ import type { RenderMode } from '@/types';
 import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
 import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
 import { LayupMappingTable, type LayupMapping } from '@/components/composition/LayupMappingTable';
-import { COMPOSITIONS, createComposition, updateComposition } from '@/data/compositions';
 import { nextLocalId } from '@/lib/utils';
+import { useCreateComposition, useCompositionDetail, useUpdateComposition } from '@/hooks/api/useComposition';
 
 const DEFAULT_UPPER_MAPPINGS: LayupMapping[] = [
   { id: 'u0', name: 'OUTER-SHELL', layupId: 'biax-skin-04' },
@@ -34,17 +34,60 @@ const DEFAULT_LOWER_MAPPINGS: LayupMapping[] = [
 export function CompositionNew() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const existing = id ? COMPOSITIONS.find((c) => c.id === id) : undefined;
+  const [searchParams] = useSearchParams();
+  const isEditing = Boolean(id);
+  const compositionId = isEditing ? Number(id) : NaN;
+  const duplicateFromRaw = !isEditing ? searchParams.get('duplicateFrom') : null;
+  const duplicateSourceId = duplicateFromRaw ? Number(duplicateFromRaw) : NaN;
+
+  const detailQuery = useCompositionDetail(compositionId);
+  const duplicateQuery = useCompositionDetail(duplicateSourceId);
+  const createMutation = useCreateComposition();
+  const updateMutation = useUpdateComposition(compositionId);
+
   const [activeTab, setActiveTab] = useState<
     'general' | 'geometry' | 'layup-mapping' | 'transversal-mapping'
   >('general');
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
 
-  // General
-  const [name, setName] = useState(existing?.name ?? '');
-  const [description, setDescription] = useState(existing?.description ?? '');
+  // General — hydrated from the backend for edit/duplicate. Geometry pick, layup
+  // mapping and transversal mapping stay on local mock state: the geometry picker
+  // lists mock geometries (string slug ids), and layup/transversal mapping carry
+  // rich shapes (bezier curves, per-side tables) the typed backend payloads don't
+  // describe — wiring those needs a real data-source swap, left for a follow-up.
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [solidCore, setSolidCore] = useState(false);
   const [targetWeight, setTargetWeight] = useState('');
+  const [hydrated, setHydrated] = useState(false);
+  const [baseline, setBaseline] = useState<{ name: string; description: string } | null>(null);
+  const [duplicateHydrated, setDuplicateHydrated] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing || hydrated || detailQuery.isFetching || !detailQuery.data) return;
+    const c = detailQuery.data;
+    const hydratedDescription = c.description ?? '';
+    setName(c.name);
+    setDescription(hydratedDescription);
+    setBaseline({ name: c.name, description: hydratedDescription });
+    setHydrated(true);
+  }, [isEditing, hydrated, detailQuery.isFetching, detailQuery.data]);
+
+  useEffect(() => {
+    if (
+      isEditing ||
+      duplicateHydrated ||
+      !Number.isFinite(duplicateSourceId) ||
+      duplicateQuery.isFetching ||
+      !duplicateQuery.data
+    ) {
+      return;
+    }
+    const c = duplicateQuery.data;
+    setName(`${c.name}_copy`);
+    setDescription(c.description ?? '');
+    setDuplicateHydrated(true);
+  }, [isEditing, duplicateHydrated, duplicateSourceId, duplicateQuery.isFetching, duplicateQuery.data]);
 
   // Geometry pick
   const [geomQuery, setGeomQuery] = useState('');
@@ -53,10 +96,10 @@ export function CompositionNew() {
 
   // Layup mapping — pre-filled with defaults for existing compositions
   const [upperMappings, setUpperMappings] = useState<LayupMapping[]>(
-    existing ? DEFAULT_UPPER_MAPPINGS : [{ id: 'u0', name: '', layupId: null }],
+    isEditing ? DEFAULT_UPPER_MAPPINGS : [{ id: 'u0', name: '', layupId: null }],
   );
   const [lowerMappings, setLowerMappings] = useState<LayupMapping[]>(
-    existing ? DEFAULT_LOWER_MAPPINGS : [{ id: 'l0', name: '', layupId: null }],
+    isEditing ? DEFAULT_LOWER_MAPPINGS : [{ id: 'l0', name: '', layupId: null }],
   );
   const [layupPicker, setLayupPicker] = useState<{
     side: 'upper' | 'lower';
@@ -120,26 +163,23 @@ export function CompositionNew() {
     });
   }
 
-  const titleText = name.trim() || existing?.name || 'New composition';
+  const titleText = isEditing ? name.trim() || 'Loading…' : name.trim() || 'New composition';
 
-  function handleGeneralSubmit() {
-    if (existing) {
-      updateComposition(existing.id, { name, description });
-      navigate('/composition');
-      return;
+  const savePending = createMutation.isPending || updateMutation.isPending;
+  const saveError = createMutation.isError || updateMutation.isError;
+
+  async function handleGeneralSubmit() {
+    if (isEditing) {
+      if (!baseline || name !== baseline.name || description !== baseline.description) {
+        await updateMutation.mutateAsync({ name, description });
+      }
+    } else {
+      await createMutation.mutateAsync({ name, description });
     }
-    // Mock stand-in for a POST: append to the list, then open the new composition.
-    const composition = createComposition(name, description);
-    navigate(`/composition/${composition.id}`);
+    navigate('/composition');
   }
 
-  /** Save (create or update) then go back to the list — called by Exit edit mode. */
   function handleExit() {
-    if (existing) {
-      updateComposition(existing.id, { name, description });
-    } else if (name.trim()) {
-      createComposition(name, description);
-    }
     navigate('/composition');
   }
 
@@ -234,8 +274,23 @@ export function CompositionNew() {
           >
             Back to Compositions
           </button>
+          {activeTab === 'general' && (
+            <button
+              type="button"
+              onClick={handleGeneralSubmit}
+              disabled={!name.trim() || savePending}
+              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {savePending ? 'Saving…' : isEditing ? 'Update composition' : 'Create composition'}
+            </button>
+          )}
         </div>
       </div>
+      {saveError && (
+        <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
+          Failed to {isEditing ? 'update' : 'create'} composition. Please try again.
+        </div>
+      )}
 
       {/* Render toggle + settings (top-center, below sub-toolbar) */}
       <div className={`absolute left-1/2 top-[60px] z-20 flex -translate-x-1/2 items-center gap-2 pt-2${activeTab === 'geometry' ? ' hidden' : ''}`}>
@@ -324,7 +379,7 @@ export function CompositionNew() {
         {/* Always mounted — hidden instead of unmounted so internal state survives tab switches */}
         <div className={`pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto${activeTab !== 'transversal-mapping' ? ' hidden' : ''}`}>
           <TransversalMappingSection
-            useDefaultData={!!existing}
+            useDefaultData={isEditing}
             upperMappingNames={upperMappings.map((m) => m.name)}
           />
         </div>

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
 import { LoadGroupGeneralTab } from '@/components/load-group/LoadGroupGeneralTab';
@@ -8,7 +8,7 @@ import { LoadGroupLimitsTab } from '@/components/load-group/LoadGroupLimitsTab';
 import { LoadGroupFatigueProfilesTab } from '@/components/load-group/LoadGroupFatigueProfilesTab';
 import { LoadCasePickerDialog } from '@/components/load-group/LoadCasePickerDialog';
 import type { ControlPoint } from '@/types';
-import { LOAD_GROUPS, createLoadGroup, updateLoadGroup } from '@/data/loadGroups';
+import { useCreateLoadGroup, useLoadGroupDetail, useUpdateLoadGroup } from '@/hooks/api/useLoadGroups';
 import {
   EXISTING_FATIGUE_PROFILES,
   EXISTING_LOAD_CASES,
@@ -33,14 +33,56 @@ const LOAD_GROUP_TABS = [
 export function LoadGroupNew() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const isNew = !id || id === 'new';
-  const existing = isNew ? undefined : LOAD_GROUPS.find((g) => g.id === id);
+  const loadGroupId = isNew ? NaN : Number(id);
+  const duplicateFromRaw = isNew ? searchParams.get('duplicateFrom') : null;
+  const duplicateSourceId = duplicateFromRaw ? Number(duplicateFromRaw) : NaN;
+
+  const detailQuery = useLoadGroupDetail(loadGroupId);
+  const duplicateQuery = useLoadGroupDetail(duplicateSourceId);
+  const createMutation = useCreateLoadGroup();
+  const updateMutation = useUpdateLoadGroup(loadGroupId);
 
   const [activeTab, setActiveTab] = useState<LoadGroupTab>('general');
 
-  // General
-  const [name, setName] = useState(existing?.name ?? '');
-  const [description, setDescription] = useState(existing?.description ?? '');
+  // General — hydrated from the backend for edit/duplicate; a fresh POST/PUT
+  // {name, description} is the only real endpoint this page wires up so far.
+  // The other 3 tabs (load cases/limits/fatigue profiles) stay on local mock
+  // state: their UI models carry many fields the typed backend payloads don't
+  // define (e.g. load case altitude/disa/inflow*), so wiring them would mean
+  // silently dropping data — left for a follow-up once that's resolved.
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [hydrated, setHydrated] = useState(false);
+  const [baseline, setBaseline] = useState<{ name: string; description: string } | null>(null);
+  const [duplicateHydrated, setDuplicateHydrated] = useState(false);
+
+  useEffect(() => {
+    if (isNew || hydrated || detailQuery.isFetching || !detailQuery.data) return;
+    const g = detailQuery.data;
+    const hydratedDescription = g.description ?? '';
+    setName(g.name);
+    setDescription(hydratedDescription);
+    setBaseline({ name: g.name, description: hydratedDescription });
+    setHydrated(true);
+  }, [isNew, hydrated, detailQuery.isFetching, detailQuery.data]);
+
+  useEffect(() => {
+    if (
+      !isNew ||
+      duplicateHydrated ||
+      !Number.isFinite(duplicateSourceId) ||
+      duplicateQuery.isFetching ||
+      !duplicateQuery.data
+    ) {
+      return;
+    }
+    const g = duplicateQuery.data;
+    setName(`${g.name}_copy`);
+    setDescription(g.description ?? '');
+    setDuplicateHydrated(true);
+  }, [isNew, duplicateHydrated, duplicateSourceId, duplicateQuery.isFetching, duplicateQuery.data]);
 
   // Load cases
   const [loadCases, setLoadCases] = useState<LoadCase[]>(() =>
@@ -62,17 +104,22 @@ export function LoadGroupNew() {
     caseId: string;
   } | null>(null);
 
-  const titleText = isNew
-    ? name.trim() || 'New load group'
-    : name.trim() || existing?.name || id;
+  const titleText = isNew ? name.trim() || 'New load group' : name.trim() || 'Loading…';
+
+  const savePending = createMutation.isPending || updateMutation.isPending;
+  const saveError = createMutation.isError || updateMutation.isError;
 
   // ── Exit / save ──────────────────────────────────────────────────────────
-  function handleExit() {
+  async function handleSaveGeneral() {
     if (isNew) {
-      if (name.trim()) createLoadGroup({ name, description });
-    } else if (existing) {
-      updateLoadGroup(existing.id, { name, description });
+      await createMutation.mutateAsync({ name, description });
+    } else if (!baseline || name !== baseline.name || description !== baseline.description) {
+      await updateMutation.mutateAsync({ name, description });
     }
+    navigate('/load-group');
+  }
+
+  function handleExit() {
     navigate('/load-group');
   }
 
@@ -249,7 +296,24 @@ export function LoadGroupNew() {
         title={titleText}
         backLabel="Back to Load groups"
         onBack={handleExit}
+        actions={
+          activeTab === 'general' && (
+            <button
+              type="button"
+              onClick={handleSaveGeneral}
+              disabled={!name.trim() || savePending}
+              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {savePending ? 'Saving…' : isNew ? 'Create load group' : 'Update load group'}
+            </button>
+          )
+        }
       />
+      {saveError && (
+        <p className="px-4 text-[13px] text-[#dc2626]">
+          Failed to {isNew ? 'create' : 'update'} load group. Please try again.
+        </p>
+      )}
 
       {/* ── Main content ──────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-hidden px-4 pb-6 pt-4">

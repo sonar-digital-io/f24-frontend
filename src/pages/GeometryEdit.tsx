@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Settings, Check, Undo2, Redo2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { OccViewer } from '@/components/common/viewer/OccViewer';
@@ -14,8 +14,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BLADE_TYPES, GEOMETRIES, createGeometry, updateGeometry } from '@/data/geometries';
-import type { BladeType } from '@/data/geometries';
+import { BLADE_TYPES } from '@/data/geometries';
+import {
+  useCreateGeometry,
+  useGeometryDetail,
+  useUpdateGeometrySettings,
+} from '@/hooks/api/useGeometry';
 
 
 const MANUFACTURING_TECHNOLOGIES = [
@@ -35,25 +39,39 @@ interface GlobalProperties {
 export function GeometryEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isNew = id === 'new';
-  const geometry = isNew ? undefined : GEOMETRIES.find((g) => g.id === id);
-  const name = isNew ? 'New geometry' : (geometry?.name ?? id ?? 'New geometry');
+  const geometryId = isNew ? NaN : Number(id);
+  const duplicateFromRaw = isNew ? searchParams.get('duplicateFrom') : null;
+  const duplicateSourceId = duplicateFromRaw ? Number(duplicateFromRaw) : NaN;
+
+  const detailQuery = useGeometryDetail(geometryId);
+  const duplicateQuery = useGeometryDetail(duplicateSourceId);
+  const createMutation = useCreateGeometry();
+  const updateSettingsMutation = useUpdateGeometrySettings(geometryId);
+
+  const name = isNew ? 'New geometry' : (detailQuery.data?.name ?? id ?? 'New geometry');
 
   const [activeTab, setActiveTab] = useState(isNew ? 'create' : 'global-properties');
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
   const [profileFolded, setProfileFolded] = useState(false);
   const [stackingFolded, setStackingFolded] = useState(true);
+  // Global properties — sent via PUT /geometry/:id/settings/ as key/value pairs. There's no
+  // typed GET for this endpoint, so these can't be reliably reloaded from the backend yet;
+  // they start at these defaults and Save always PUTs the current form values.
   const [props, setProps] = useState<GlobalProperties>({
     nominalRadius: '75.0',
     rootRadius: '5.0',
     stackingReference: '0.3',
   });
 
-  // New geometry project config state — pre-filled from existing geometry when returning to this tab
-  const [newBladeType, setNewBladeType] = useState(geometry?.type ?? '');
+  // New geometry project config state. Blade type / manufacturing technology are UI-only —
+  // the backend GeometryPayload only accepts {name, description}.
+  const [newBladeType, setNewBladeType] = useState('');
   const [newManufacturing, setNewManufacturing] = useState('To be determined');
-  const [newName, setNewName] = useState(geometry?.name ?? '');
-  const [newDescription, setNewDescription] = useState(geometry?.description ?? '');
+  const [newName, setNewName] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [duplicateHydrated, setDuplicateHydrated] = useState(false);
 
   // When Create is clicked, navigate replaces /geometry/new → /geometry/:id without
   // remounting (same route pattern). Switch to Global properties once isNew turns false.
@@ -63,13 +81,32 @@ export function GeometryEdit() {
     }
   }, [isNew]);
 
+  useEffect(() => {
+    if (
+      !isNew ||
+      duplicateHydrated ||
+      !Number.isFinite(duplicateSourceId) ||
+      duplicateQuery.isFetching ||
+      !duplicateQuery.data
+    ) {
+      return;
+    }
+    const g = duplicateQuery.data;
+    setNewName(`${g.name}_copy`);
+    setNewDescription(g.description ?? '');
+    setDuplicateHydrated(true);
+  }, [isNew, duplicateHydrated, duplicateSourceId, duplicateQuery.isFetching, duplicateQuery.data]);
+
   function updateField(key: keyof GlobalProperties, value: string) {
     setProps((p) => ({ ...p, [key]: value }));
   }
 
-  function handleCreate() {
+  async function handleCreate() {
     if (!newBladeType || !newName.trim()) return;
-    const geom = createGeometry(newName.trim(), newDescription.trim(), newBladeType as BladeType);
+    const result = await createMutation.mutateAsync({
+      name: newName.trim(),
+      description: newDescription.trim(),
+    });
     // /geometry/new and /geometry/:id share a route, so this navigate does NOT
     // remount the component — leave the create tab and clear the form explicitly,
     // otherwise the create panel stays up and a second click creates a duplicate.
@@ -77,14 +114,20 @@ export function GeometryEdit() {
     setNewBladeType('');
     setNewName('');
     setNewDescription('');
-    navigate(`/geometry/${geom.id}`, { replace: true });
+    navigate(`/geometry/${result.id}`, { replace: true });
+  }
+
+  async function handleSaveGlobalProperties() {
+    await updateSettingsMutation.mutateAsync({
+      settings: [
+        { reference: 'nominal_radius', value: props.nominalRadius },
+        { reference: 'root_radius', value: props.rootRadius },
+        { reference: 'stacking_reference', value: props.stackingReference },
+      ],
+    });
   }
 
   function handleExit() {
-    if (!isNew && geometry) {
-      // Touch lastUpdated to signal it was worked on (physics props aren't in the data model yet)
-      updateGeometry(geometry.id, {});
-    }
     navigate('/geometry');
   }
 
@@ -244,7 +287,7 @@ export function GeometryEdit() {
                   <button
                     type="button"
                     onClick={handleCreate}
-                    disabled={!newBladeType || !newName.trim()}
+                    disabled={!newBladeType || !newName.trim() || createMutation.isPending}
                     className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
                   >
                     Create
@@ -277,6 +320,17 @@ export function GeometryEdit() {
                 edge. This setting determines the structural balance and aerodynamic center of the
                 blade.
               </p>
+              <button
+                type="button"
+                onClick={handleSaveGlobalProperties}
+                disabled={updateSettingsMutation.isPending}
+                className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {updateSettingsMutation.isPending ? 'Saving…' : 'Save'}
+              </button>
+              {updateSettingsMutation.isError && (
+                <p className="text-[13px] text-[#dc2626]">Failed to save. Please try again.</p>
+              )}
             </div>
           )}
           {activeTab === 'profile-distribution' && (
