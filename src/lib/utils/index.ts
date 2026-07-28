@@ -1,4 +1,4 @@
 export { cn } from './cn';
 export { slugify } from './slug';
-export { todayISO } from './date';
+export { todayISO, toIsoDateTime, toDateInputValue } from './date';
 export { uniqueId, nextLocalId } from './id';

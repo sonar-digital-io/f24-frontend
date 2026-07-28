@@ -16,7 +16,7 @@ import type { RenderMode } from '@/types';
 import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
 import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
 import { LayupMappingTable, type LayupMapping } from '@/components/composition/LayupMappingTable';
-import { nextLocalId } from '@/lib/utils';
+import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { useCreateComposition, useCompositionDetail, useUpdateComposition } from '@/hooks/api/useComposition';
 
 const DEFAULT_UPPER_MAPPINGS: LayupMapping[] = [
@@ -57,19 +57,25 @@ export function CompositionNew() {
   // describe — wiring those needs a real data-source swap, left for a follow-up.
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [date, setDate] = useState(todayISO());
   const [solidCore, setSolidCore] = useState(false);
   const [targetWeight, setTargetWeight] = useState('');
   const [hydrated, setHydrated] = useState(false);
-  const [baseline, setBaseline] = useState<{ name: string; description: string } | null>(null);
+  const [baseline, setBaseline] = useState<{ name: string; description: string; date: string } | null>(
+    null
+  );
   const [duplicateHydrated, setDuplicateHydrated] = useState(false);
 
   useEffect(() => {
     if (!isEditing || hydrated || detailQuery.isFetching || !detailQuery.data) return;
     const c = detailQuery.data;
     const hydratedDescription = c.description ?? '';
+    const hydratedDate =
+      typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO();
     setName(c.name);
     setDescription(hydratedDescription);
-    setBaseline({ name: c.name, description: hydratedDescription });
+    setDate(hydratedDate);
+    setBaseline({ name: c.name, description: hydratedDescription, date: hydratedDate });
     setHydrated(true);
   }, [isEditing, hydrated, detailQuery.isFetching, detailQuery.data]);
 
@@ -86,6 +92,7 @@ export function CompositionNew() {
     const c = duplicateQuery.data;
     setName(`${c.name}_copy`);
     setDescription(c.description ?? '');
+    setDate(typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO());
     setDuplicateHydrated(true);
   }, [isEditing, duplicateHydrated, duplicateSourceId, duplicateQuery.isFetching, duplicateQuery.data]);
 
@@ -170,11 +177,16 @@ export function CompositionNew() {
 
   async function handleGeneralSubmit() {
     if (isEditing) {
-      if (!baseline || name !== baseline.name || description !== baseline.description) {
-        await updateMutation.mutateAsync({ name, description });
+      if (
+        !baseline ||
+        name !== baseline.name ||
+        description !== baseline.description ||
+        date !== baseline.date
+      ) {
+        await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
       }
     } else {
-      await createMutation.mutateAsync({ name, description });
+      await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
     }
     navigate('/composition');
   }
@@ -278,7 +290,7 @@ export function CompositionNew() {
             <button
               type="button"
               onClick={handleGeneralSubmit}
-              disabled={!name.trim() || savePending}
+              disabled={!name.trim() || !date || savePending}
               className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {savePending ? 'Saving…' : isEditing ? 'Update composition' : 'Create composition'}
@@ -316,6 +328,8 @@ export function CompositionNew() {
           <CompositionGeneralTab
             name={name}
             onNameChange={setName}
+            date={date}
+            onDateChange={setDate}
             description={description}
             onDescriptionChange={setDescription}
             solidCore={solidCore}

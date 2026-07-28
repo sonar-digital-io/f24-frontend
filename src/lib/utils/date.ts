@@ -6,3 +6,15 @@ export function todayISO(): string {
     now.getDate()
   ).padStart(2, '0')}`;
 }
+
+/** A `<input type="date">` value only collects a calendar day; the backend requires a full ISO-8601 datetime. */
+export function toIsoDateTime(isoDate: string): string {
+  return new Date(`${isoDate}T00:00:00Z`).toISOString();
+}
+
+/** Backend datetimes can arrive as "...T...Z" or the space-separated "... ...+00:00" variant. */
+export function toDateInputValue(isoDateTime: string): string {
+  const normalized = isoDateTime.includes('T') ? isoDateTime : isoDateTime.replace(' ', 'T');
+  const d = new Date(normalized);
+  return Number.isNaN(d.getTime()) ? todayISO() : d.toISOString().slice(0, 10);
+}

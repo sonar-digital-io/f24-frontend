@@ -17,7 +17,7 @@ import {
 } from '@/hooks/api/useMaterials';
 import type { MaterialPayload } from '@/api/types/materials';
 import type { KeyValuePair } from '@/api/types/common';
-import { todayISO } from '@/lib/utils';
+import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
 const TABS = [
   { value: 'general', label: 'General' },
@@ -43,18 +43,6 @@ interface Baseline {
   date: string;
   mechValues: Record<string, string>;
   fatigueValues: Record<string, string>;
-}
-
-/** The date picker only collects a calendar day; the backend requires a full ISO-8601 datetime. */
-function toIsoDateTime(isoDate: string): string {
-  return new Date(`${isoDate}T00:00:00Z`).toISOString();
-}
-
-/** Backend dates can arrive as "...T...Z" or the space-separated "... ...+00:00" variant. */
-function toDateInputValue(isoDateTime: string): string {
-  const normalized = isoDateTime.includes('T') ? isoDateTime : isoDateTime.replace(' ', 'T');
-  const d = new Date(normalized);
-  return Number.isNaN(d.getTime()) ? todayISO() : d.toISOString().slice(0, 10);
 }
 
 function toKeyValueList(values: Record<string, string>) {

@@ -7,6 +7,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 export interface CompositionGeneralTabProps {
   name: string;
   onNameChange: (v: string) => void;
+  date: string;
+  onDateChange: (v: string) => void;
   description: string;
   onDescriptionChange: (v: string) => void;
   solidCore: boolean;
@@ -19,6 +21,8 @@ export interface CompositionGeneralTabProps {
 export function CompositionGeneralTab({
   name,
   onNameChange,
+  date,
+  onDateChange,
   description,
   onDescriptionChange,
   solidCore,
@@ -45,6 +49,20 @@ export function CompositionGeneralTab({
           onChange={(e) => onNameChange(e.target.value)}
           required
           placeholder="Name the composition"
+          className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+        />
+      </div>
+
+      <div className="flex w-full flex-col gap-2">
+        <Label htmlFor="comp-date" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+          Date<span className="text-[#dc2626]">*</span>
+        </Label>
+        <Input
+          id="comp-date"
+          type="date"
+          value={date}
+          onChange={(e) => onDateChange(e.target.value)}
+          required
           className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
         />
       </div>
