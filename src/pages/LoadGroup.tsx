@@ -6,19 +6,34 @@ import { Footer } from '@/components/common/layout/Footer';
 import { Pagination } from '@/components/common/list/Pagination';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
+import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
 import { matchesQuery, paginate, rowInteractionProps, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, LoadGroupSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
-import { LOAD_GROUPS, type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
+import { type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
+import { useDeleteLoadGroup, useLoadGroupList } from '@/hooks/api/useLoadGroups';
+import type { LoadGroup as BackendLoadGroup } from '@/api/types/loadGroups';
 
 const PAGE_SIZE = 10;
+
+function toUiLoadGroup(g: BackendLoadGroup): LoadGroupItem {
+  return {
+    id: String(g.id),
+    name: g.name,
+    description: g.description ?? '',
+    lastUpdated: '—',
+    profiles: [],
+  };
+}
 
 interface LoadGroupRowProps {
   item: LoadGroupItem;
   onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }
 
-function LoadGroupRow({ item, onEdit }: LoadGroupRowProps) {
+function LoadGroupRow({ item, onEdit, onDuplicate, onDelete }: LoadGroupRowProps) {
   return (
     <tr
       {...rowInteractionProps(onEdit)}
@@ -33,8 +48,8 @@ function LoadGroupRow({ item, onEdit }: LoadGroupRowProps) {
         <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <RowIconButton label="Edit load group" icon={Pencil} onClick={onEdit} />
           <RowIconButton label="Export load group" icon={Download} onClick={() => {}} />
-          <RowIconButton label="Duplicate load group" icon={Copy} onClick={() => {}} />
-          <RowIconButton label="Delete load group" icon={Trash2} onClick={() => {}} variant="danger" />
+          <RowIconButton label="Duplicate load group" icon={Copy} onClick={onDuplicate} />
+          <RowIconButton label="Delete load group" icon={Trash2} onClick={onDelete} variant="danger" />
         </div>
       </td>
     </tr>
@@ -47,9 +62,21 @@ export function LoadGroup() {
   const [sort, setSort] = useState<SortState<LoadGroupSortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
 
+  const { data: backendLoadGroups, isLoading, isError } = useLoadGroupList();
+  const LOAD_GROUPS = useMemo(() => (backendLoadGroups ?? []).map(toUiLoadGroup), [backendLoadGroups]);
+
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const deleteMutation = useDeleteLoadGroup();
+
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    await deleteMutation.mutateAsync(Number(pendingDelete.id));
+    setPendingDelete(null);
+  }
+
   const filtered = useMemo(
     () => LOAD_GROUPS.filter((g) => matchesQuery(query, [g.name, g.description])),
-    [query]
+    [LOAD_GROUPS, query]
   );
 
   const sorted = useMemo(() => sortItems(filtered, sort, (g, key) => g[key]), [filtered, sort]);
@@ -114,14 +141,32 @@ export function LoadGroup() {
               <table className="w-full border-collapse">
                 <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
                 <tbody>
-                  {pageRows.map((item) => (
-                    <LoadGroupRow
-                      key={item.id}
-                      item={item}
-                      onEdit={() => navigate(`/load-group/${item.id}`)}
-                    />
-                  ))}
-                  {pageRows.length === 0 && (
+                  {isLoading && (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                        Loading load groups…
+                      </td>
+                    </tr>
+                  )}
+                  {isError && (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-8 text-center text-[14px] text-[#dc2626]">
+                        Failed to load load groups from the server.
+                      </td>
+                    </tr>
+                  )}
+                  {!isLoading &&
+                    !isError &&
+                    pageRows.map((item) => (
+                      <LoadGroupRow
+                        key={item.id}
+                        item={item}
+                        onEdit={() => navigate(`/load-group/${item.id}`)}
+                        onDuplicate={() => navigate(`/load-group/new?duplicateFrom=${item.id}`)}
+                        onDelete={() => setPendingDelete({ id: item.id, name: item.name })}
+                      />
+                    ))}
+                  {!isLoading && !isError && pageRows.length === 0 && (
                     <tr>
                       <td
                         colSpan={4}
@@ -144,6 +189,17 @@ export function LoadGroup() {
       </main>
 
       <Footer />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete load group"
+        message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
+        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+        confirmDisabled={deleteMutation.isPending}
+        danger
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

@@ -15,9 +15,23 @@ import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { Input } from '@/components/ui/input';
 import { GeometryCard } from '@/components/common/card/GeometryCard';
-import { GEOMETRIES } from '@/data/geometries';
+import { type Geometry as GeometryItem, type BladeType } from '@/data/geometries';
+import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { useDeleteGeometry, useGeometryList } from '@/hooks/api/useGeometry';
+import type { Geometry as BackendGeometry } from '@/api/types/geometry';
 
 const PAGE_SIZE = 10;
+
+function toUiGeometry(g: BackendGeometry): GeometryItem {
+  return {
+    id: String(g.id),
+    name: g.name,
+    description: g.description ?? '',
+    nominalRadius: 0,
+    type: '—' as BladeType,
+    lastUpdated: g.last_modified,
+  };
+}
 
 export function Geometry() {
   const navigate = useNavigate();
@@ -27,6 +41,18 @@ export function Geometry() {
   const [sort, setSort] = useState<SortState<GeometrySortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
 
+  const { data: backendGeometries, isLoading, isError } = useGeometryList();
+  const GEOMETRIES = useMemo(() => (backendGeometries ?? []).map(toUiGeometry), [backendGeometries]);
+
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const deleteMutation = useDeleteGeometry();
+
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    await deleteMutation.mutateAsync(Number(pendingDelete.id));
+    setPendingDelete(null);
+  }
+
   // Navigate to inline creation flow when arriving with ?new=1 (from Home dashboard)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -35,7 +61,7 @@ export function Geometry() {
     }
   }, [location.search, navigate]);
 
-  const allTypes = useMemo(() => [...new Set(GEOMETRIES.map((g) => g.type))].sort(), []);
+  const allTypes = useMemo(() => [...new Set(GEOMETRIES.map((g) => g.type))].sort(), [GEOMETRIES]);
   const typeFilter = useColumnFilter(allTypes, () => setPage(1));
 
   const filtered = useMemo(
@@ -45,7 +71,7 @@ export function Geometry() {
           matchesQuery(query, [g.name, g.description]) &&
           (typeFilter.selected.size === 0 || typeFilter.selected.has(g.type))
       ),
-    [query, typeFilter.selected]
+    [GEOMETRIES, query, typeFilter.selected]
   );
 
   const sorted = useMemo(
@@ -138,7 +164,21 @@ export function Geometry() {
                 <table className="w-full border-collapse">
                   <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
                   <tbody>
-                    {pageRows.map((g) => (
+                    {isLoading && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                          Loading geometries…
+                        </td>
+                      </tr>
+                    )}
+                    {isError && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-8 text-center text-[14px] text-[#dc2626]">
+                          Failed to load geometries from the server.
+                        </td>
+                      </tr>
+                    )}
+                    {!isLoading && !isError && pageRows.map((g) => (
                       <tr
                         key={g.id}
                         {...rowInteractionProps(() => navigate(`/geometry/${g.id}`))}
@@ -167,18 +207,22 @@ export function Geometry() {
                               onClick={() => navigate(`/geometry/${g.id}`)}
                             />
                             <RowIconButton label="Export geometry" icon={Download} onClick={() => {}} />
-                            <RowIconButton label="Duplicate geometry" icon={Copy} onClick={() => {}} />
+                            <RowIconButton
+                              label="Duplicate geometry"
+                              icon={Copy}
+                              onClick={() => navigate(`/geometry/new?duplicateFrom=${g.id}`)}
+                            />
                             <RowIconButton
                               label="Delete geometry"
                               icon={Trash2}
-                              onClick={() => {}}
+                              onClick={() => setPendingDelete({ id: g.id, name: g.name })}
                               variant="danger"
                             />
                           </div>
                         </td>
                       </tr>
                     ))}
-                    {pageRows.length === 0 && (
+                    {!isLoading && !isError && pageRows.length === 0 && (
                       <tr>
                         <td colSpan={6} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
                           No geometries match your search.
@@ -228,6 +272,17 @@ export function Geometry() {
         selected={typeFilter.selected}
         onToggle={typeFilter.toggle}
         onToggleAll={typeFilter.toggleSelectAll}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete geometry"
+        message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
+        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+        confirmDisabled={deleteMutation.isPending}
+        danger
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setPendingDelete(null)}
       />
     </div>
   );

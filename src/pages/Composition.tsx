@@ -15,9 +15,24 @@ import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { Input } from '@/components/ui/input';
 import { CompositionCard } from '@/components/composition/CompositionCard';
-import { COMPOSITIONS } from '@/data/compositions';
+import { type Composition as CompositionItem } from '@/data/compositions';
+import { type BladeType } from '@/data/geometries';
+import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { useCompositionList, useDeleteComposition } from '@/hooks/api/useComposition';
+import type { Composition as BackendComposition } from '@/api/types/composition';
 
 const PAGE_SIZE = 10;
+
+function toUiComposition(c: BackendComposition): CompositionItem {
+  return {
+    id: String(c.id),
+    name: c.name,
+    description: c.description ?? '',
+    nominalRadius: 0,
+    type: '—' as BladeType,
+    lastUpdated: '—',
+  };
+}
 
 export function Composition() {
   const navigate = useNavigate();
@@ -26,7 +41,19 @@ export function Composition() {
   const [sort, setSort] = useState<SortState<CompositionSortKey>>({ key: 'name', direction: 'asc' });
   const [page, setPage] = useState(1);
 
-  const allTypes = useMemo(() => [...new Set(COMPOSITIONS.map((c) => c.type))].sort(), []);
+  const { data: backendCompositions, isLoading, isError } = useCompositionList();
+  const COMPOSITIONS = useMemo(() => (backendCompositions ?? []).map(toUiComposition), [backendCompositions]);
+
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const deleteMutation = useDeleteComposition();
+
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    await deleteMutation.mutateAsync(Number(pendingDelete.id));
+    setPendingDelete(null);
+  }
+
+  const allTypes = useMemo(() => [...new Set(COMPOSITIONS.map((c) => c.type))].sort(), [COMPOSITIONS]);
   const typeFilter = useColumnFilter(allTypes, () => setPage(1));
 
   const filtered = useMemo(
@@ -36,7 +63,7 @@ export function Composition() {
           matchesQuery(query, [c.name, c.description]) &&
           (typeFilter.selected.size === 0 || typeFilter.selected.has(c.type))
       ),
-    [query, typeFilter.selected]
+    [COMPOSITIONS, query, typeFilter.selected]
   );
 
   const sorted = useMemo(
@@ -128,7 +155,21 @@ export function Composition() {
                 <table className="w-full border-collapse">
                   <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
                   <tbody>
-                    {pageRows.map((c) => (
+                    {isLoading && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                          Loading compositions…
+                        </td>
+                      </tr>
+                    )}
+                    {isError && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-8 text-center text-[14px] text-[#dc2626]">
+                          Failed to load compositions from the server.
+                        </td>
+                      </tr>
+                    )}
+                    {!isLoading && !isError && pageRows.map((c) => (
                       <tr
                         key={c.id}
                         className="group border-b border-[#e5e7eb] bg-white hover:bg-[#f9fafb]"
@@ -156,18 +197,22 @@ export function Composition() {
                               onClick={() => navigate(`/composition/${c.id}`)}
                             />
                             <RowIconButton label="Export composition" icon={Download} onClick={() => {}} />
-                            <RowIconButton label="Duplicate composition" icon={Copy} onClick={() => {}} />
+                            <RowIconButton
+                              label="Duplicate composition"
+                              icon={Copy}
+                              onClick={() => navigate(`/composition/new?duplicateFrom=${c.id}`)}
+                            />
                             <RowIconButton
                               label="Delete composition"
                               icon={Trash2}
-                              onClick={() => {}}
+                              onClick={() => setPendingDelete({ id: c.id, name: c.name })}
                               variant="danger"
                             />
                           </div>
                         </td>
                       </tr>
                     ))}
-                    {pageRows.length === 0 && (
+                    {!isLoading && !isError && pageRows.length === 0 && (
                       <tr>
                         <td colSpan={6} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
                           No compositions match your search.
@@ -219,6 +264,17 @@ export function Composition() {
         selected={typeFilter.selected}
         onToggle={typeFilter.toggle}
         onToggleAll={typeFilter.toggleSelectAll}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete composition"
+        message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
+        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+        confirmDisabled={deleteMutation.isPending}
+        danger
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setPendingDelete(null)}
       />
     </div>
   );
