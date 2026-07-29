@@ -27,7 +27,9 @@ function toUiMaterial(m: BackendMaterial): Material {
   return {
     id: String(m.id),
     name: m.name,
-    type: m.type,
+    // Type isn't a field on the material — it's a mechanical property, only visible
+    // via the detail endpoint (GET /material/list/ doesn't include mechanical_properties).
+    type: '—',
     description: m.description ?? '',
     lastUpdated: m.last_modified,
     source: 'own',

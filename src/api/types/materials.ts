@@ -19,7 +19,6 @@ export interface Material {
   name: string;
   date: string;
   description?: string;
-  type: string;
 }
 
 /** GET /material/:id/ — the list shape plus the per-material property arrays. */
@@ -37,7 +36,6 @@ export interface MaterialGeneralPayload {
 }
 
 export interface MaterialMechanicalPropertiesPayload {
-  type: string;
   mechanical_properties: KeyValuePair[];
 }
 

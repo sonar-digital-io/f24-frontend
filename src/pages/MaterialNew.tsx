@@ -38,12 +38,15 @@ const MATERIAL_TYPES = [
 
 interface Baseline {
   name: string;
-  type: string;
   description: string;
   date: string;
   mechValues: Record<string, string>;
   fatigueValues: Record<string, string>;
 }
+
+/** Type isn't its own field on the material — it's a mechanical property, sent/read
+ * as the "mech_prop_type" entry in mechanical_properties. */
+const MECH_PROP_TYPE_REFERENCE = 'mech_prop_type';
 
 function toKeyValueList(values: Record<string, string>) {
   return Object.entries(values)
@@ -83,15 +86,21 @@ export function MaterialNew() {
   const updateFatigueMutation = useUpdateFatigueProperties(materialId);
 
   const [name, setName] = useState('');
-  const [type, setType] = useState('UD ply');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(todayISO());
   const [activeTab, setActiveTab] = useState('general');
-  const [mechValues, setMechValues] = useState<Record<string, string>>({});
+  const [mechValues, setMechValues] = useState<Record<string, string>>({
+    [MECH_PROP_TYPE_REFERENCE]: 'UD ply',
+  });
   const [fatigueValues, setFatigueValues] = useState<Record<string, string>>({});
   const [hydrated, setHydrated] = useState(false);
   const [baseline, setBaseline] = useState<Baseline | null>(null);
   const [duplicateHydrated, setDuplicateHydrated] = useState(false);
+
+  const type = mechValues[MECH_PROP_TYPE_REFERENCE] ?? 'UD ply';
+  function setType(value: string) {
+    setMechValues((prev) => ({ ...prev, [MECH_PROP_TYPE_REFERENCE]: value }));
+  }
 
   // Populate the form once the (forced, never-cached) detail fetch settles, and record a
   // baseline snapshot so saving can tell which of the 3 tabs actually changed. Waiting on
@@ -105,14 +114,12 @@ export function MaterialNew() {
     const hydratedMech = toValueMap(m.mechanical_properties);
     const hydratedFatigue = toValueMap(m.fatigue_properties);
     setName(m.name);
-    setType(m.type);
     setDescription(hydratedDescription);
     setDate(hydratedDate);
     setMechValues(hydratedMech);
     setFatigueValues(hydratedFatigue);
     setBaseline({
       name: m.name,
-      type: m.type,
       description: hydratedDescription,
       date: hydratedDate,
       mechValues: hydratedMech,
@@ -135,7 +142,6 @@ export function MaterialNew() {
     }
     const m = duplicateQuery.data;
     setName(`${m.name}_copy`);
-    setType(m.type);
     setDescription(m.description ?? '');
     setDate(toDateInputValue(m.date));
     setMechValues(toValueMap(m.mechanical_properties));
@@ -163,8 +169,9 @@ export function MaterialNew() {
 
   /**
    * Creating sends one POST with everything. Editing calls only the endpoints whose
-   * tab actually changed: PUT /material/:id/ (general, minus type), PUT .../mechanical-properties/
-   * (mechanical tab + type), PUT .../fatigue-properties/ (fatigue tab).
+   * tab actually changed: PUT /material/:id/ (general — name/date/description), PUT
+   * .../mechanical-properties/ (mechanical tab, including Type as the "mech_prop_type"
+   * entry), PUT .../fatigue-properties/ (fatigue tab).
    */
   async function handleSave() {
     if (!isEditing) {
@@ -184,8 +191,7 @@ export function MaterialNew() {
 
     const generalChanged =
       name !== baseline.name || date !== baseline.date || description !== baseline.description;
-    const mechanicalChanged =
-      type !== baseline.type || keyValueSignature(mechValues) !== keyValueSignature(baseline.mechValues);
+    const mechanicalChanged = keyValueSignature(mechValues) !== keyValueSignature(baseline.mechValues);
     const fatigueChanged = keyValueSignature(fatigueValues) !== keyValueSignature(baseline.fatigueValues);
 
     const tasks: Promise<unknown>[] = [];
@@ -193,7 +199,7 @@ export function MaterialNew() {
       tasks.push(updateGeneralMutation.mutateAsync({ name, date: toIsoDateTime(date), description }));
     }
     if (mechanicalChanged) {
-      tasks.push(updateMechanicalMutation.mutateAsync({ type, mechanical_properties: toKeyValueList(mechValues) }));
+      tasks.push(updateMechanicalMutation.mutateAsync({ mechanical_properties: toKeyValueList(mechValues) }));
     }
     if (fatigueChanged) {
       tasks.push(updateFatigueMutation.mutateAsync({ fatigue_properties: toKeyValueList(fatigueValues) }));
