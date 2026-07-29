@@ -19,6 +19,10 @@ export interface Material {
   name: string;
   date: string;
   description?: string;
+  /** Mirrors the "mech_prop_type" entry in mechanical_properties — returned directly
+   * here too on both the list and detail endpoints. Writes still go through
+   * mechanical_properties (see MaterialMechanicalPropertiesPayload), not this field. */
+  type: string;
 }
 
 /** GET /material/:id/ — the list shape plus the per-material property arrays. */
