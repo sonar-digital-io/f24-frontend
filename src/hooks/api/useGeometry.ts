@@ -4,7 +4,7 @@ import type {
   GeometryPayload,
   GeometrySettingsPayload,
   GeometryEdgesPayload,
-  GeometryProfilesPayload,
+  GeometryProfilesWritePayload,
   GeometryProfilePreviewPayload,
   GeometryProfileQuery,
   GeometrySparsPayload,
@@ -115,7 +115,7 @@ export function useGeometryProfiles(geometryId: number) {
 export function useUpdateGeometryProfiles(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: GeometryProfilesPayload) => geometryApi.updateGeometryProfiles(geometryId, payload),
+    mutationFn: (payload: GeometryProfilesWritePayload) => geometryApi.updateGeometryProfiles(geometryId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: geometryKeys.profiles(geometryId) });
       queryClient.invalidateQueries({ queryKey: ['geometry', 'profile', geometryId] });

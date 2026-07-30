@@ -25,7 +25,7 @@ import {
 } from '@/hooks/api/useGeometry';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import type { Profile } from '@/data/profiles';
-import type { GeometryProfile, ProfileGeneratorParameters } from '@/api/types/geometry';
+import type { GeometryProfile, GeometryProfileInput, ProfileGeneratorParameters } from '@/api/types/geometry';
 
 interface GlobalProperties {
   nominalRadius: string;
@@ -64,13 +64,11 @@ function toUiProfile(p: GeometryProfile): Profile {
   };
 }
 
-function toApiProfile(p: Profile): GeometryProfile {
+function toApiProfile(p: Profile): GeometryProfileInput {
   return {
-    id: Number(p.id) || 0,
     name: p.name,
     position: p.position,
     type: UI_TO_API_PROFILE_TYPE[p.type] ?? p.type,
-    file: null,
     parameters: [
       { reference: 'max_camber', value: String(p.maxCamber) },
       { reference: 'max_camber_position', value: String(p.maxCamberPosition) },
@@ -250,9 +248,8 @@ export function GeometryEdit() {
       geometryId,
       payload: { profile_generator_parameters: params },
     });
-    const apiProfiles: GeometryProfile[] = profiles.map((p) => ({ ...p, id: 0, file: null }));
-    await updateProfilesMutation.mutateAsync({ profiles: apiProfiles });
-    setHydratedProfiles(apiProfiles.map(toUiProfile));
+    await updateProfilesMutation.mutateAsync({ profiles });
+    setHydratedProfiles(profiles.map((p, i) => toUiProfile({ ...p, id: i, file: null })));
     setActiveTab('profiles');
   }
 

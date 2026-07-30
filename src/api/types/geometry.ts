@@ -55,6 +55,18 @@ export interface GeometryProfilesPayload {
   profiles: GeometryProfile[];
 }
 
+/** PUT /geometry/:id/profiles/ — write payload; no id/file, unlike the GET shape. */
+export interface GeometryProfileInput {
+  name: string;
+  position: number;
+  type: string;
+  parameters: GeometryProfileParameter[];
+}
+
+export interface GeometryProfilesWritePayload {
+  profiles: GeometryProfileInput[];
+}
+
 /** GET /geometry/:id/ — the list shape plus whatever nested sub-resources the
  * backend includes inline (settings/profiles confirmed; edges/spars not typed
  * here yet — their edge_type/spar shape conventions aren't established). */
