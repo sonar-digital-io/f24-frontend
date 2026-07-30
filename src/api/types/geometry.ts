@@ -2,6 +2,7 @@ import type { KeyValuePair } from './common';
 
 export interface GeometryPayload {
   name: string;
+  created_at: string;
   description?: string;
 }
 

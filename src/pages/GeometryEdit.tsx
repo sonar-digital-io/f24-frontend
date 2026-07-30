@@ -9,26 +9,17 @@ import { StackingPanel } from '@/components/geometry/StackingPanel';
 import { CoordinateGizmo } from '@/components/common/viewer/CoordinateGizmo';
 import { RenderToggle } from '@/components/common/viewer/RenderToggle';
 import type { RenderMode } from '@/types';
-import { Select, Tip, FormField } from '@/components/geometry/GeometryEditControls';
+import { FormField } from '@/components/geometry/GeometryEditControls';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BLADE_TYPES } from '@/data/geometries';
 import {
   useCreateGeometry,
   useGeometryDetail,
   useUpdateGeometrySettings,
 } from '@/hooks/api/useGeometry';
-
-
-const MANUFACTURING_TECHNOLOGIES = [
-  'To be determined',
-  'Vacuum infusion',
-  'Prepreg autoclave',
-  'Filament winding',
-  'Resin transfer moulding',
-];
+import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
 interface GlobalProperties {
   nominalRadius: string;
@@ -65,11 +56,9 @@ export function GeometryEdit() {
     stackingReference: '0.3',
   });
 
-  // New geometry project config state. Blade type / manufacturing technology are UI-only —
-  // the backend GeometryPayload only accepts {name, description}.
-  const [newBladeType, setNewBladeType] = useState('');
-  const [newManufacturing, setNewManufacturing] = useState('To be determined');
+  // New geometry project config state — only these 3 fields are sent to POST /geometry/.
   const [newName, setNewName] = useState('');
+  const [newDate, setNewDate] = useState(todayISO());
   const [newDescription, setNewDescription] = useState('');
   const [duplicateHydrated, setDuplicateHydrated] = useState(false);
 
@@ -93,6 +82,7 @@ export function GeometryEdit() {
     }
     const g = duplicateQuery.data;
     setNewName(`${g.name}_copy`);
+    setNewDate(toDateInputValue(g.created_at));
     setNewDescription(g.description ?? '');
     setDuplicateHydrated(true);
   }, [isNew, duplicateHydrated, duplicateSourceId, duplicateQuery.isFetching, duplicateQuery.data]);
@@ -102,19 +92,24 @@ export function GeometryEdit() {
   }
 
   async function handleCreate() {
-    if (!newBladeType || !newName.trim()) return;
-    const result = await createMutation.mutateAsync({
-      name: newName.trim(),
-      description: newDescription.trim(),
-    });
-    // /geometry/new and /geometry/:id share a route, so this navigate does NOT
-    // remount the component — leave the create tab and clear the form explicitly,
-    // otherwise the create panel stays up and a second click creates a duplicate.
-    setActiveTab('global-properties');
-    setNewBladeType('');
-    setNewName('');
-    setNewDescription('');
-    navigate(`/geometry/${result.id}`, { replace: true });
+    if (!newName.trim() || !newDate) return;
+    try {
+      const result = await createMutation.mutateAsync({
+        name: newName.trim(),
+        created_at: toIsoDateTime(newDate),
+        description: newDescription.trim(),
+      });
+      // /geometry/new and /geometry/:id share a route, so this navigate does NOT
+      // remount the component — leave the create tab and clear the form explicitly,
+      // otherwise the create panel stays up and a second click creates a duplicate.
+      setActiveTab('global-properties');
+      setNewName('');
+      setNewDate(todayISO());
+      setNewDescription('');
+      navigate(`/geometry/${result.id}`, { replace: true });
+    } catch {
+      // createMutation.isError already surfaces the failure in the UI — stay on this tab.
+    }
   }
 
   async function handleSaveGlobalProperties() {
@@ -237,30 +232,24 @@ export function GeometryEdit() {
 
               <div className="flex flex-col gap-2">
                 <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                  Blade type<span className="text-[#dc2626]">*</span>
-                </Label>
-                <Tip label={!isNew ? 'Cannot be changed after creation' : ''}>
-                  <Select value={newBladeType} onChange={setNewBladeType} options={BLADE_TYPES} disabled={!isNew} />
-                </Tip>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                  Manufacturing technology
-                </Label>
-                <Tip label={!isNew ? 'Cannot be changed after creation' : ''}>
-                  <Select value={newManufacturing} onChange={setNewManufacturing} options={MANUFACTURING_TECHNOLOGIES} disabled={!isNew} />
-                </Tip>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
                   Name<span className="text-[#dc2626]">*</span>
                 </Label>
                 <Input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="Geometry name"
+                  className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+                  Date<span className="text-[#dc2626]">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
                   className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
                 />
               </div>
@@ -276,6 +265,10 @@ export function GeometryEdit() {
                 />
               </div>
 
+              {createMutation.isError && (
+                <p className="text-[13px] text-[#dc2626]">Failed to create geometry. Please try again.</p>
+              )}
+
               {isNew && (
                 <div className="flex items-center justify-end gap-2 pt-1">
                   <Link
@@ -287,10 +280,10 @@ export function GeometryEdit() {
                   <button
                     type="button"
                     onClick={handleCreate}
-                    disabled={!newBladeType || !newName.trim() || createMutation.isPending}
+                    disabled={!newName.trim() || !newDate || createMutation.isPending}
                     className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
                   >
-                    Create
+                    {createMutation.isPending ? 'Creating…' : 'Create'}
                   </button>
                 </div>
               )}
