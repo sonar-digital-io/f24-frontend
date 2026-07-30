@@ -5,13 +5,15 @@
  *    mesh tessellation. Served from public/fan-object.igs, fetched at
  *    runtime, written into the OCC Emscripten virtual filesystem, parsed with
  *    IGESControl_Reader, and tessellated into a Three.js BufferGeometry.
- *  - STL (when `stlData` is passed): already-triangulated ASCII STL mesh
- *    data — e.g. the backend's generated result — parsed with a small direct
- *    regex parser (see parseAsciiStl below), not THREE.STLLoader: its
- *    binary/ASCII sniffing heuristic can misfire on real ASCII STL text and
- *    try to allocate a bogus-huge typed array. No OCC involved either way.
- *    Vertices are unitless (fractions of the geometry's nominal_radius), so
- *    `stlScale` must be set to rescale it.
+ *  - STL (when `stlData` is passed): already-triangulated mesh data — e.g.
+ *    the backend's generated result, ASCII or binary — parsed directly (see
+ *    parseAsciiStl/parseBinaryStl below), not THREE.STLLoader: its
+ *    binary/ASCII sniffing heuristic (peeking a face count at byte 80 before
+ *    even checking for "solid") can misfire and try to allocate a bogus-huge
+ *    typed array. Format is instead detected by checking whether the content
+ *    actually starts with "solid". No OCC involved either way. Vertices are
+ *    unitless (fractions of the geometry's nominal_radius), so `stlScale`
+ *    must be set to rescale it.
  *
  * `stlData` takes over rendering from the IGES pipeline whenever it's set.
  *
@@ -113,14 +115,20 @@ async function loadIgesShapes(
 }
 
 // ---------------------------------------------------------------------------
-// ASCII STL parser — deliberately not THREE.STLLoader: its binary/ASCII
-// auto-detection heuristic (peeking a "triangle count" at byte 80) can
-// misfire on real ASCII STL responses and try to allocate a bogus-huge
-// typed array. The backend guarantees plain ASCII ("solid ... endsolid"),
-// so parse that directly instead of relying on sniffing.
+// ASCII + binary STL parsers — deliberately not THREE.STLLoader: its
+// binary/ASCII auto-detection heuristic (peeking a "triangle count" at byte
+// 80, before even checking for a "solid" prefix) can misfire and try to
+// allocate a bogus-huge typed array. Detect the format by sniffing whether
+// the content actually starts with "solid" instead, and sanity-check a
+// binary header's face count against the real byte length before trusting it.
 // ---------------------------------------------------------------------------
 
 const STL_VERTEX_RE = /vertex\s+([+-]?[\d.eE+-]+)\s+([+-]?[\d.eE+-]+)\s+([+-]?[\d.eE+-]+)/g;
+
+function looksLikeAsciiStl(buffer: ArrayBuffer): boolean {
+  const head = new Uint8Array(buffer, 0, Math.min(512, buffer.byteLength));
+  return /^\s*solid\b/.test(new TextDecoder().decode(head));
+}
 
 function parseAsciiStl(text: string): Float32Array {
   const vertices: number[] = [];
@@ -130,6 +138,37 @@ function parseAsciiStl(text: string): Float32Array {
     vertices.push(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
   }
   return new Float32Array(vertices);
+}
+
+function parseBinaryStl(buffer: ArrayBuffer): Float32Array {
+  const HEADER_SIZE = 84; // 80-byte header + uint32 face count
+  const FACE_SIZE    = 50; // 12 floats (normal + 3 vertices) + uint16 attribute count
+  if (buffer.byteLength < HEADER_SIZE) {
+    throw new Error(`Binary STL too short to contain a header (${buffer.byteLength} bytes)`);
+  }
+  const reader = new DataView(buffer);
+  const faces = reader.getUint32(80, true);
+  const expected = HEADER_SIZE + faces * FACE_SIZE;
+  if (expected !== buffer.byteLength) {
+    throw new Error(
+      `Binary STL face count doesn't match its byte length (header says ${faces} faces, ` +
+        `expected ${expected} bytes, got ${buffer.byteLength}) — likely a truncated or corrupt response`
+    );
+  }
+
+  const positions = new Float32Array(faces * 3 * 3);
+  let offset = HEADER_SIZE;
+  let vi = 0;
+  for (let f = 0; f < faces; f++) {
+    offset += 12; // skip the facet normal — recomputed later via computeVertexNormals
+    for (let v = 0; v < 3; v++) {
+      positions[vi++] = reader.getFloat32(offset, true); offset += 4;
+      positions[vi++] = reader.getFloat32(offset, true); offset += 4;
+      positions[vi++] = reader.getFloat32(offset, true); offset += 4;
+    }
+    offset += 2; // attribute byte count
+  }
+  return positions;
 }
 
 // ---------------------------------------------------------------------------
@@ -367,9 +406,16 @@ export function OccViewer({
     setStatus('loading');
 
     async function loadStl(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[] }> {
-      const text = typeof stlData === 'string' ? stlData : new TextDecoder().decode(stlData as ArrayBuffer);
-      const positions = parseAsciiStl(text);
-      if (positions.length === 0) throw new Error('No vertices found in STL — not a valid ASCII STL?');
+      let positions: Float32Array;
+      if (typeof stlData === 'string') {
+        positions = parseAsciiStl(stlData);
+      } else {
+        const buf = stlData as ArrayBuffer;
+        positions = looksLikeAsciiStl(buf) ? parseAsciiStl(new TextDecoder().decode(buf)) : parseBinaryStl(buf);
+      }
+      if (positions.length === 0) {
+        throw new Error('No vertices found in STL — empty or unrecognized file');
+      }
 
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
