@@ -95,8 +95,6 @@ export function GeometryEdit() {
   const [resultRequested, setResultRequested] = useState(false);
   const [resultStatus, setResultStatus] = useState<'loading' | 'ready' | 'error'>('ready');
 
-  const name = isNew ? 'New geometry' : (detailQuery.data?.name ?? id ?? 'New geometry');
-
   const [activeTab, setActiveTab] = useState(isNew ? 'create' : 'global-properties');
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
   const [profileFolded, setProfileFolded] = useState(false);
@@ -310,10 +308,6 @@ export function GeometryEdit() {
               </TabsList>
             </Tabs>
           </div>
-
-          <h1 className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
-            {name}
-          </h1>
 
           <div className="absolute inset-y-0 right-4 flex items-center gap-4">
             {!isNew && (
