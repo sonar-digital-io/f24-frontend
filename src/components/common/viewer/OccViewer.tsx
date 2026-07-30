@@ -1,21 +1,24 @@
 /**
- * OccViewer — full-bleed Three.js canvas with two independent load pipelines:
+ * OccViewer — full-bleed Three.js canvas with three independent load pipelines:
  *
  *  - IGES (default): a real IGES file loaded through OpenCascade.js B-Rep →
  *    mesh tessellation. Served from public/fan-object.igs, fetched at
  *    runtime, written into the OCC Emscripten virtual filesystem, parsed with
  *    IGESControl_Reader, and tessellated into a Three.js BufferGeometry.
- *  - STL (when `stlData` is passed): already-triangulated mesh data — e.g.
- *    the backend's generated result, ASCII or binary — parsed directly (see
- *    parseAsciiStl/parseBinaryStl below), not THREE.STLLoader: its
- *    binary/ASCII sniffing heuristic (peeking a face count at byte 80 before
- *    even checking for "solid") can misfire and try to allocate a bogus-huge
- *    typed array. Format is instead detected by checking whether the content
- *    actually starts with "solid". No OCC involved either way. Vertices are
- *    unitless (fractions of the geometry's nominal_radius), so `stlScale`
- *    must be set to rescale it.
+ *  - STL (when `stlData` is passed and doesn't sniff as a zip): parsed
+ *    directly (see parseAsciiStl/parseBinaryStl below), not THREE.STLLoader:
+ *    its binary/ASCII sniffing heuristic (peeking a face count at byte 80
+ *    before even checking for "solid") can misfire and try to allocate a
+ *    bogus-huge typed array.
+ *  - 3MF (when `stlData` is a zip, i.e. starts with the PK\x03\x04 local-file
+ *    -header signature): despite the backend's documented "raw STL" contract,
+ *    the real /result/ response observed in practice is a zip-based OPC
+ *    package (3MF), so it's parsed with THREE.ThreeMFLoader instead.
  *
- * `stlData` takes over rendering from the IGES pipeline whenever it's set.
+ * No OCC involved for either STL or 3MF. Vertices/geometry are unitless
+ * (fractions of the geometry's nominal_radius), so `stlScale` must be set to
+ * rescale them. `stlData` takes over rendering from the IGES pipeline
+ * whenever it's set.
  *
  * opencascade.js v1.1.1 API notes (v1.1.1 = OCC 7.5 bindings):
  *   Constructor overloads always use _N suffix (even if only one):
@@ -43,6 +46,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { getOcc } from '@/lib/occ-init';
 
 export interface OccViewerProps {
@@ -133,6 +137,16 @@ function looksLikeAsciiStl(buffer: ArrayBuffer): boolean {
   const head = new Uint8Array(buffer, 0, Math.min(4096, buffer.byteLength));
   const text = new TextDecoder().decode(head);
   return /\bsolid\b/i.test(text) && /\bfacet\b/i.test(text);
+}
+
+// Real-world observation: the backend's "STL" result actually comes back as
+// a zip archive (PK\x03\x04 local-file-header signature) containing an OPC
+// package — i.e. a 3MF file, the standard zip-based 3D-printing/CAD format.
+// Detect that up front so it takes a completely different load path.
+function looksLikeZip(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 4) return false;
+  const b = new Uint8Array(buffer, 0, 4);
+  return b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04;
 }
 
 function hexDump(buffer: ArrayBuffer, length = 64): string {
@@ -417,7 +431,13 @@ export function OccViewer({
     let disposed = false;
     setStatus('loading');
 
-    async function loadStl(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[] }> {
+    // `roots`: top-level objects to auto-fit the camera against. For STL/IGES
+    // this is just the meshes themselves (direct children of the scene); for
+    // 3MF it's the parsed group, since Box3.expandByObject must be called on
+    // an object whose own world matrix it can (re)compute — calling it on a
+    // deeply-nested child directly would use its parent's possibly-stale
+    // matrixWorld instead of freshly computing it top-down.
+    async function loadStl(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
       let positions: Float32Array;
       if (typeof stlData === 'string') {
         positions = parseAsciiStl(stlData);
@@ -456,10 +476,10 @@ export function OccViewer({
       lines.visible = wireframeRef.current;
       scene.add(lines);
 
-      return { newMeshes: [mesh], newLines: [lines] };
+      return { newMeshes: [mesh], newLines: [lines], roots: [mesh] };
     }
 
-    async function loadIges(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[] }> {
+    async function loadIges(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
       const oc = await getOcc();
 
       // Load IGES file
@@ -498,17 +518,61 @@ export function OccViewer({
         }
       }
 
-      return { newMeshes, newLines };
+      return { newMeshes, newLines, roots: newMeshes };
     }
 
-    (stlData !== undefined ? loadStl() : loadIges())
-      .then(({ newMeshes, newLines }) => {
+    async function load3mf(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+      const loader = new ThreeMFLoader();
+      const group = loader.parse(stlData as ArrayBuffer);
+      group.scale.setScalar(stlScale);
+      scene.add(group);
+
+      const newMeshes: THREE.Mesh[] = [];
+      const newLines:  THREE.LineSegments[] = [];
+
+      group.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh)) return;
+
+        const mat = new THREE.MeshPhysicalMaterial({
+          color: 0x94a3b8,
+          metalness: 0.3,
+          roughness: 0.4,
+          side: THREE.DoubleSide,
+        });
+        mat.userData.baseOpacity = 1;
+        if (wireframeRef.current) mat.opacity = 0;
+        obj.material = mat;
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+        newMeshes.push(obj);
+
+        // Parented to the mesh itself so it inherits the mesh's own local
+        // transform automatically (3MF build items can each carry their own).
+        const edgeGeo = new THREE.EdgesGeometry(obj.geometry, 15);
+        const edgeMat = new THREE.LineBasicMaterial({ color: 0x475569, opacity: 0.55, transparent: true });
+        const lines = new THREE.LineSegments(edgeGeo, edgeMat);
+        lines.visible = wireframeRef.current;
+        obj.add(lines);
+        newLines.push(lines);
+      });
+
+      return { newMeshes, newLines, roots: [group] };
+    }
+
+    function pickLoader() {
+      if (stlData === undefined) return loadIges();
+      if (typeof stlData !== 'string' && looksLikeZip(stlData)) return load3mf();
+      return loadStl();
+    }
+
+    pickLoader()
+      .then(({ newMeshes, newLines, roots }) => {
         if (disposed) return;
 
         // ── Auto-fit camera + grid to loaded geometry ───────────────────────
-        if (newMeshes.length > 0) {
+        if (roots.length > 0) {
           const box = new THREE.Box3();
-          newMeshes.forEach((m) => box.expandByObject(m));
+          roots.forEach((r) => box.expandByObject(r));
 
           if (!box.isEmpty()) {
             const center  = box.getCenter(new THREE.Vector3());
