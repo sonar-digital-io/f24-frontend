@@ -126,8 +126,19 @@ async function loadIgesShapes(
 const STL_VERTEX_RE = /vertex\s+([+-]?[\d.eE+-]+)\s+([+-]?[\d.eE+-]+)\s+([+-]?[\d.eE+-]+)/g;
 
 function looksLikeAsciiStl(buffer: ArrayBuffer): boolean {
-  const head = new Uint8Array(buffer, 0, Math.min(512, buffer.byteLength));
-  return /^\s*solid\b/.test(new TextDecoder().decode(head));
+  // Anchoring on "starts with solid" is too strict — a stray leading byte
+  // (BOM variant, whitespace the decoder doesn't normalize, etc.) makes a
+  // real ASCII file look binary. Instead just check that both STL keywords
+  // show up as readable text near the start of the file.
+  const head = new Uint8Array(buffer, 0, Math.min(4096, buffer.byteLength));
+  const text = new TextDecoder().decode(head);
+  return /\bsolid\b/i.test(text) && /\bfacet\b/i.test(text);
+}
+
+function hexDump(buffer: ArrayBuffer, length = 64): string {
+  return Array.from(new Uint8Array(buffer, 0, Math.min(length, buffer.byteLength)))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join(' ');
 }
 
 function parseAsciiStl(text: string): Float32Array {
@@ -152,7 +163,8 @@ function parseBinaryStl(buffer: ArrayBuffer): Float32Array {
   if (expected !== buffer.byteLength) {
     throw new Error(
       `Binary STL face count doesn't match its byte length (header says ${faces} faces, ` +
-        `expected ${expected} bytes, got ${buffer.byteLength}) — likely a truncated or corrupt response`
+        `expected ${expected} bytes, got ${buffer.byteLength}) — likely misdetected as binary. ` +
+        `First bytes: ${hexDump(buffer)}`
     );
   }
 
@@ -414,7 +426,8 @@ export function OccViewer({
         positions = looksLikeAsciiStl(buf) ? parseAsciiStl(new TextDecoder().decode(buf)) : parseBinaryStl(buf);
       }
       if (positions.length === 0) {
-        throw new Error('No vertices found in STL — empty or unrecognized file');
+        const diag = typeof stlData === 'string' ? stlData.slice(0, 200) : hexDump(stlData as ArrayBuffer, 128);
+        throw new Error(`No vertices found in STL — empty or unrecognized file. First bytes: ${diag}`);
       }
 
       const geo = new THREE.BufferGeometry();
