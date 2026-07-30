@@ -5,10 +5,13 @@
  *    mesh tessellation. Served from public/fan-object.igs, fetched at
  *    runtime, written into the OCC Emscripten virtual filesystem, parsed with
  *    IGESControl_Reader, and tessellated into a Three.js BufferGeometry.
- *  - STL (when `stlData` is passed): already-triangulated mesh data — e.g.
- *    the backend's generated result — parsed directly with THREE.STLLoader,
- *    no OCC involved. Its vertices are unitless (fractions of the geometry's
- *    nominal_radius), so `stlScale` must be set to rescale it.
+ *  - STL (when `stlData` is passed): already-triangulated ASCII STL mesh
+ *    data — e.g. the backend's generated result — parsed with a small direct
+ *    regex parser (see parseAsciiStl below), not THREE.STLLoader: its
+ *    binary/ASCII sniffing heuristic can misfire on real ASCII STL text and
+ *    try to allocate a bogus-huge typed array. No OCC involved either way.
+ *    Vertices are unitless (fractions of the geometry's nominal_radius), so
+ *    `stlScale` must be set to rescale it.
  *
  * `stlData` takes over rendering from the IGES pipeline whenever it's set.
  *
@@ -38,7 +41,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { getOcc } from '@/lib/occ-init';
 
 export interface OccViewerProps {
@@ -108,6 +110,26 @@ async function loadIgesShapes(
   } finally {
     try { oc.FS.unlink(tmpPath); } catch { /* virtual-FS cleanup */ }
   }
+}
+
+// ---------------------------------------------------------------------------
+// ASCII STL parser — deliberately not THREE.STLLoader: its binary/ASCII
+// auto-detection heuristic (peeking a "triangle count" at byte 80) can
+// misfire on real ASCII STL responses and try to allocate a bogus-huge
+// typed array. The backend guarantees plain ASCII ("solid ... endsolid"),
+// so parse that directly instead of relying on sniffing.
+// ---------------------------------------------------------------------------
+
+const STL_VERTEX_RE = /vertex\s+([+-]?[\d.eE+-]+)\s+([+-]?[\d.eE+-]+)\s+([+-]?[\d.eE+-]+)/g;
+
+function parseAsciiStl(text: string): Float32Array {
+  const vertices: number[] = [];
+  let m: RegExpExecArray | null;
+  STL_VERTEX_RE.lastIndex = 0;
+  while ((m = STL_VERTEX_RE.exec(text)) !== null) {
+    vertices.push(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
+  }
+  return new Float32Array(vertices);
 }
 
 // ---------------------------------------------------------------------------
@@ -345,8 +367,12 @@ export function OccViewer({
     setStatus('loading');
 
     async function loadStl(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[] }> {
-      const loader = new STLLoader();
-      const geo = typeof stlData === 'string' ? loader.parse(stlData) : loader.parse(stlData as ArrayBuffer);
+      const text = typeof stlData === 'string' ? stlData : new TextDecoder().decode(stlData as ArrayBuffer);
+      const positions = parseAsciiStl(text);
+      if (positions.length === 0) throw new Error('No vertices found in STL — not a valid ASCII STL?');
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       geo.computeVertexNormals();
 
       const mat = new THREE.MeshPhysicalMaterial({
