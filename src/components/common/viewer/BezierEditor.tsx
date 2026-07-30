@@ -128,7 +128,7 @@ export function BezierEditor({
   function handlePointDoubleClick(idx: number, e: React.MouseEvent) {
     e.stopPropagation();
     if (idx === 0 || idx === points.length - 1) return; // keep endpoints
-    if (points.length <= 3) return; // keep minimum 3 points
+    if (points.length <= 2) return; // keep minimum 2 points
     onChange(points.filter((_, i) => i !== idx));
   }
 
