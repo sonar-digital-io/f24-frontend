@@ -21,10 +21,11 @@ export interface FormFieldProps {
   label: string;
   value: string;
   onChange: (v: string) => void;
+  disabled?: boolean;
 }
 
 /** Labelled text input used by the GeometryEdit "Global properties" panel. */
-export function FormField({ label, value, onChange }: FormFieldProps) {
+export function FormField({ label, value, onChange, disabled }: FormFieldProps) {
   const inputId = `geometry-field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   return (
     <div className="flex flex-col gap-2">
@@ -35,7 +36,8 @@ export function FormField({ label, value, onChange }: FormFieldProps) {
         id={inputId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+        disabled={disabled}
+        className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:bg-[#f1f5f9] disabled:text-[#6b7280]"
       />
     </div>
   );

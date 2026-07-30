@@ -24,8 +24,13 @@ import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 interface GlobalProperties {
   nominalRadius: string;
   rootRadius: string;
-  stackingReference: string;
+  stackingLine: string;
+  bladeNumber: string;
 }
+
+/** Always sent as-is to PUT /geometry/:id/settings/ — shown in the form but not editable. */
+const AIRFOIL_ORIENTATION = 'normal';
+const AIRFOIL_DRAWING_PLANE = 'xy';
 
 export function GeometryEdit() {
   const { id } = useParams<{ id: string }>();
@@ -53,7 +58,8 @@ export function GeometryEdit() {
   const [props, setProps] = useState<GlobalProperties>({
     nominalRadius: '75.0',
     rootRadius: '5.0',
-    stackingReference: '0.3',
+    stackingLine: '1',
+    bladeNumber: '3',
   });
 
   // New geometry project config state — only these 3 fields are sent to POST /geometry/.
@@ -117,7 +123,10 @@ export function GeometryEdit() {
       settings: [
         { reference: 'nominal_radius', value: props.nominalRadius },
         { reference: 'root_radius', value: props.rootRadius },
-        { reference: 'stacking_reference', value: props.stackingReference },
+        { reference: 'airfoil_orientation', value: AIRFOIL_ORIENTATION },
+        { reference: 'airfoil_drawing_plane', value: AIRFOIL_DRAWING_PLANE },
+        { reference: 'stacking_line', value: props.stackingLine },
+        { reference: 'blade_number', value: props.bladeNumber },
       ],
     });
   }
@@ -305,10 +314,17 @@ export function GeometryEdit() {
                 value={props.rootRadius}
                 onChange={(v) => updateField('rootRadius', v)}
               />
+              <FormField label="Airfoil orientation" value={AIRFOIL_ORIENTATION} onChange={() => {}} disabled />
+              <FormField label="Airfoil drawing plane" value={AIRFOIL_DRAWING_PLANE} onChange={() => {}} disabled />
               <FormField
-                label="Stacking reference"
-                value={props.stackingReference}
-                onChange={(v) => updateField('stackingReference', v)}
+                label="Stacking line"
+                value={props.stackingLine}
+                onChange={(v) => updateField('stackingLine', v)}
+              />
+              <FormField
+                label="Blade number"
+                value={props.bladeNumber}
+                onChange={(v) => updateField('bladeNumber', v)}
               />
               <p className="text-[14px] leading-5 text-[#6b7280]">
                 Defines the longitudinal position along the chord line where the blade sections are
