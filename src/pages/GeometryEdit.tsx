@@ -56,10 +56,10 @@ export function GeometryEdit() {
   // typed GET for this endpoint, so these can't be reliably reloaded from the backend yet;
   // they start at these defaults and Save always PUTs the current form values.
   const [props, setProps] = useState<GlobalProperties>({
-    nominalRadius: '75.0',
-    rootRadius: '5.0',
-    stackingLine: '1',
-    bladeNumber: '3',
+    nominalRadius: '',
+    rootRadius: '',
+    stackingLine: '',
+    bladeNumber: '',
   });
 
   // New geometry project config state — only these 3 fields are sent to POST /geometry/.
@@ -303,16 +303,18 @@ export function GeometryEdit() {
           )}
 
           {activeTab === 'global-properties' && !isNew && (
-            <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+            <div className="flex max-h-[calc(100vh-72px)] flex-col gap-4 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
               <FormField
                 label="Nominal radius (m)"
                 value={props.nominalRadius}
                 onChange={(v) => updateField('nominalRadius', v)}
+                placeholder="e.g. 75.0"
               />
               <FormField
                 label="Root radius (%)"
                 value={props.rootRadius}
                 onChange={(v) => updateField('rootRadius', v)}
+                placeholder="e.g. 5.0"
               />
               <FormField label="Airfoil orientation" value={AIRFOIL_ORIENTATION} onChange={() => {}} disabled />
               <FormField label="Airfoil drawing plane" value={AIRFOIL_DRAWING_PLANE} onChange={() => {}} disabled />
@@ -320,11 +322,13 @@ export function GeometryEdit() {
                 label="Stacking line"
                 value={props.stackingLine}
                 onChange={(v) => updateField('stackingLine', v)}
+                placeholder="e.g. 1"
               />
               <FormField
                 label="Blade number"
                 value={props.bladeNumber}
                 onChange={(v) => updateField('bladeNumber', v)}
+                placeholder="e.g. 3"
               />
               <p className="text-[14px] leading-5 text-[#6b7280]">
                 Defines the longitudinal position along the chord line where the blade sections are
