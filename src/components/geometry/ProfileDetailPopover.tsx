@@ -1,14 +1,17 @@
+import { useEffect } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { AirfoilPreview } from '@/components/common/AirfoilPreview';
-import { PROFILE_TYPES, type Profile } from '@/data/profiles';
+import { PROFILE_TYPES, UI_TO_API_PROFILE_TYPE, type Profile } from '@/data/profiles';
 import { DropdownSelect } from '@/components/common/form/DropdownSelect';
 import { DialogHeader } from '@/components/common/dialog/DialogHeader';
 import { Field, NumberField } from '@/components/geometry/ProfileFormFields';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useDraggablePosition } from '@/hooks/useDraggablePosition';
+import { usePreviewGeometryProfile } from '@/hooks/api/useGeometry';
 
 export interface ProfileDetailPopoverProps {
+  geometryId: number;
   profile: Profile;
   onChange: (next: Profile) => void;
   onClose: () => void;
@@ -16,7 +19,7 @@ export interface ProfileDetailPopoverProps {
 }
 
 /** Draggable floating popover for editing a single profile's parameters. */
-export function ProfileDetailPopover({ profile, onChange, onClose, onSort }: ProfileDetailPopoverProps) {
+export function ProfileDetailPopover({ geometryId, profile, onChange, onClose, onSort }: ProfileDetailPopoverProps) {
   const { pos, startDrag } = useDraggablePosition(() => ({
     x: window.innerWidth / 2,
     y: window.innerHeight / 2,
@@ -27,6 +30,25 @@ export function ProfileDetailPopover({ profile, onChange, onClose, onSort }: Pro
   function update<K extends keyof Profile>(key: K, value: Profile[K]) {
     onChange({ ...profile, [key]: value });
   }
+
+  // POST /geometry/:id/profiles/preview/ — re-run whenever any field that
+  // affects the airfoil shape changes.
+  const previewMutation = usePreviewGeometryProfile();
+  useEffect(() => {
+    previewMutation.mutate({
+      geometryId,
+      payload: {
+        position: profile.position,
+        type: UI_TO_API_PROFILE_TYPE[profile.type] ?? profile.type,
+        parameters: [
+          { reference: 'max_camber', value: String(profile.maxCamber) },
+          { reference: 'max_camber_position', value: String(profile.maxCamberPosition) },
+          { reference: 'max_thickness', value: String(profile.thickness) },
+        ],
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geometryId, profile.position, profile.type, profile.maxCamber, profile.maxCamberPosition, profile.thickness]);
 
   return (
     <div

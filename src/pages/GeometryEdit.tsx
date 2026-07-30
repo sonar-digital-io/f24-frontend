@@ -24,7 +24,7 @@ import {
   useUpdateProfileGenerator,
 } from '@/hooks/api/useGeometry';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
-import type { Profile } from '@/data/profiles';
+import { API_TO_UI_PROFILE_TYPE, UI_TO_API_PROFILE_TYPE, type Profile } from '@/data/profiles';
 import type { GeometryProfile, GeometryProfileInput, ProfileGeneratorParameters } from '@/api/types/geometry';
 
 interface GlobalProperties {
@@ -37,18 +37,6 @@ interface GlobalProperties {
 /** Always sent as-is to PUT /geometry/:id/settings/ — shown in the form but not editable. */
 const AIRFOIL_ORIENTATION = 'normal';
 const AIRFOIL_DRAWING_PLANE = 'xy';
-
-/** UI dropdown labels <-> backend profile "type" reference, per the profile-generator spec example. */
-const API_TO_UI_PROFILE_TYPE: Record<string, string> = {
-  naca_4_digit: 'NACA 4 digit',
-  naca_5_digit: 'NACA 5 digit',
-  custom_airfoil: 'Custom airfoil',
-};
-const UI_TO_API_PROFILE_TYPE: Record<string, string> = {
-  'NACA 4 digit': 'naca_4_digit',
-  'NACA 5 digit': 'naca_5_digit',
-  'Custom airfoil': 'custom_airfoil',
-};
 
 function toUiProfile(p: GeometryProfile): Profile {
   const params = new Map(p.parameters.map((kv) => [kv.reference, kv.value]));
@@ -512,6 +500,7 @@ export function GeometryEdit() {
           )}
           {activeTab === 'profiles' && (
             <ProfilesPanel
+              geometryId={geometryId}
               initialProfiles={hydratedProfiles ?? undefined}
               onSave={handleSaveProfiles}
               saving={updateProfilesMutation.isPending}

@@ -9,6 +9,8 @@ import { ProfileDetailPopover } from '@/components/geometry/ProfileDetailPopover
 const HIDE_BANNER_KEY = 'f24_profiles_mode_hide';
 
 export interface ProfilesPanelProps {
+  /** Needed to call POST /geometry/:id/profiles/preview/ from the detail popover. */
+  geometryId: number;
   /** Prefill from the backend (GET /geometry/:id/ nested `profiles`) instead of the mock defaults. */
   initialProfiles?: Profile[];
   /** When provided, a Save button appears that calls this with the current profile list. */
@@ -17,7 +19,7 @@ export interface ProfilesPanelProps {
   saveError?: boolean;
 }
 
-export function ProfilesPanel({ initialProfiles, onSave, saving, saveError }: ProfilesPanelProps) {
+export function ProfilesPanel({ geometryId, initialProfiles, onSave, saving, saveError }: ProfilesPanelProps) {
   const [bannerVisible, setBannerVisible] = useState(
     () => localStorage.getItem(HIDE_BANNER_KEY) !== 'true'
   );
@@ -179,6 +181,7 @@ export function ProfilesPanel({ initialProfiles, onSave, saving, saveError }: Pr
 
       {selected && (
         <ProfileDetailPopover
+          geometryId={geometryId}
           profile={selected}
           onChange={handleUpdate}
           onClose={() => { sortByPosition(); setSelectedId(null); }}
