@@ -25,8 +25,9 @@ import {
  *
  * Interactions:
  * - Click on background  → insert a new anchor at that position
- * - Drag anchor          → move it (endpoints locked to xMin / xMax)
- * - Double-click anchor  → remove it (not available for the two endpoints)
+ * - Drag anchor          → move it (bounded by its neighbors / xMin·xMax)
+ * - Double-click anchor  → remove it, including endpoints — a curve can be
+ *   emptied down to 0 points; callers must block saving below 2 points
  * - +/- buttons          → zoom in / out
  * - Drag background      → pan (only when zoomed in)
  * - Double-click bg      → reset zoom & pan
@@ -124,11 +125,11 @@ export function BezierEditor({
     setDraggingIndex(null);
   }
 
-  // Double-click a middle anchor to remove it
+  // Double-click any anchor (including endpoints) to remove it. Down to 0
+  // points is allowed here — callers are responsible for blocking save
+  // when a curve has fewer than 2 points.
   function handlePointDoubleClick(idx: number, e: React.MouseEvent) {
     e.stopPropagation();
-    if (idx === 0 || idx === points.length - 1) return; // keep endpoints
-    if (points.length <= 2) return; // keep minimum 2 points
     onChange(points.filter((_, i) => i !== idx));
   }
 
@@ -262,7 +263,6 @@ export function BezierEditor({
         {/* Draggable anchors */}
         {points.map((p, idx) => {
           const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
-          const isEndpoint = idx === 0 || idx === points.length - 1;
           return (
             <ChartAnchorPoint
               key={idx}
@@ -274,7 +274,7 @@ export function BezierEditor({
               onPointerUp={(e) => handlePointerUp(idx, e)}
               onPointerCancel={(e) => handlePointerUp(idx, e)}
               onDoubleClick={(e) => handlePointDoubleClick(idx, e)}
-              tooltip={isEndpoint ? 'Drag to move' : 'Drag to move · Double-click to remove'}
+              tooltip="Drag to move · Double-click to remove"
             />
           );
         })}

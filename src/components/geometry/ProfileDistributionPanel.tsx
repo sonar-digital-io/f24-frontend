@@ -190,6 +190,10 @@ export function ProfileDistributionPanel({
     };
   }
 
+  // Points can be deleted down to 0 in the chart — block saving/generating
+  // until every curve has at least the 2 points a bezier curve needs.
+  const hasEnoughPoints = SECTION_KEYS.every((key) => sectionPoints[key].length >= 2);
+
   // A single section's chart + table BODY (no heading). Heading is rendered
   // by the accordion item in folded mode, and is hidden in expanded mode
   // because sub-tabs already name the section.
@@ -341,7 +345,7 @@ export function ProfileDistributionPanel({
                 <button
                   type="button"
                   onClick={() => onSaveParameters(buildParams())}
-                  disabled={saving}
+                  disabled={saving || !hasEnoughPoints}
                   className="inline-flex h-8 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? 'Saving…' : 'Save parameters'}
@@ -351,7 +355,7 @@ export function ProfileDistributionPanel({
                 <button
                   type="button"
                   onClick={() => onGenerate(buildParams())}
-                  disabled={generating}
+                  disabled={generating || !hasEnoughPoints}
                   className="inline-flex h-8 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {generating ? 'Generating…' : 'Generate'}
@@ -361,13 +365,16 @@ export function ProfileDistributionPanel({
                 <button
                   type="button"
                   onClick={() => onSaveAndNext(buildParams())}
-                  disabled={savingAndNext}
+                  disabled={savingAndNext || !hasEnoughPoints}
                   className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {savingAndNext ? 'Saving…' : 'Save & Next'}
                 </button>
               )}
             </div>
+            {!hasEnoughPoints && (
+              <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>
+            )}
             {saveError && <p className="text-[13px] text-[#dc2626]">Failed to save parameters. Please try again.</p>}
             {generateError && <p className="text-[13px] text-[#dc2626]">Failed to generate. Please try again.</p>}
             {saveAndNextError && <p className="text-[13px] text-[#dc2626]">Failed to save profiles. Please try again.</p>}

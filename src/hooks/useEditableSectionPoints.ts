@@ -27,6 +27,13 @@ export function useEditableSectionPoints<K extends string>(
   function addPoint(key: K) {
     setSectionPoints((current) => {
       const pts = current[key];
+      // A curve emptied out (via double-click delete) has too few points to
+      // interpolate a new one between — reseed a fresh 2-point line instead.
+      if (pts.length < 2) {
+        const { min, max } = getYBounds(key);
+        const midY = (min + max) / 2;
+        return { ...current, [key]: [{ x: 0, y: midY }, { x: 1, y: midY }] };
+      }
       // Insert a new point between the last two existing points
       const secondLast = pts[pts.length - 2];
       const last = pts[pts.length - 1];

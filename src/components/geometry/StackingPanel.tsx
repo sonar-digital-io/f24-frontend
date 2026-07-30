@@ -145,6 +145,10 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, onSave, savi
     }));
   }
 
+  // Points can be deleted down to 0 in the chart — block saving until every
+  // curve has at least the 2 points a bezier curve needs.
+  const hasEnoughPoints = SECTION_KEYS.every((key) => sectionPoints[key].length >= 2);
+
   function renderSectionBody(key: SectionKey) {
     const points = sectionPoints[key];
     return (
@@ -198,7 +202,7 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, onSave, savi
               <button
                 type="button"
                 onClick={() => onSave(buildEdges())}
-                disabled={saving}
+                disabled={saving || !hasEnoughPoints}
                 className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? 'Saving…' : 'Save'}
@@ -215,6 +219,9 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, onSave, savi
             </button>
           </div>
         </div>
+        {!hasEnoughPoints && (
+          <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>
+        )}
         {saveError && <p className="text-[13px] text-[#dc2626]">Failed to save. Please try again.</p>}
       </div>
 
