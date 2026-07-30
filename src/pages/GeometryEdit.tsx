@@ -132,6 +132,9 @@ export function GeometryEdit() {
     if (!isNew && activeTab === 'create') {
       setActiveTab('global-properties');
     }
+    // Only re-run on the isNew transition (after Create succeeds) — not on every
+    // manual tab switch, which would defeat the point of this one-time redirect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew]);
 
   // Load the existing geometry's name/date/description — plus, when present, the nested
