@@ -19,8 +19,11 @@ import {
   useGeometryDetail,
   useUpdateGeometry,
   useUpdateGeometrySettings,
+  useUpdateGeometryProfiles,
 } from '@/hooks/api/useGeometry';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
+import type { Profile } from '@/data/profiles';
+import type { GeometryProfile } from '@/api/types/geometry';
 
 interface GlobalProperties {
   nominalRadius: string;
@@ -32,6 +35,47 @@ interface GlobalProperties {
 /** Always sent as-is to PUT /geometry/:id/settings/ — shown in the form but not editable. */
 const AIRFOIL_ORIENTATION = 'normal';
 const AIRFOIL_DRAWING_PLANE = 'xy';
+
+/** UI dropdown labels <-> backend profile "type" reference, per the profile-generator spec example. */
+const API_TO_UI_PROFILE_TYPE: Record<string, string> = {
+  naca_4_digit: 'NACA 4 digit',
+  naca_5_digit: 'NACA 5 digit',
+  custom_airfoil: 'Custom airfoil',
+};
+const UI_TO_API_PROFILE_TYPE: Record<string, string> = {
+  'NACA 4 digit': 'naca_4_digit',
+  'NACA 5 digit': 'naca_5_digit',
+  'Custom airfoil': 'custom_airfoil',
+};
+
+function toUiProfile(p: GeometryProfile): Profile {
+  const params = new Map(p.parameters.map((kv) => [kv.reference, kv.value]));
+  return {
+    id: String(p.id),
+    name: p.name,
+    position: p.position,
+    type: API_TO_UI_PROFILE_TYPE[p.type] ?? p.type,
+    maxCamber: Number(params.get('max_camber') ?? 0),
+    maxCamberPosition: Number(params.get('max_camber_position') ?? 0),
+    thickness: Number(params.get('max_thickness') ?? 0),
+    show2D: true,
+  };
+}
+
+function toApiProfile(p: Profile): GeometryProfile {
+  return {
+    id: Number(p.id) || 0,
+    name: p.name,
+    position: p.position,
+    type: UI_TO_API_PROFILE_TYPE[p.type] ?? p.type,
+    file: null,
+    parameters: [
+      { reference: 'max_camber', value: p.maxCamber },
+      { reference: 'max_camber_position', value: p.maxCamberPosition },
+      { reference: 'max_thickness', value: p.thickness },
+    ],
+  };
+}
 
 export function GeometryEdit() {
   const { id } = useParams<{ id: string }>();
@@ -47,6 +91,7 @@ export function GeometryEdit() {
   const createMutation = useCreateGeometry();
   const updateGeneralMutation = useUpdateGeometry(geometryId);
   const updateSettingsMutation = useUpdateGeometrySettings(geometryId);
+  const updateProfilesMutation = useUpdateGeometryProfiles(geometryId);
 
   const name = isNew ? 'New geometry' : (detailQuery.data?.name ?? id ?? 'New geometry');
 
@@ -54,15 +99,17 @@ export function GeometryEdit() {
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
   const [profileFolded, setProfileFolded] = useState(false);
   const [stackingFolded, setStackingFolded] = useState(true);
-  // Global properties — sent via PUT /geometry/:id/settings/ as key/value pairs. There's no
-  // typed GET for this endpoint, so these can't be reliably reloaded from the backend yet;
-  // they start at these defaults and Save always PUTs the current form values.
+  // Global properties — sent via PUT /geometry/:id/settings/ as key/value pairs, and
+  // hydrated below from the `settings` array nested in GET /geometry/:id/ when present.
   const [props, setProps] = useState<GlobalProperties>({
     nominalRadius: '',
     rootRadius: '',
     stackingLine: '',
     bladeNumber: '',
   });
+
+  // Profiles — hydrated from the `profiles` array nested in GET /geometry/:id/.
+  const [hydratedProfiles, setHydratedProfiles] = useState<Profile[] | null>(null);
 
   // Project config state — name/date/description, sent to POST /geometry/ on create
   // or PUT /geometry/:id/ on edit. For edits, hydrated from GET /geometry/:id/.
@@ -83,7 +130,8 @@ export function GeometryEdit() {
     }
   }, [isNew]);
 
-  // Load the existing geometry's name/date/description into the form when editing.
+  // Load the existing geometry's name/date/description — plus, when present, the nested
+  // settings/profiles arrays — into the form when editing.
   useEffect(() => {
     if (isNew || hydrated || detailQuery.isFetching || !detailQuery.data) return;
     const g = detailQuery.data;
@@ -93,6 +141,21 @@ export function GeometryEdit() {
     setNewDate(hydratedDate);
     setNewDescription(hydratedDescription);
     setBaseline({ name: g.name, date: hydratedDate, description: hydratedDescription });
+
+    if (g.settings) {
+      const settingsMap = new Map(g.settings.map((kv) => [kv.reference, String(kv.value)]));
+      setProps({
+        nominalRadius: settingsMap.get('nominal_radius') ?? '',
+        rootRadius: settingsMap.get('root_radius') ?? '',
+        stackingLine: settingsMap.get('stacking_line') ?? '',
+        bladeNumber: settingsMap.get('blade_number') ?? '',
+      });
+    }
+
+    if (g.profiles) {
+      setHydratedProfiles(g.profiles.map(toUiProfile));
+    }
+
     setHydrated(true);
   }, [isNew, hydrated, detailQuery.isFetching, detailQuery.data]);
 
@@ -162,6 +225,10 @@ export function GeometryEdit() {
         { reference: 'blade_number', value: props.bladeNumber },
       ],
     });
+  }
+
+  async function handleSaveProfiles(profiles: Profile[]) {
+    await updateProfilesMutation.mutateAsync({ profiles: profiles.map(toApiProfile) });
   }
 
   function handleExit() {
@@ -411,7 +478,14 @@ export function GeometryEdit() {
               onFoldToggle={() => setProfileFolded((f) => !f)}
             />
           )}
-          {activeTab === 'profiles' && <ProfilesPanel />}
+          {activeTab === 'profiles' && (
+            <ProfilesPanel
+              initialProfiles={hydratedProfiles ?? undefined}
+              onSave={handleSaveProfiles}
+              saving={updateProfilesMutation.isPending}
+              saveError={updateProfilesMutation.isError}
+            />
+          )}
           {activeTab === 'stacking' && (
             <StackingPanel folded={stackingFolded} onFoldToggle={() => setStackingFolded((f) => !f)} />
           )}

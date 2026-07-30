@@ -8,12 +8,23 @@ import { ProfileDetailPopover } from '@/components/geometry/ProfileDetailPopover
 
 const HIDE_BANNER_KEY = 'f24_profiles_mode_hide';
 
-export function ProfilesPanel() {
+export interface ProfilesPanelProps {
+  /** Prefill from the backend (GET /geometry/:id/ nested `profiles`) instead of the mock defaults. */
+  initialProfiles?: Profile[];
+  /** When provided, a Save button appears that calls this with the current profile list. */
+  onSave?: (profiles: Profile[]) => void;
+  saving?: boolean;
+  saveError?: boolean;
+}
+
+export function ProfilesPanel({ initialProfiles, onSave, saving, saveError }: ProfilesPanelProps) {
   const [bannerVisible, setBannerVisible] = useState(
     () => localStorage.getItem(HIDE_BANNER_KEY) !== 'true'
   );
-  const [profiles, setProfiles] = useState<Profile[]>(INITIAL_PROFILES);
-  const [selectedId, setSelectedId] = useState<string | null>(INITIAL_PROFILES[0]?.id ?? null);
+  const [profiles, setProfiles] = useState<Profile[]>(initialProfiles ?? INITIAL_PROFILES);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    (initialProfiles ?? INITIAL_PROFILES)[0]?.id ?? null
+  );
 
   function handleUpdate(next: Profile) {
     setProfiles((current) => current.map((p) => (p.id === next.id ? next : p)));
@@ -141,14 +152,29 @@ export function ProfilesPanel() {
           </table>
         </div>
 
-        <button
-          type="button"
-          onClick={handleAdd}
-          className="inline-flex h-8 items-center justify-center gap-2 self-start rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-        >
-          <Plus className="h-4 w-4" strokeWidth={2} />
-          Add new profile
-        </button>
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={handleAdd}
+            className="inline-flex h-8 items-center justify-center gap-2 self-start rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2} />
+            Add new profile
+          </button>
+          {onSave && (
+            <button
+              type="button"
+              onClick={() => onSave(profiles)}
+              disabled={saving}
+              className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          )}
+        </div>
+        {saveError && (
+          <p className="text-[13px] text-[#dc2626]">Failed to save. Please try again.</p>
+        )}
       </div>
 
       {selected && (

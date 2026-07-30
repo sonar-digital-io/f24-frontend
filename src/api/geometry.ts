@@ -3,6 +3,7 @@ import type {
   GeometryPayload,
   GeometryCreateResponse,
   Geometry,
+  GeometryDetail,
   GeometrySettingsPayload,
   GeometryEdgesPayload,
   GeometryProfilesPayload,
@@ -24,8 +25,8 @@ export async function getGeometryList(): Promise<Geometry[]> {
   return data;
 }
 
-export async function getGeometry(geometryId: number): Promise<Geometry> {
-  const { data } = await apiClient.get<Geometry>(`/geometry/${geometryId}/`);
+export async function getGeometry(geometryId: number): Promise<GeometryDetail> {
+  const { data } = await apiClient.get<GeometryDetail>(`/geometry/${geometryId}/`);
   return data;
 }
 

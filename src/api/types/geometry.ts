@@ -55,6 +55,14 @@ export interface GeometryProfilesPayload {
   profiles: GeometryProfile[];
 }
 
+/** GET /geometry/:id/ — the list shape plus whatever nested sub-resources the
+ * backend includes inline (settings/profiles confirmed; edges/spars not typed
+ * here yet — their edge_type/spar shape conventions aren't established). */
+export interface GeometryDetail extends Geometry {
+  settings?: KeyValuePair[];
+  profiles?: GeometryProfile[];
+}
+
 export interface GeometryProfilePreviewPayload {
   type: string;
   position: number;
