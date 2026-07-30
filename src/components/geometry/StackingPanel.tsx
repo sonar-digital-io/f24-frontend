@@ -6,7 +6,7 @@ import type { ControlPoint } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldableSectionList } from '@/components/geometry/FoldableSectionList';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
-import type { GeometryEdgeInput } from '@/api/types/geometry';
+import type { GeometryEdge, GeometryEdgeInput } from '@/api/types/geometry';
 
 type SectionKey = 'sweep' | 'dihedral' | 'twist' | 'chord';
 
@@ -77,19 +77,37 @@ const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
 interface StackingPanelProps {
   folded: boolean;
   onFoldToggle: () => void;
+  /** Prefill from the backend (GET /geometry/:id/edges/) instead of the mock defaults. */
+  initialEdges?: GeometryEdge[];
   /** PUT /geometry/:id/edges/ — persist the current sweep/dihedral/twist/chord curves. */
   onSave?: (edges: GeometryEdgeInput[]) => void;
   saving?: boolean;
   saveError?: boolean;
 }
 
-export function StackingPanel({ folded, onFoldToggle, onSave, saving, saveError }: StackingPanelProps) {
+function edgeMap(initialEdges?: GeometryEdge[]): Map<string, GeometryEdge> {
+  return new Map((initialEdges ?? []).map((e) => [e.edge_type, e]));
+}
+
+export function StackingPanel({ folded, onFoldToggle, initialEdges, onSave, saving, saveError }: StackingPanelProps) {
   const [subTab, setSubTab] = useState<SectionKey>('sweep');
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     sweep: true,
     dihedral: true,
     twist: true,
     chord: true,
+  });
+
+  // Y-axis bounds come from the backend edge when available, falling back to
+  // the mock defaults — captured once at mount, same as the initial points.
+  const [yBounds] = useState<Record<SectionKey, { min: number; max: number }>>(() => {
+    const map = edgeMap(initialEdges);
+    return {
+      sweep: { min: map.get('sweep')?.ymin ?? SECTION_Y_MIN.sweep, max: map.get('sweep')?.ymax ?? SECTION_Y_MAX.sweep },
+      dihedral: { min: map.get('dihedral')?.ymin ?? SECTION_Y_MIN.dihedral, max: map.get('dihedral')?.ymax ?? SECTION_Y_MAX.dihedral },
+      twist: { min: map.get('twist')?.ymin ?? SECTION_Y_MIN.twist, max: map.get('twist')?.ymax ?? SECTION_Y_MAX.twist },
+      chord: { min: map.get('chord')?.ymin ?? SECTION_Y_MIN.chord, max: map.get('chord')?.ymax ?? SECTION_Y_MAX.chord },
+    };
   });
 
   const {
@@ -100,8 +118,16 @@ export function StackingPanel({ folded, onFoldToggle, onSave, saving, saveError 
     handleInputChange,
     handleInputBlur,
   } = useEditableSectionPoints(
-    INITIAL_SECTION_POINTS,
-    (key) => ({ min: SECTION_Y_MIN[key], max: SECTION_Y_MAX[key] }),
+    (() => {
+      const map = edgeMap(initialEdges);
+      return {
+        sweep: map.get('sweep')?.curve ?? INITIAL_SECTION_POINTS.sweep,
+        dihedral: map.get('dihedral')?.curve ?? INITIAL_SECTION_POINTS.dihedral,
+        twist: map.get('twist')?.curve ?? INITIAL_SECTION_POINTS.twist,
+        chord: map.get('chord')?.curve ?? INITIAL_SECTION_POINTS.chord,
+      };
+    })(),
+    (key) => yBounds[key],
     5
   );
 
@@ -113,8 +139,8 @@ export function StackingPanel({ folded, onFoldToggle, onSave, saving, saveError 
     return SECTION_KEYS.map((key) => ({
       edge_type: key,
       curve_type: 'bezier',
-      ymin: SECTION_Y_MIN[key],
-      ymax: SECTION_Y_MAX[key],
+      ymin: yBounds[key].min,
+      ymax: yBounds[key].max,
       curve: sectionPoints[key],
     }));
   }
@@ -132,8 +158,8 @@ export function StackingPanel({ folded, onFoldToggle, onSave, saving, saveError 
         <BezierEditor
           points={points}
           onChange={(next) => setPointsForSection(key, next)}
-          yMin={SECTION_Y_MIN[key]}
-          yMax={SECTION_Y_MAX[key]}
+          yMin={yBounds[key].min}
+          yMax={yBounds[key].max}
           yStep={SECTION_Y_STEP[key]}
           rootX={0.05}
         />

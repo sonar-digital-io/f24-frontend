@@ -23,6 +23,7 @@ import {
   useRunProfileGenerator,
   useUpdateProfileGenerator,
   useUpdateGeometryEdges,
+  useGeometryEdges,
 } from '@/hooks/api/useGeometry';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { API_TO_UI_PROFILE_TYPE, UI_TO_API_PROFILE_TYPE, type Profile } from '@/data/profiles';
@@ -89,6 +90,7 @@ export function GeometryEdit() {
   const runGeneratorMutation = useRunProfileGenerator();
   const updateGeneratorMutation = useUpdateProfileGenerator();
   const updateEdgesMutation = useUpdateGeometryEdges(geometryId);
+  const edgesQuery = useGeometryEdges(geometryId);
 
   const name = isNew ? 'New geometry' : (detailQuery.data?.name ?? id ?? 'New geometry');
 
@@ -522,6 +524,7 @@ export function GeometryEdit() {
             <StackingPanel
               folded={stackingFolded}
               onFoldToggle={() => setStackingFolded((f) => !f)}
+              initialEdges={edgesQuery.data?.edges}
               onSave={handleSaveEdges}
               saving={updateEdgesMutation.isPending}
               saveError={updateEdgesMutation.isError}
