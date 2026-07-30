@@ -3,7 +3,7 @@ import type { KeyValuePair } from './common';
 export interface CompositionPayload {
   name: string;
   created_at: string;
-  description?: string;
+  description: string;
 }
 
 export interface Composition {

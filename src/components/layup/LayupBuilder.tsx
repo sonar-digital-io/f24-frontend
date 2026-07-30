@@ -1,32 +1,32 @@
 import { useState } from 'react';
 import { ChevronDown, GripVertical, Plus, Trash2 } from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PlyStackViz } from '@/components/layup/PlyStackViz';
 import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
 import { nextLocalId } from '@/lib/utils';
 import { MaterialPickerDialog } from '@/components/layup/MaterialPickerDialog';
-import { MATERIALS } from '@/data/materials';
+import { useMaterialList } from '@/hooks/api/useMaterials';
 import { useDragReorder } from '@/hooks/useDragReorder';
 
-const MATERIAL_TYPE_COLORS: Record<string, string> = {
-  'UD Carbon Ply':      '#0066cc',
-  'UD Ply':             '#0066cc',
-  'Biaxial Ply (±45°)': '#22c55e',
-  'Core (PET Foam)':    '#f59e0b',
-  'Core (Balsa)':       '#f59e0b',
-  'Surface Ply':        '#9333ea',
-  'Hybrid Ply':         '#06b6d4',
-  'Random Mat Ply':     '#ec4899',
-  'Consolidated Ply':   '#1e3a8a',
-};
+// Vibrant pastel palette — one material name always hashes to the same
+// color, and distinct material names spread across the palette.
+const PLY_COLOR_PALETTE = [
+  '#FF9AA2', '#FFB7B2', '#FFDAC1', '#FFE066', '#C4F1BE',
+  '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#B5EAD7',
+  '#C7CEEA', '#FDCB82', '#F694C1', '#8DE0D5',
+];
 const FALLBACK_COLOR = '#6b7280';
 
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
 function getMaterialColor(materialName: string): string {
-  const m = MATERIALS.find((mat) => mat.name === materialName);
-  if (m) return MATERIAL_TYPE_COLORS[m.type] ?? FALLBACK_COLOR;
-  return FALLBACK_COLOR;
+  if (!materialName || materialName === 'Select') return FALLBACK_COLOR;
+  return PLY_COLOR_PALETTE[hashString(materialName) % PLY_COLOR_PALETTE.length];
 }
 
 export interface Ply {
@@ -39,16 +39,7 @@ export interface Ply {
 }
 
 
-const INITIAL_PLIES: Ply[] = [
-  {
-    id: 'p1',
-    name: 'Placeholder',
-    material: 'Select',
-    thickness: 0,
-    orientation: 0,
-    color: FALLBACK_COLOR,
-  },
-];
+const INITIAL_PLIES: Ply[] = [];
 
 /**
  * Drag-and-drop reorderable ply list + isometric schematic.
@@ -63,8 +54,9 @@ const INITIAL_PLIES: Ply[] = [
  */
 export function LayupBuilder() {
   const [plies, setPlies] = useState<Ply[]>(INITIAL_PLIES);
-  const [unifiedVisualization, setUnifiedVisualization] = useState(true);
   const [materialPickerPlyId, setMaterialPickerPlyId] = useState<string | null>(null);
+  const { data: materialData } = useMaterialList();
+  const materials = materialData ?? [];
 
   function reorderPlies(fromIdx: number, toIdx: number) {
     setPlies((current) => {
@@ -251,26 +243,11 @@ export function LayupBuilder() {
           </table>
         </div>
 
-        {/* Unified visualization toggle */}
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="unified-visualization"
-            checked={unifiedVisualization}
-            onCheckedChange={(checked) => setUnifiedVisualization(Boolean(checked))}
-            className="size-4 rounded border-[#e2e8f0] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
-          />
-          <Label
-            htmlFor="unified-visualization"
-            className="cursor-pointer text-[14px] font-medium text-[#0a0a0a]"
-          >
-            Unified visualization
-          </Label>
-        </div>
       </div>
 
-      {/* Right: isometric ply stack viz */}
+      {/* Right: 3D ply stack viz — rotate/zoom like OccViewer */}
       <div className="flex w-full max-w-[440px] shrink-0 flex-col items-center">
-        <PlyStackViz plies={plies} unified={unifiedVisualization} className="h-auto w-full" />
+        <PlyStackViz plies={plies} materials={materials} className="h-[520px] w-full" />
       </div>
 
       <MaterialPickerDialog

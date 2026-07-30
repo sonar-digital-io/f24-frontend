@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Check, Redo2, Settings, Undo2 } from 'lucide-react';
+import { Check, Redo2, Undo2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
-import { OccViewer } from '@/components/common/viewer/OccViewer';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LayupPickerDialog } from '@/components/composition/LayupPickerDialog';
 import {
@@ -10,14 +9,13 @@ import {
   LayupMappingBezierDialog,
 } from '@/components/composition/LayupMappingBezierDialog';
 import { TransversalMappingSection } from '@/components/composition/TransversalMappingSection';
-import { CoordinateGizmo } from '@/components/common/viewer/CoordinateGizmo';
-import { RenderToggle } from '@/components/common/viewer/RenderToggle';
-import type { RenderMode } from '@/types';
 import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
 import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
+import { CompositionLayupTab, type CompositionLayup } from '@/components/composition/CompositionLayupTab';
 import { LayupMappingTable, type LayupMapping } from '@/components/composition/LayupMappingTable';
 import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { useCreateComposition, useCompositionDetail, useUpdateComposition } from '@/hooks/api/useComposition';
+import { updateCompositionSettings } from '@/api/composition';
 
 const DEFAULT_UPPER_MAPPINGS: LayupMapping[] = [
   { id: 'u0', name: 'OUTER-SHELL', layupId: 'biax-skin-04' },
@@ -46,9 +44,8 @@ export function CompositionNew() {
   const updateMutation = useUpdateComposition(compositionId);
 
   const [activeTab, setActiveTab] = useState<
-    'general' | 'geometry' | 'layup-mapping' | 'transversal-mapping'
+    'general' | 'geometry' | 'layup' | 'layup-mapping' | 'transversal-mapping'
   >('general');
-  const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
 
   // General — hydrated from the backend for edit/duplicate. Geometry pick, layup
   // mapping and transversal mapping stay on local mock state: the geometry picker
@@ -100,6 +97,13 @@ export function CompositionNew() {
   const [geomQuery, setGeomQuery] = useState('');
   const [geomView, setGeomView] = useState<'list' | 'grid'>('grid');
   const [selectedGeometryId, setSelectedGeometryId] = useState<string | null>(null);
+
+  // Layup — locally-created layups for this composition, separate from the
+  // per-side layup mapping below (which maps the shared LAYUPS catalog).
+  const [layups, setLayups] = useState<CompositionLayup[]>([]);
+  function addLayup(name: string) {
+    setLayups((arr) => [...arr, { id: nextLocalId('layup'), name }]);
+  }
 
   // Layup mapping — pre-filled with defaults for existing compositions
   const [upperMappings, setUpperMappings] = useState<LayupMapping[]>(
@@ -185,10 +189,16 @@ export function CompositionNew() {
       ) {
         await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
       }
-    } else {
-      await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+      return;
     }
-    navigate('/composition');
+    const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+    await updateCompositionSettings(created.id, {
+      settings: [{ reference: 'target_weight', value: targetWeight }],
+    });
+    // /composition/new and /composition/:id share a route, so this navigate does NOT
+    // remount the component — switching the URL just flips isEditing to true.
+    setActiveTab('geometry');
+    navigate(`/composition/${created.id}`, { replace: true });
   }
 
   function handleExit() {
@@ -226,12 +236,8 @@ export function CompositionNew() {
     <div className="flex min-h-screen w-full flex-col">
       <MainNav />
 
-      {/* Body: full-bleed OCC canvas + floating overlays */}
-      <main className="relative flex-1 overflow-hidden">
-        {/* OCC canvas fills the whole area */}
-        <OccViewer wireframe={renderMode === 'wireframe'} className="absolute inset-0 w-full h-full" />
-
-      {/* Sub-toolbar floating above the canvas */}
+      <main className="relative flex-1 overflow-hidden bg-[#f8fafc]">
+      {/* Sub-toolbar */}
       <div className="absolute inset-x-0 top-0 z-40 h-[52px] border-b border-[#e5e7eb]/70">
         <div className="absolute inset-y-0 left-4 flex items-center">
           <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as typeof activeTab); setBezierFor(null); }} className="h-9">
@@ -239,6 +245,7 @@ export function CompositionNew() {
               {[
                 { value: 'general', label: 'General' },
                 { value: 'geometry', label: 'Geometry' },
+                { value: 'layup', label: 'Layup' },
                 { value: 'layup-mapping', label: 'Layup mapping' },
                 { value: 'transversal-mapping', label: 'Transversal mapping' },
               ].map((t) => (
@@ -290,7 +297,7 @@ export function CompositionNew() {
             <button
               type="button"
               onClick={handleGeneralSubmit}
-              disabled={!name.trim() || !date || savePending}
+              disabled={!name.trim() || !description.trim() || !date || savePending}
               className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {savePending ? 'Saving…' : isEditing ? 'Update composition' : 'Create composition'}
@@ -304,26 +311,8 @@ export function CompositionNew() {
         </div>
       )}
 
-      {/* Render toggle + settings (top-center, below sub-toolbar) */}
-      <div className={`absolute left-1/2 top-[60px] z-20 flex -translate-x-1/2 items-center gap-2 pt-2${activeTab === 'geometry' ? ' hidden' : ''}`}>
-        <RenderToggle value={renderMode} onChange={setRenderMode} />
-        <button
-          type="button"
-          aria-label="Viewer settings"
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white/95 text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#f1f5f9]"
-        >
-          <Settings className="h-4 w-4" strokeWidth={2} />
-        </button>
-      </div>
-
-      {/* Coordinate gizmo (bottom-left) */}
-      <div className="pointer-events-none absolute bottom-4 left-4 z-20">
-        <CoordinateGizmo />
-      </div>
-
-      {/* Tab content panels — pointer-events-none on wrapper so the canvas
-           behind receives orbit/zoom events; each panel restores pointer-events */}
-      <div className="pointer-events-none absolute bottom-4 left-4 right-4 top-[60px]">
+      {/* Tab content panels */}
+      <div className="absolute bottom-4 left-4 right-4 top-[60px]">
         {activeTab === 'general' && (
           <CompositionGeneralTab
             name={name}
@@ -342,13 +331,19 @@ export function CompositionNew() {
 
         {activeTab === 'geometry' && (
           <CompositionGeometryTab
+            compositionId={compositionId}
             geomQuery={geomQuery}
             onGeomQueryChange={setGeomQuery}
             geomView={geomView}
             onGeomViewChange={setGeomView}
             selectedGeometryId={selectedGeometryId}
             onSelectGeometry={setSelectedGeometryId}
+            onAfterSelect={() => setActiveTab('layup')}
           />
+        )}
+
+        {activeTab === 'layup' && (
+          <CompositionLayupTab layups={layups} onAddLayup={addLayup} />
         )}
 
         {/* Always mounted — hidden instead of unmounted so mapping state survives tab switches */}

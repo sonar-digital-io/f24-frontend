@@ -111,6 +111,12 @@ export function useCompositionIntersections(compositionId: number) {
   });
 }
 
+export function useFetchCompositionIntersections() {
+  return useMutation({
+    mutationFn: (compositionId: number) => compositionApi.getCompositionIntersections(compositionId),
+  });
+}
+
 export function useUpdateCompositionCoreMaterial(compositionId: number) {
   const queryClient = useQueryClient();
   return useMutation({

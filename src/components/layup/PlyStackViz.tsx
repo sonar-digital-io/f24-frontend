@@ -1,196 +1,389 @@
 /**
- * Isometric schematic of the layup stack. Each ply is drawn as a parallelogram
- * (rhombus, ~30° iso) with fiber orientation lines clipped to that shape.
+ * True 3D isometric-style view of the layup stack: each ply is a Three.js box
+ * mesh, stacked on top of each other (index 0 = top of stack, drawn highest
+ * on the Y axis). Plies taper going up the stack (each one a bit narrower in
+ * X/Z than the one below).
  *
- * Unified mode: all plies are flat, evenly spaced.
- * Non-unified mode: each ply grows a visible side face proportional to its
- * thickness (mm). The face heights are scaled by PLY_THICKNESS_SCALE px/mm.
- * Plies with thickness=0 stay flat but keep a minimum Y gap.
+ * Fiber orientation is modeled literally as a stack of parallel "sheets of
+ * paper" running through the ply at the orientation angle, evenly spaced and
+ * clipped to the ply's own footprint (real geometry, analytically clipped to
+ * the box's X/Z bounds — not a baked 2D texture). Wherever a sheet crosses
+ * the cuboid's outer surface — top, bottom, or a side wall — that's exactly
+ * where a line becomes visible, so the pattern is automatically continuous
+ * and correct on every face with no seams.
+ *
+ * Camera/controls mirror OccViewer: OrbitControls (left-drag rotate, scroll
+ * zoom, right-drag pan). The renderer/camera/controls persist across ply
+ * edits — only the ply meshes are rebuilt when `plies` changes, and the
+ * camera only auto-fits when the set of plies (added/removed) changes, not
+ * on every thickness/orientation/material tweak, so the user's view doesn't
+ * jump around while editing.
  */
 
+import { useEffect, useRef } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Ply } from '@/components/layup/LayupBuilder';
-import { MATERIALS } from '@/data/materials';
+import type { Material } from '@/api/types/materials';
 
 const BIAXIAL_TYPES = new Set(['Biaxial Ply (±45°)']);
 
-function isBiaxial(materialName: string): boolean {
-  const m = MATERIALS.find((mat) => mat.name === materialName);
+function isBiaxial(materialName: string, materials: Material[]): boolean {
+  const m = materials.find((mat) => mat.name === materialName);
   if (m) return BIAXIAL_TYPES.has(m.type);
   return materialName.toLowerCase().includes('biax');
 }
 
-// px per mm of ply thickness in non-unified mode (0.1 mm ≈ 1 SVG unit)
-const PLY_THICKNESS_SCALE = 10;
-
-function darkenColor(hex: string, factor: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgb(${Math.round(r * (1 - factor))},${Math.round(g * (1 - factor))},${Math.round(b * (1 - factor))})`;
-}
+// World units per mm of ply thickness, and the floor for ~0mm plies so they stay visible.
+const THICKNESS_SCALE = 0.05;
+const MIN_HEIGHT = 0.12;
+const BOX_WIDTH = 3; // X
+const BOX_DEPTH = 3; // Z
+// Taper: up to 5 plies step down by a fixed 0.2 per ply (1x, 0.8x, 0.6x,
+// 0.4x, 0.2x, bottom to top). Beyond 5 plies, that fixed step would go
+// negative, so sizes are instead spread evenly across the whole 1x–0.2x range.
+const TAPER_STEP = 0.2;
+const MIN_SCALE = 0.2;
+const TAPER_STEP_MAX_PLIES = 5;
+// "Paper sheet" spacing/thickness (world units) for the fiber-orientation lines.
+const SHEET_SPACING = 0.4;
+const SHEET_THICKNESS = 0.035;
+const SHEET_COLOR = 0x0f172a;
 
 interface PlyStackVizProps {
-  plies: Ply[]; // top of stack = index 0, drawn on top of the viz
-  unified?: boolean;
+  plies: Ply[]; // top of stack = index 0
+  materials: Material[];
   className?: string;
 }
 
-// Geometry of a single ply in viewBox units
-const PLY_W = 360; // horizontal extent of the rhombus
-const PLY_H = 180; // vertical extent (top-to-bottom of the rhombus diamond shape)
-const Y_STEP = 50; // vertical distance between consecutive plies in unified mode
-const PAD_X = 60;
-const PAD_Y = 30;
+/** Clips the infinite line { p0 + s*dir } (p0 = perp * offset) against the
+ *  rectangle [-hw,hw] x [-hd,hd] in the X/Z plane. Returns the surviving
+ *  segment's length and midpoint, or null if the line misses the rectangle. */
+function clipLineToBox(
+  offset: number,
+  dirX: number,
+  dirZ: number,
+  perpX: number,
+  perpZ: number,
+  hw: number,
+  hd: number
+): { length: number; midX: number; midZ: number } | null {
+  const p0x = perpX * offset;
+  const p0z = perpZ * offset;
 
-/** 4 corners of the rhombus for a ply at given vertical offset (in viewBox y). */
-function rhombusPath(yOffset: number): string {
-  const top = `${PAD_X + PLY_W / 2},${PAD_Y + yOffset}`;
-  const right = `${PAD_X + PLY_W},${PAD_Y + yOffset + PLY_H / 2}`;
-  const bottom = `${PAD_X + PLY_W / 2},${PAD_Y + yOffset + PLY_H}`;
-  const left = `${PAD_X},${PAD_Y + yOffset + PLY_H / 2}`;
-  return `M ${top} L ${right} L ${bottom} L ${left} Z`;
-}
+  let sMin = -Infinity;
+  let sMax = Infinity;
 
-/**
- * Side face paths for a ply at yOffset with visual height h.
- * The right and left faces form the front "walls" of the slab in the iso view.
- * Both faces share the bottom vertex of the rhombus.
- */
-function sideFacePaths(yOffset: number, h: number): { right: string; left: string } {
-  const cx = PAD_X + PLY_W / 2;
-  const midY = PAD_Y + yOffset + PLY_H / 2; // y of left and right vertices
-  const botY = PAD_Y + yOffset + PLY_H;      // y of bottom vertex
-  const rx = PAD_X + PLY_W;
-  const lx = PAD_X;
+  if (Math.abs(dirX) > 1e-9) {
+    let a = (-hw - p0x) / dirX;
+    let b = (hw - p0x) / dirX;
+    if (a > b) [a, b] = [b, a];
+    sMin = Math.max(sMin, a);
+    sMax = Math.min(sMax, b);
+  } else if (p0x < -hw || p0x > hw) {
+    return null;
+  }
+
+  if (Math.abs(dirZ) > 1e-9) {
+    let a = (-hd - p0z) / dirZ;
+    let b = (hd - p0z) / dirZ;
+    if (a > b) [a, b] = [b, a];
+    sMin = Math.max(sMin, a);
+    sMax = Math.min(sMax, b);
+  } else if (p0z < -hd || p0z > hd) {
+    return null;
+  }
+
+  if (sMin >= sMax) return null;
+
+  const sMid = (sMin + sMax) / 2;
   return {
-    right: `M ${rx},${midY} L ${cx},${botY} L ${cx},${botY + h} L ${rx},${midY + h} Z`,
-    left:  `M ${lx},${midY} L ${cx},${botY} L ${cx},${botY + h} L ${lx},${midY + h} Z`,
+    length: sMax - sMin,
+    midX: p0x + dirX * sMid,
+    midZ: p0z + dirZ * sMid,
   };
 }
 
-/** Maps ply orientation (deg) to a screen angle (deg) for the iso rhombus.
- *  0° → top-right edge direction, 45° → horizontal, 90° → top-left edge. */
-function orientationToScreenAngle(orientation: number): number {
-  const edgeAngleDeg = Math.atan2(PLY_H / 2, PLY_W / 2) * (180 / Math.PI);
-  return edgeAngleDeg + (orientation / 90) * (180 - 2 * edgeAngleDeg);
-}
+/** Builds the parallel "sheet" meshes for one orientation angle, each already
+ *  clipped to the ply's hw×hd footprint and positioned/rotated in place
+ *  (local Y=0 — caller offsets to the ply's actual center height). */
+function buildFiberSheets(hw: number, hd: number, height: number, orientationDeg: number): THREE.Mesh[] {
+  const angleRad = (orientationDeg * Math.PI) / 180;
+  const dirX = Math.cos(angleRad);
+  const dirZ = Math.sin(angleRad);
+  const perpX = -Math.sin(angleRad);
+  const perpZ = Math.cos(angleRad);
+  const maxPerp = Math.hypot(hw, hd);
 
-/** Generate fiber lines at an exact screen angle (deg), clipped to the rhombus. */
-function fiberLinesAtScreenAngle(yOffset: number, screenAngleDeg: number): string[] {
-  const a = (screenAngleDeg * Math.PI) / 180;
-  const dx = Math.cos(a);
-  const dy = Math.sin(a);
-  const px = -dy;
-  const py = dx;
-
-  const cx = PAD_X + PLY_W / 2;
-  const cy = PAD_Y + yOffset + PLY_H / 2;
-
-  const maxOffset = (PLY_W + PLY_H) / 2;
-  const spacing = 14;
-  const count = Math.floor((2 * maxOffset) / spacing);
-
-  const lines: string[] = [];
-  for (let i = -count / 2; i <= count / 2; i++) {
-    const offset = i * spacing;
-    const x0 = cx + px * offset - dx * maxOffset;
-    const y0 = cy + py * offset - dy * maxOffset;
-    const x1 = cx + px * offset + dx * maxOffset;
-    const y1 = cy + py * offset + dy * maxOffset;
-    lines.push(`M ${x0.toFixed(1)},${y0.toFixed(1)} L ${x1.toFixed(1)},${y1.toFixed(1)}`);
+  // Sheets are clipped to land exactly flush with the ply box's own surface,
+  // so they're coplanar with it there — coplanar triangles z-fight (a
+  // flickering surface). polygonOffset biases the sheet's depth values so it
+  // wins that tie deterministically, without inflating the geometry itself
+  // (which would visibly poke out past the cuboid's body).
+  const material = new THREE.MeshBasicMaterial({
+    color: SHEET_COLOR,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
+  });
+  const sheets: THREE.Mesh[] = [];
+  for (let offset = -maxPerp; offset <= maxPerp; offset += SHEET_SPACING) {
+    const clip = clipLineToBox(offset, dirX, dirZ, perpX, perpZ, hw, hd);
+    if (!clip || clip.length < 1e-3) continue;
+    const geometry = new THREE.BoxGeometry(clip.length, height, SHEET_THICKNESS);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(clip.midX, 0, clip.midZ);
+    // Rotating by -angleRad around Y maps local +X to world (cosθ, 0, sinθ) = dir.
+    mesh.rotation.y = -angleRad;
+    sheets.push(mesh);
   }
-  return lines;
+  return sheets;
 }
 
-export function PlyStackViz({ plies, unified = true, className }: PlyStackVizProps) {
-  // Per-ply visual heights (px) — 0 in unified mode or when thickness is 0
-  const heights = plies.map((ply) =>
-    unified ? 0 : Math.max(0, ply.thickness * PLY_THICKNESS_SCALE)
-  );
+function createLabelSprite(text: string): THREE.Sprite {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = 'bold 48px sans-serif';
+  ctx.fillStyle = '#0a0a0a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, size / 2, size / 2);
 
-  // Y offsets are identical in both modes — uniform Y_STEP spacing is preserved.
-  // In non-unified mode the side faces overlay the ply below rather than
-  // pushing it further down, so spacing stays consistent.
-  const yOffsets = plies.map((_, i) => i * Y_STEP);
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(0.9, 0.9, 1);
+  return sprite;
+}
 
-  const lastH = plies.length > 0 ? heights[plies.length - 1] : 0;
-  // Extra height for the last ply's side face (nothing below it to cover it).
-  const totalY = PLY_H + (plies.length - 1) * Y_STEP + lastH + 2 * PAD_Y;
-  const totalX = PLY_W + 2 * PAD_X;
+export function PlyStackViz({ plies, materials, className }: PlyStackVizProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
+  const groupRef = useRef<THREE.Group | null>(null);
+  const fittedKeyRef = useRef<string | null>(null);
 
-  return (
-    <svg
-      viewBox={`0 0 ${totalX} ${totalY}`}
-      className={className}
-      preserveAspectRatio="xMidYMid meet"
-      aria-label="Layup ply stack visualization"
-    >
-      <defs>
-        {plies.map((ply, idx) => (
-          <clipPath key={ply.id} id={`ply-clip-${ply.id}`}>
-            <path d={rhombusPath(yOffsets[idx])} />
-          </clipPath>
-        ))}
-      </defs>
+  // ── One-time scene/camera/renderer/controls setup ─────────────────────────
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const container = containerRef.current;
 
-      {/* Paint bottom-to-top so the top ply is drawn last (highest SVG z-order). */}
-      {[...plies].reverse().map((ply) => {
-        const idx = plies.indexOf(ply);
-        const yOffset = yOffsets[idx];
-        const h = heights[idx];
+    const w = container.clientWidth || 400;
+    const h = container.clientHeight || 400;
 
-        const biaxial = isBiaxial(ply.material);
-        const screenAngle = biaxial
-          ? ply.orientation
-          : orientationToScreenAngle(ply.orientation);
-        const lines = fiberLinesAtScreenAngle(yOffset, screenAngle);
-        const crossLines = biaxial
-          ? fiberLinesAtScreenAngle(yOffset, screenAngle + 90)
-          : null;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf1f5f9);
+    sceneRef.current = scene;
 
-        const faces = h > 0 ? sideFacePaths(yOffset, h) : null;
+    const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 1000);
+    camera.position.set(6, 5, 8);
+    cameraRef.current = camera;
 
-        return (
-          <g key={ply.id}>
-            {/* Side faces drawn first so the top face covers their shared edge */}
-            {faces && (
-              <>
-                <path
-                  d={faces.right}
-                  fill={darkenColor(ply.color, 0.18)}
-                  stroke="#0f172a"
-                  strokeOpacity="0.25"
-                  strokeWidth="1.5"
-                />
-                <path
-                  d={faces.left}
-                  fill={darkenColor(ply.color, 0.34)}
-                  stroke="#0f172a"
-                  strokeOpacity="0.25"
-                  strokeWidth="1.5"
-                />
-              </>
-            )}
-            {/* Top face */}
-            <path
-              d={rhombusPath(yOffset)}
-              fill={ply.color}
-              stroke="#0f172a"
-              strokeOpacity="0.35"
-              strokeWidth="2"
-            />
-            {/* Fiber lines clipped to the top face */}
-            <g clipPath={`url(#ply-clip-${ply.id})`}>
-              {lines.map((d, i) => (
-                <path key={i} d={d} stroke="#ffffff" strokeWidth="1.5" fill="none" opacity="0.4" />
-              ))}
-              {crossLines?.map((d, i) => (
-                <path key={`x${i}`} d={d} stroke="#ffffff" strokeWidth="1.5" fill="none" opacity="0.4" />
-              ))}
-            </g>
-          </g>
-        );
-      })}
-    </svg>
-  );
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+    controlsRef.current = controls;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    keyLight.position.set(6, 10, 6);
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.4);
+    fillLight.position.set(-6, 4, -6);
+    scene.add(fillLight);
+
+    const group = new THREE.Group();
+    groupRef.current = group;
+    scene.add(group);
+
+    let animId = 0;
+    const animate = () => {
+      animId = requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    const onResize = () => {
+      const nw = container.clientWidth;
+      const nh = container.clientHeight;
+      if (!nw || !nh) return;
+      camera.aspect = nw / nh;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nw, nh);
+    };
+    const ro = new ResizeObserver(onResize);
+    ro.observe(container);
+
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(animId);
+      controls.dispose();
+      scene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
+          obj.geometry.dispose();
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((mat) => {
+            Object.values(mat).forEach((v) => {
+              if (v instanceof THREE.Texture) v.dispose();
+            });
+            mat.dispose();
+          });
+        }
+        if (obj instanceof THREE.Sprite) {
+          obj.material.map?.dispose();
+          obj.material.dispose();
+        }
+      });
+      renderer.dispose();
+      if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
+      sceneRef.current = null;
+      cameraRef.current = null;
+      controlsRef.current = null;
+      groupRef.current = null;
+    };
+  }, []);
+
+  // ── Rebuild ply meshes whenever the ply data changes ──────────────────────
+  useEffect(() => {
+    const group = groupRef.current;
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!group || !camera || !controls) return;
+
+    // Clear previous meshes
+    [...group.children].forEach((child) => {
+      group.remove(child);
+      if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
+        child.geometry.dispose();
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((mat) => {
+          Object.values(mat).forEach((v) => {
+            if (v instanceof THREE.Texture) v.dispose();
+          });
+          mat.dispose();
+        });
+      }
+      if (child instanceof THREE.Sprite) {
+        child.material.map?.dispose();
+        child.material.dispose();
+      }
+    });
+
+    const heights = plies.map((ply) => Math.max(MIN_HEIGHT, ply.thickness * THICKNESS_SCALE));
+
+    // Taper: the bottom-most ply is full size, each one going up is smaller —
+    // index 0 is the top of the stack, so its "distance from the bottom" is
+    // (plies.length - 1 - idx). Up to 5 plies: fixed 0.2 step (1, 0.8, 0.6,
+    // 0.4, 0.2). Beyond that a fixed step would go negative, so sizes are
+    // instead spread evenly across the whole 1x–0.2x range.
+    const n = plies.length;
+    const scales = plies.map((_, idx) => {
+      const distanceFromBottom = n - 1 - idx;
+      if (n <= TAPER_STEP_MAX_PLIES) {
+        return Math.max(MIN_SCALE, 1 - TAPER_STEP * distanceFromBottom);
+      }
+      return 1 - (1 - MIN_SCALE) * (distanceFromBottom / (n - 1));
+    });
+
+    // Cumulative bottom-up: last ply (bottom of stack) starts at y=0, index 0
+    // (top of stack) ends up highest.
+    const yStarts = new Array<number>(plies.length);
+    let cursor = 0;
+    for (let i = plies.length - 1; i >= 0; i--) {
+      yStarts[i] = cursor;
+      cursor += heights[i];
+    }
+
+    plies.forEach((ply, idx) => {
+      const height = heights[idx];
+      const scale = scales[idx];
+      const width = BOX_WIDTH * scale;
+      const depth = BOX_DEPTH * scale;
+      const centerY = yStarts[idx] + height / 2;
+      const biaxial = isBiaxial(ply.material, materials);
+
+      const material = new THREE.MeshStandardMaterial({ color: ply.color, roughness: 0.6, metalness: 0.05 });
+      const geometry = new THREE.BoxGeometry(width, height, depth);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(0, centerY, 0);
+      group.add(mesh);
+
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry),
+        new THREE.LineBasicMaterial({ color: 0x0f172a, opacity: 1, transparent: false })
+      );
+      edges.position.copy(mesh.position);
+      group.add(edges);
+
+      // "Sheets of paper" running through the ply at the fiber angle — where
+      // a sheet crosses the outer surface (top, bottom, or a side wall) is
+      // exactly where a line shows up, on every face, with no seams.
+      const sheets = buildFiberSheets(width / 2, depth / 2, height, ply.orientation);
+      sheets.forEach((sheet) => {
+        sheet.position.y = centerY;
+        group.add(sheet);
+      });
+      if (biaxial) {
+        const crossSheets = buildFiberSheets(width / 2, depth / 2, height, ply.orientation + 90);
+        crossSheets.forEach((sheet) => {
+          sheet.position.y = centerY;
+          group.add(sheet);
+        });
+      }
+    });
+
+    // 0° reference marker on the topmost ply, parallel to its cover
+    if (plies.length > 0) {
+      const topY = yStarts[0] + heights[0];
+      const arrowLen = (BOX_WIDTH * scales[0]) / 2 + 0.6;
+      const arrow = new THREE.ArrowHelper(
+        new THREE.Vector3(1, 0, 0),
+        new THREE.Vector3(0, topY + 0.02, 0),
+        arrowLen,
+        0x0a0a0a,
+        0.25,
+        0.15
+      );
+      group.add(arrow);
+
+      const label = createLabelSprite('0°');
+      label.position.set(arrowLen + 0.5, topY + 0.1, 0);
+      group.add(label);
+    }
+
+    // Auto-fit the camera only when the set of plies changes (add/remove),
+    // not on every property edit, so the user's rotation/zoom is preserved.
+    const fitKey = plies.map((p) => p.id).join(',');
+    if (fitKey !== fittedKeyRef.current) {
+      fittedKeyRef.current = fitKey;
+      const box = new THREE.Box3().setFromObject(group);
+      if (!box.isEmpty()) {
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z, 1);
+        const fitDist = maxDim * 2.2;
+        camera.position.set(center.x + fitDist * 0.7, center.y + fitDist * 0.55, center.z + fitDist * 0.7);
+        camera.near = maxDim * 0.01;
+        camera.far = maxDim * 100;
+        camera.updateProjectionMatrix();
+        controls.target.copy(center);
+        controls.minDistance = maxDim * 0.2;
+        controls.maxDistance = maxDim * 20;
+        controls.update();
+      }
+    }
+  }, [plies, materials]);
+
+  return <div ref={containerRef} className={className} aria-label="Layup ply stack 3D visualization" />;
 }
