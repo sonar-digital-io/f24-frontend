@@ -30,11 +30,24 @@ export interface GeometryEdge {
   curve_type: string;
   ymin: number;
   ymax: number;
-  curve: number[];
+  curve: BezierControlPoint[];
 }
 
 export interface GeometryEdgesPayload {
   edges: GeometryEdge[];
+}
+
+/** PUT /geometry/:id/edges/ — write payload; no id, unlike the GET shape. */
+export interface GeometryEdgeInput {
+  edge_type: string;
+  curve_type: string;
+  ymin: number;
+  ymax: number;
+  curve: BezierControlPoint[];
+}
+
+export interface GeometryEdgesWritePayload {
+  edges: GeometryEdgeInput[];
 }
 
 export interface GeometryProfileParameter {

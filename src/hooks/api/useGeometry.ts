@@ -3,7 +3,7 @@ import * as geometryApi from '@/api/geometry';
 import type {
   GeometryPayload,
   GeometrySettingsPayload,
-  GeometryEdgesPayload,
+  GeometryEdgesWritePayload,
   GeometryProfilesWritePayload,
   GeometryProfilePreviewPayload,
   GeometryProfileQuery,
@@ -88,7 +88,7 @@ export function useGeometryEdges(geometryId: number) {
 export function useUpdateGeometryEdges(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: GeometryEdgesPayload) => geometryApi.updateGeometryEdges(geometryId, payload),
+    mutationFn: (payload: GeometryEdgesWritePayload) => geometryApi.updateGeometryEdges(geometryId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: geometryKeys.edges(geometryId) });
       queryClient.invalidateQueries({ queryKey: ['geometry', 'edges-preview', geometryId] });

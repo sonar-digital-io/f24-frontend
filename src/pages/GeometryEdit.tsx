@@ -22,10 +22,16 @@ import {
   useUpdateGeometryProfiles,
   useRunProfileGenerator,
   useUpdateProfileGenerator,
+  useUpdateGeometryEdges,
 } from '@/hooks/api/useGeometry';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { API_TO_UI_PROFILE_TYPE, UI_TO_API_PROFILE_TYPE, type Profile } from '@/data/profiles';
-import type { GeometryProfile, GeometryProfileInput, ProfileGeneratorParameters } from '@/api/types/geometry';
+import type {
+  GeometryProfile,
+  GeometryProfileInput,
+  GeometryEdgeInput,
+  ProfileGeneratorParameters,
+} from '@/api/types/geometry';
 
 interface GlobalProperties {
   nominalRadius: string;
@@ -82,6 +88,7 @@ export function GeometryEdit() {
   const updateProfilesMutation = useUpdateGeometryProfiles(geometryId);
   const runGeneratorMutation = useRunProfileGenerator();
   const updateGeneratorMutation = useUpdateProfileGenerator();
+  const updateEdgesMutation = useUpdateGeometryEdges(geometryId);
 
   const name = isNew ? 'New geometry' : (detailQuery.data?.name ?? id ?? 'New geometry');
 
@@ -239,6 +246,10 @@ export function GeometryEdit() {
     await updateProfilesMutation.mutateAsync({ profiles });
     setHydratedProfiles(profiles.map((p, i) => toUiProfile({ ...p, id: i, file: null })));
     setActiveTab('profiles');
+  }
+
+  async function handleSaveEdges(edges: GeometryEdgeInput[]) {
+    await updateEdgesMutation.mutateAsync({ edges });
   }
 
   function handleExit() {
@@ -508,7 +519,13 @@ export function GeometryEdit() {
             />
           )}
           {activeTab === 'stacking' && (
-            <StackingPanel folded={stackingFolded} onFoldToggle={() => setStackingFolded((f) => !f)} />
+            <StackingPanel
+              folded={stackingFolded}
+              onFoldToggle={() => setStackingFolded((f) => !f)}
+              onSave={handleSaveEdges}
+              saving={updateEdgesMutation.isPending}
+              saveError={updateEdgesMutation.isError}
+            />
           )}
           {activeTab !== 'create' &&
             activeTab !== 'global-properties' &&

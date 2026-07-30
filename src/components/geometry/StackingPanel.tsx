@@ -6,6 +6,7 @@ import type { ControlPoint } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldableSectionList } from '@/components/geometry/FoldableSectionList';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
+import type { GeometryEdgeInput } from '@/api/types/geometry';
 
 type SectionKey = 'sweep' | 'dihedral' | 'twist' | 'chord';
 
@@ -76,9 +77,13 @@ const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
 interface StackingPanelProps {
   folded: boolean;
   onFoldToggle: () => void;
+  /** PUT /geometry/:id/edges/ — persist the current sweep/dihedral/twist/chord curves. */
+  onSave?: (edges: GeometryEdgeInput[]) => void;
+  saving?: boolean;
+  saveError?: boolean;
 }
 
-export function StackingPanel({ folded, onFoldToggle }: StackingPanelProps) {
+export function StackingPanel({ folded, onFoldToggle, onSave, saving, saveError }: StackingPanelProps) {
   const [subTab, setSubTab] = useState<SectionKey>('sweep');
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     sweep: true,
@@ -102,6 +107,16 @@ export function StackingPanel({ folded, onFoldToggle }: StackingPanelProps) {
 
   function toggleSection(key: SectionKey) {
     setOpenSections((s) => ({ ...s, [key]: !s[key] }));
+  }
+
+  function buildEdges(): GeometryEdgeInput[] {
+    return SECTION_KEYS.map((key) => ({
+      edge_type: key,
+      curve_type: 'bezier',
+      ymin: SECTION_Y_MIN[key],
+      ymax: SECTION_Y_MAX[key],
+      curve: sectionPoints[key],
+    }));
   }
 
   function renderSectionBody(key: SectionKey) {
@@ -139,27 +154,42 @@ export function StackingPanel({ folded, onFoldToggle }: StackingPanelProps) {
     <div
       className={`flex w-full ${folded ? 'max-w-[516px]' : 'max-w-[924px]'} max-h-[calc(100vh-128px)] flex-col rounded-[14px] border border-[#e5e7eb] bg-white/95 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm transition-[max-width] duration-150`}
     >
-      {/* Header: sub-tabs (expanded mode) + toggle button */}
-      <div className="flex items-center justify-between gap-4 p-6 pb-4">
-        {!folded ? (
-          <SectionTabs
-            sectionKeys={SECTION_KEYS}
-            sectionLabels={SECTION_LABELS}
-            value={subTab}
-            onValueChange={setSubTab}
-          />
-        ) : (
-          <div />
-        )}
-        <button
-          type="button"
-          onClick={onFoldToggle}
-          aria-pressed={folded}
-          aria-label={folded ? 'Show sections one at a time (expand)' : 'Show all sections as accordion (fold)'}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
-        >
-          <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
-        </button>
+      {/* Header: sub-tabs (expanded mode) + save + toggle button */}
+      <div className="flex flex-col gap-2 p-6 pb-4">
+        <div className="flex items-center justify-between gap-4">
+          {!folded ? (
+            <SectionTabs
+              sectionKeys={SECTION_KEYS}
+              sectionLabels={SECTION_LABELS}
+              value={subTab}
+              onValueChange={setSubTab}
+            />
+          ) : (
+            <div />
+          )}
+          <div className="flex items-center gap-2">
+            {onSave && (
+              <button
+                type="button"
+                onClick={() => onSave(buildEdges())}
+                disabled={saving}
+                className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onFoldToggle}
+              aria-pressed={folded}
+              aria-label={folded ? 'Show sections one at a time (expand)' : 'Show all sections as accordion (fold)'}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
+            >
+              <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+          </div>
+        </div>
+        {saveError && <p className="text-[13px] text-[#dc2626]">Failed to save. Please try again.</p>}
       </div>
 
       <FoldableSectionList

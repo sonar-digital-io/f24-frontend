@@ -6,6 +6,7 @@ import type {
   GeometryDetail,
   GeometrySettingsPayload,
   GeometryEdgesPayload,
+  GeometryEdgesWritePayload,
   GeometryProfilesPayload,
   GeometryProfilesWritePayload,
   GeometryProfilePreviewPayload,
@@ -50,7 +51,7 @@ export async function getGeometryEdges(geometryId: number): Promise<GeometryEdge
   return data;
 }
 
-export async function updateGeometryEdges(geometryId: number, payload: GeometryEdgesPayload): Promise<GeometryEdgesPayload> {
+export async function updateGeometryEdges(geometryId: number, payload: GeometryEdgesWritePayload): Promise<GeometryEdgesPayload> {
   const { data } = await apiClient.put<GeometryEdgesPayload>(`/geometry/${geometryId}/edges/`, payload);
   return data;
 }
