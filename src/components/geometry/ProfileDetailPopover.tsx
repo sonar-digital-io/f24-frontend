@@ -97,7 +97,6 @@ export function ProfileDetailPopover({ geometryId, profile, onChange, onClose, o
               label="Position (relative radius)"
               value={profile.position}
               onCommit={(v) => update('position', v)}
-              step="0.0001"
               max={1}
               maxMessage="Max value of position is 1"
               onBlur={onSort}
@@ -114,19 +113,16 @@ export function ProfileDetailPopover({ geometryId, profile, onChange, onClose, o
               label="Maximum camber (%)"
               value={profile.maxCamber}
               onCommit={(v) => update('maxCamber', v)}
-              step="0.01"
             />
             <NumberField
               label="Maximum camber position"
               value={profile.maxCamberPosition}
               onCommit={(v) => update('maxCamberPosition', v)}
-              step="0.000001"
             />
             <NumberField
               label="Thickness (TMC) (%)"
               value={profile.thickness}
               onCommit={(v) => update('thickness', v)}
-              step="0.000001"
             />
           </div>
 

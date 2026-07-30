@@ -34,8 +34,10 @@ export interface NumberFieldProps {
   onBlur?: () => void;
 }
 
-/** Numeric Field with a typing buffer — the field stays clearable mid-edit. */
-export function NumberField({ label, value, onCommit, step, max, maxMessage, onBlur }: NumberFieldProps) {
+/** Numeric Field with a typing buffer — the field stays clearable mid-edit.
+ *  Step only affects the native up/down arrows (0.1 by default); typing an
+ *  arbitrarily precise value always works regardless of step. */
+export function NumberField({ label, value, onCommit, step = '0.1', max, maxMessage, onBlur }: NumberFieldProps) {
   const hasError = max !== undefined && Number.isFinite(value) && value > max;
   return (
     // onBlur on the wrapper bubbles from the input (React blur = focusout), so
