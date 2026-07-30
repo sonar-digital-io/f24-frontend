@@ -488,6 +488,7 @@ export function GeometryEdit() {
             <ProfileDistributionPanel
               folded={profileFolded}
               onFoldToggle={() => setProfileFolded((f) => !f)}
+              rootRadiusPercent={props.rootRadius}
               onSaveParameters={handleSaveProfileGeneratorParams}
               onGenerate={handleGenerateProfiles}
               saving={updateGeneratorMutation.isPending}

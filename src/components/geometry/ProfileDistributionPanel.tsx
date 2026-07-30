@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FoldHorizontal, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -74,6 +74,9 @@ interface ProfileDistributionPanelProps {
    *  Lifted to the parent so the surrounding `<aside>` can shrink in width. */
   folded: boolean;
   onFoldToggle: () => void;
+  /** Global properties' root radius, as a percentage (e.g. "10" for 10%) —
+   *  kept in sync with Start position, which is the same value as a fraction (0.1). */
+  rootRadiusPercent?: string;
   /** PUT /geometry/:id/tools/profile-generator/ — persist the current parameters. */
   onSaveParameters?: (params: ProfileGeneratorParameters) => void;
   /** POST /geometry/:id/tools/profile-generator/ — run the generator. */
@@ -87,6 +90,7 @@ interface ProfileDistributionPanelProps {
 export function ProfileDistributionPanel({
   folded,
   onFoldToggle,
+  rootRadiusPercent,
   onSaveParameters,
   onGenerate,
   saving,
@@ -96,6 +100,15 @@ export function ProfileDistributionPanel({
 }: ProfileDistributionPanelProps) {
   const [type, setType] = useState('NACA 4 digit');
   const [startPos, setStartPos] = useState(String(DEFAULT_START_POSITION));
+
+  // Start position mirrors Global properties' root radius — same value, just
+  // a fraction (0.1) instead of a percentage (10).
+  useEffect(() => {
+    const percent = parseFloat((rootRadiusPercent ?? '').replace(',', '.'));
+    if (!Number.isFinite(percent)) return;
+    setStartPos(String(percent / 100));
+  }, [rootRadiusPercent]);
+
   const [endPos, setEndPos] = useState('1');
   const [profileCount, setProfileCount] = useState('6');
   const [subTab, setSubTab] = useState<SectionKey>('maximum-camber');
