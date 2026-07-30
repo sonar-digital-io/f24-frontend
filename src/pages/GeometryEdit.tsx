@@ -92,7 +92,7 @@ export function GeometryEdit() {
   }
 
   async function handleCreate() {
-    if (!newName.trim() || !newDate) return;
+    if (!newName.trim() || !newDate || !newDescription.trim()) return;
     try {
       const result = await createMutation.mutateAsync({
         name: newName.trim(),
@@ -255,11 +255,14 @@ export function GeometryEdit() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Description</Label>
+                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+                  Description<span className="text-[#dc2626]">*</span>
+                </Label>
                 <Textarea
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder="Optional description"
+                  placeholder="Describe the geometry"
+                  required
                   rows={2}
                   className="min-h-[60px] rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
                 />
@@ -280,7 +283,7 @@ export function GeometryEdit() {
                   <button
                     type="button"
                     onClick={handleCreate}
-                    disabled={!newName.trim() || !newDate || createMutation.isPending}
+                    disabled={!newName.trim() || !newDate || !newDescription.trim() || createMutation.isPending}
                     className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
                   >
                     {createMutation.isPending ? 'Creating…' : 'Create'}
