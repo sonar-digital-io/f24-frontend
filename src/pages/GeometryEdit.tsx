@@ -20,10 +20,12 @@ import {
   useUpdateGeometry,
   useUpdateGeometrySettings,
   useUpdateGeometryProfiles,
+  useRunProfileGenerator,
+  useUpdateProfileGenerator,
 } from '@/hooks/api/useGeometry';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import type { Profile } from '@/data/profiles';
-import type { GeometryProfile } from '@/api/types/geometry';
+import type { GeometryProfile, ProfileGeneratorParameters } from '@/api/types/geometry';
 
 interface GlobalProperties {
   nominalRadius: string;
@@ -92,6 +94,8 @@ export function GeometryEdit() {
   const updateGeneralMutation = useUpdateGeometry(geometryId);
   const updateSettingsMutation = useUpdateGeometrySettings(geometryId);
   const updateProfilesMutation = useUpdateGeometryProfiles(geometryId);
+  const runGeneratorMutation = useRunProfileGenerator();
+  const updateGeneratorMutation = useUpdateProfileGenerator();
 
   const name = isNew ? 'New geometry' : (detailQuery.data?.name ?? id ?? 'New geometry');
 
@@ -229,6 +233,14 @@ export function GeometryEdit() {
 
   async function handleSaveProfiles(profiles: Profile[]) {
     await updateProfilesMutation.mutateAsync({ profiles: profiles.map(toApiProfile) });
+  }
+
+  async function handleSaveProfileGeneratorParams(params: ProfileGeneratorParameters) {
+    await updateGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
+  }
+
+  async function handleGenerateProfiles(params: ProfileGeneratorParameters) {
+    await runGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
   }
 
   function handleExit() {
@@ -476,6 +488,12 @@ export function GeometryEdit() {
             <ProfileDistributionPanel
               folded={profileFolded}
               onFoldToggle={() => setProfileFolded((f) => !f)}
+              onSaveParameters={handleSaveProfileGeneratorParams}
+              onGenerate={handleGenerateProfiles}
+              saving={updateGeneratorMutation.isPending}
+              generating={runGeneratorMutation.isPending}
+              saveError={updateGeneratorMutation.isError}
+              generateError={runGeneratorMutation.isError}
             />
           )}
           {activeTab === 'profiles' && (

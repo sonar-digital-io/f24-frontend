@@ -87,10 +87,28 @@ export interface GeometryTopView {
   nominal_radius: number;
 }
 
-export interface ProfileGeneratorPayload {
+export interface BezierControlPoint {
+  x: number;
+  y: number;
+}
+
+export interface ProfileGeneratorCurveParameter {
+  reference: string;
+  curve_type: string;
+  control_points: BezierControlPoint[];
+}
+
+export interface ProfileGeneratorParameters {
+  type: string;
   start_position: number;
   end_position: number;
-  parameters: GeometryProfileParameter[];
+  profile_count: number;
+  name: string;
+  parameters: ProfileGeneratorCurveParameter[];
+}
+
+export interface ProfileGeneratorPayload {
+  profile_generator_parameters: ProfileGeneratorParameters;
 }
 
 export interface GeneratedProfile {

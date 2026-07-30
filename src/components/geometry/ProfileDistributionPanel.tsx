@@ -10,8 +10,11 @@ import { ProfileDistributionSwitch } from '@/components/geometry/ProfileDistribu
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldableSectionList } from '@/components/geometry/FoldableSectionList';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
+import type { ProfileGeneratorParameters } from '@/api/types/geometry';
 
-const PROFILE_TYPES = ['NACA 4 digit', 'NACA 5 digit', 'Custom airfoil'];
+// Only NACA 4 digit is supported by the backend right now.
+const PROFILE_TYPES = ['NACA 4 digit'];
+const API_PROFILE_TYPE = 'naca_4_digit';
 
 type SectionKey = 'maximum-camber' | 'maximum-camber-position' | 'thickness';
 
@@ -25,6 +28,13 @@ const SECTION_LABELS: Record<SectionKey, string> = {
   'maximum-camber': 'Maximum camber',
   'maximum-camber-position': 'Maximum camber position',
   thickness: 'Thickness (TMC)',
+};
+
+/** UI section key -> profile-generator parameter reference, per the tools/profile-generator spec. */
+const SECTION_TO_REFERENCE: Record<SectionKey, string> = {
+  'maximum-camber': 'max_camber',
+  'maximum-camber-position': 'max_camber_position',
+  thickness: 'max_thickness',
 };
 
 // Initial control points for each curve.
@@ -58,11 +68,25 @@ interface ProfileDistributionPanelProps {
    *  Lifted to the parent so the surrounding `<aside>` can shrink in width. */
   folded: boolean;
   onFoldToggle: () => void;
+  /** PUT /geometry/:id/tools/profile-generator/ — persist the current parameters. */
+  onSaveParameters?: (params: ProfileGeneratorParameters) => void;
+  /** POST /geometry/:id/tools/profile-generator/ — run the generator. */
+  onGenerate?: (params: ProfileGeneratorParameters) => void;
+  saving?: boolean;
+  generating?: boolean;
+  saveError?: boolean;
+  generateError?: boolean;
 }
 
 export function ProfileDistributionPanel({
   folded,
   onFoldToggle,
+  onSaveParameters,
+  onGenerate,
+  saving,
+  generating,
+  saveError,
+  generateError,
 }: ProfileDistributionPanelProps) {
   const [type, setType] = useState('NACA 4 digit');
   const [startPos, setStartPos] = useState('0.05');
@@ -101,6 +125,21 @@ export function ProfileDistributionPanel({
     handleInputChange,
     handleInputBlur,
   } = useEditableSectionPoints(INITIAL_SECTION_POINTS, () => ({ min: 0, max: Y_MAX }), 2);
+
+  function buildParams(): ProfileGeneratorParameters {
+    return {
+      type: API_PROFILE_TYPE,
+      start_position: Number(startPos) || 0,
+      end_position: Number(endPos) || 0,
+      profile_count: Number(profileCount) || 0,
+      name: 'Profile',
+      parameters: SECTION_KEYS.map((key) => ({
+        reference: SECTION_TO_REFERENCE[key],
+        curve_type: 'bezier',
+        control_points: sectionPoints[key],
+      })),
+    };
+  }
 
   // A single section's chart + table BODY (no heading). Heading is rendered
   // by the accordion item in folded mode, and is hidden in expanded mode
@@ -194,7 +233,7 @@ export function ProfileDistributionPanel({
         <div className={topRowGrid}>
           <div className="flex flex-col gap-2">
             <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Type</Label>
-            <DropdownSelect value={type} onChange={setType} options={PROFILE_TYPES} />
+            <DropdownSelect value={type} onChange={setType} options={PROFILE_TYPES} disabled />
           </div>
           <div className="flex flex-col gap-2">
             <div className="group/tip relative flex items-center gap-1.5">
@@ -245,6 +284,35 @@ export function ProfileDistributionPanel({
             />
           </div>
         </div>
+
+        {(onSaveParameters || onGenerate) && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              {onSaveParameters && (
+                <button
+                  type="button"
+                  onClick={() => onSaveParameters(buildParams())}
+                  disabled={saving}
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : 'Save parameters'}
+                </button>
+              )}
+              {onGenerate && (
+                <button
+                  type="button"
+                  onClick={() => onGenerate(buildParams())}
+                  disabled={generating}
+                  className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {generating ? 'Generating…' : 'Generate'}
+                </button>
+              )}
+            </div>
+            {saveError && <p className="text-[13px] text-[#dc2626]">Failed to save parameters. Please try again.</p>}
+            {generateError && <p className="text-[13px] text-[#dc2626]">Failed to generate. Please try again.</p>}
+          </div>
+        )}
 
         <p className="pt-2 text-[16px] font-semibold leading-none text-[#0a0a0a]">
           Distribution curves
