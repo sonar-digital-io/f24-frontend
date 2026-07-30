@@ -81,10 +81,14 @@ interface ProfileDistributionPanelProps {
   onSaveParameters?: (params: ProfileGeneratorParameters) => void;
   /** POST /geometry/:id/tools/profile-generator/ — run the generator. */
   onGenerate?: (params: ProfileGeneratorParameters) => void;
+  /** Generate profiles then persist them via PUT /geometry/:id/profiles/, and move to the next tab. */
+  onSaveAndNext?: (params: ProfileGeneratorParameters) => void;
   saving?: boolean;
   generating?: boolean;
+  savingAndNext?: boolean;
   saveError?: boolean;
   generateError?: boolean;
+  saveAndNextError?: boolean;
 }
 
 export function ProfileDistributionPanel({
@@ -93,10 +97,13 @@ export function ProfileDistributionPanel({
   rootRadiusPercent,
   onSaveParameters,
   onGenerate,
+  onSaveAndNext,
   saving,
   generating,
+  savingAndNext,
   saveError,
   generateError,
+  saveAndNextError,
 }: ProfileDistributionPanelProps) {
   const [type, setType] = useState('NACA 4 digit');
   const [startPos, setStartPos] = useState(String(DEFAULT_START_POSITION));
@@ -327,7 +334,7 @@ export function ProfileDistributionPanel({
           </div>
         </div>
 
-        {(onSaveParameters || onGenerate) && (
+        {(onSaveParameters || onGenerate || onSaveAndNext) && (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               {onSaveParameters && (
@@ -345,14 +352,25 @@ export function ProfileDistributionPanel({
                   type="button"
                   onClick={() => onGenerate(buildParams())}
                   disabled={generating}
-                  className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {generating ? 'Generating…' : 'Generate'}
+                </button>
+              )}
+              {onSaveAndNext && (
+                <button
+                  type="button"
+                  onClick={() => onSaveAndNext(buildParams())}
+                  disabled={savingAndNext}
+                  className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingAndNext ? 'Saving…' : 'Save & Next'}
                 </button>
               )}
             </div>
             {saveError && <p className="text-[13px] text-[#dc2626]">Failed to save parameters. Please try again.</p>}
             {generateError && <p className="text-[13px] text-[#dc2626]">Failed to generate. Please try again.</p>}
+            {saveAndNextError && <p className="text-[13px] text-[#dc2626]">Failed to save profiles. Please try again.</p>}
           </div>
         )}
 

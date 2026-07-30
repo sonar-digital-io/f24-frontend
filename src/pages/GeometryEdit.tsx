@@ -233,7 +233,6 @@ export function GeometryEdit() {
 
   async function handleSaveProfiles(profiles: Profile[]) {
     await updateProfilesMutation.mutateAsync({ profiles: profiles.map(toApiProfile) });
-    setActiveTab('stacking');
   }
 
   async function handleSaveProfileGeneratorParams(params: ProfileGeneratorParameters) {
@@ -242,6 +241,19 @@ export function GeometryEdit() {
 
   async function handleGenerateProfiles(params: ProfileGeneratorParameters) {
     await runGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
+  }
+
+  // Generate profiles from the distribution curves, persist them via
+  // PUT /geometry/:id/profiles/, then move on to the Profiles tab.
+  async function handleSaveAndNextDistribution(params: ProfileGeneratorParameters) {
+    const { profiles } = await runGeneratorMutation.mutateAsync({
+      geometryId,
+      payload: { profile_generator_parameters: params },
+    });
+    const apiProfiles: GeometryProfile[] = profiles.map((p) => ({ ...p, id: 0, file: null }));
+    await updateProfilesMutation.mutateAsync({ profiles: apiProfiles });
+    setHydratedProfiles(apiProfiles.map(toUiProfile));
+    setActiveTab('profiles');
   }
 
   function handleExit() {
@@ -492,10 +504,13 @@ export function GeometryEdit() {
               rootRadiusPercent={props.rootRadius}
               onSaveParameters={handleSaveProfileGeneratorParams}
               onGenerate={handleGenerateProfiles}
+              onSaveAndNext={handleSaveAndNextDistribution}
               saving={updateGeneratorMutation.isPending}
               generating={runGeneratorMutation.isPending}
+              savingAndNext={runGeneratorMutation.isPending || updateProfilesMutation.isPending}
               saveError={updateGeneratorMutation.isError}
               generateError={runGeneratorMutation.isError}
+              saveAndNextError={runGeneratorMutation.isError || updateProfilesMutation.isError}
             />
           )}
           {activeTab === 'profiles' && (

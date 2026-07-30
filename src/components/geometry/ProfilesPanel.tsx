@@ -168,7 +168,7 @@ export function ProfilesPanel({ initialProfiles, onSave, saving, saveError }: Pr
               disabled={saving}
               className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving ? 'Saving…' : 'Save & Next'}
+              {saving ? 'Saving…' : 'Save'}
             </button>
           )}
         </div>
