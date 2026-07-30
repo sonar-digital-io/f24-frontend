@@ -24,7 +24,6 @@ import {
   useUpdateProfileGenerator,
   useUpdateGeometryEdges,
   useGeometryEdges,
-  useGeometryResult,
 } from '@/hooks/api/useGeometry';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { API_TO_UI_PROFILE_TYPE, UI_TO_API_PROFILE_TYPE, type Profile } from '@/data/profiles';
@@ -92,8 +91,9 @@ export function GeometryEdit() {
   const updateGeneratorMutation = useUpdateProfileGenerator();
   const updateEdgesMutation = useUpdateGeometryEdges(geometryId);
   const edgesQuery = useGeometryEdges(geometryId);
-  const resultMutation = useGeometryResult();
   const [resultIgesUrl, setResultIgesUrl] = useState<string | undefined>(undefined);
+  const [resultRequested, setResultRequested] = useState(false);
+  const [resultStatus, setResultStatus] = useState<'loading' | 'ready' | 'error'>('ready');
 
   const name = isNew ? 'New geometry' : (detailQuery.data?.name ?? id ?? 'New geometry');
 
@@ -257,12 +257,13 @@ export function GeometryEdit() {
     await updateEdgesMutation.mutateAsync({ edges });
   }
 
-  async function handleGenerateResult() {
-    const blob = await resultMutation.mutateAsync(geometryId);
-    setResultIgesUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(blob);
-    });
+  // Let OccViewer fetch GET /geometry/:id/result/ itself (through the same
+  // dev proxy as every other API call) instead of double-fetching via axios
+  // + a blob: URL — a cache-busting query param forces a reload on re-click.
+  function handleGenerateResult() {
+    const base = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+    setResultRequested(true);
+    setResultIgesUrl(`${base}/geometry/${geometryId}/result/?t=${Date.now()}`);
   }
 
   function handleExit() {
@@ -276,7 +277,11 @@ export function GeometryEdit() {
       {/* Body: full-bleed 3D scene with floating overlays (incl. sub-toolbar) */}
       <main className="relative flex-1 overflow-hidden">
         {/* Three.js canvas fills the whole body, including under the sub-toolbar */}
-        <OccViewer wireframe={renderMode === 'wireframe'} igesUrl={resultIgesUrl} />
+        <OccViewer
+          wireframe={renderMode === 'wireframe'}
+          igesUrl={resultIgesUrl}
+          onStatusChange={setResultStatus}
+        />
 
         {/* Floating sub-toolbar — transparent bg so the canvas shows through.
             Title is absolutely positioned at viewport center, independent of
@@ -547,12 +552,12 @@ export function GeometryEdit() {
               <button
                 type="button"
                 onClick={handleGenerateResult}
-                disabled={resultMutation.isPending}
+                disabled={resultRequested && resultStatus === 'loading'}
                 className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 self-start"
               >
-                {resultMutation.isPending ? 'Generating…' : 'Generate result'}
+                {resultRequested && resultStatus === 'loading' ? 'Generating…' : 'Generate result'}
               </button>
-              {resultMutation.isError && (
+              {resultRequested && resultStatus === 'error' && (
                 <p className="text-[13px] text-[#dc2626]">Failed to generate. Please try again.</p>
               )}
             </div>

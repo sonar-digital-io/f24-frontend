@@ -39,6 +39,8 @@ export interface OccViewerProps {
   className?: string;
   /** URL of the IGES file to load (must be served from the same origin). */
   igesUrl?: string;
+  /** Fires whenever the load status changes — lets callers surface loading/error state of their own. */
+  onStatusChange?: (status: 'loading' | 'ready' | 'error') => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,12 +194,19 @@ export function OccViewer({
   wireframe = false,
   className = 'absolute inset-0 w-full h-full',
   igesUrl   = '/fan-object.igs',
+  onStatusChange,
 }: OccViewerProps) {
   const containerRef  = useRef<HTMLDivElement>(null);
   const meshesRef     = useRef<THREE.Mesh[]>([]);
   const wireLineRef   = useRef<THREE.LineSegments[]>([]);
   const wireframeRef  = useRef(wireframe);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [status, setStatusState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const onStatusChangeRef = useRef(onStatusChange);
+  onStatusChangeRef.current = onStatusChange;
+  function setStatus(next: 'loading' | 'ready' | 'error') {
+    setStatusState(next);
+    onStatusChangeRef.current?.(next);
+  }
 
   // Wireframe toggle without scene re-creation
   useEffect(() => {
@@ -315,6 +324,7 @@ export function OccViewer({
 
     // ── OCC async: load IGES + tessellate ───────────────────────────────────
     let disposed = false;
+    setStatus('loading');
 
     getOcc()
       .then(async (oc) => {
