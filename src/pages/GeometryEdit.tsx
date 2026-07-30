@@ -267,8 +267,10 @@ export function GeometryEdit() {
     setResultStatus('loading');
     setResultError(null);
     try {
+      // CAD kernel generation can take a while — well past the default 10s timeout.
       const { data } = await apiClient.get<ArrayBuffer>(`/geometry/${geometryId}/result/`, {
         responseType: 'arraybuffer',
+        timeout: 120_000,
       });
       setResultScale(Number(props.nominalRadius) || 1);
       setResultStl(data);
