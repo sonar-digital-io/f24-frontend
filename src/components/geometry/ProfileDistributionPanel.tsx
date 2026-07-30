@@ -96,6 +96,10 @@ export function ProfileDistributionPanel({
 }: ProfileDistributionPanelProps) {
   const [type, setType] = useState('NACA 4 digit');
   const [startPos, setStartPos] = useState(String(DEFAULT_START_POSITION));
+  // Root indicator (yellow line) marks the geometry's fixed root/nominal
+  // radius reference — it must stay put even while the start position is
+  // being dragged, so it's captured once and never updated afterward.
+  const [rootX] = useState(() => parseFloat(startPos) || DEFAULT_START_POSITION);
   const [endPos, setEndPos] = useState('1');
   const [profileCount, setProfileCount] = useState('6');
   const [subTab, setSubTab] = useState<SectionKey>('maximum-camber');
@@ -211,7 +215,7 @@ export function ProfileDistributionPanel({
                 points={points}
                 onChange={(next) => handleCurveChange(key, next)}
                 yMax={Y_MAX}
-                rootX={Number.isFinite(parseFloat(startPos)) ? parseFloat(startPos) : 0.05}
+                rootX={rootX}
               />
             )}
           </div>
