@@ -17,6 +17,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   useCreateGeometry,
   useGeometryDetail,
+  useUpdateGeometry,
   useUpdateGeometrySettings,
 } from '@/hooks/api/useGeometry';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
@@ -44,6 +45,7 @@ export function GeometryEdit() {
   const detailQuery = useGeometryDetail(geometryId);
   const duplicateQuery = useGeometryDetail(duplicateSourceId);
   const createMutation = useCreateGeometry();
+  const updateGeneralMutation = useUpdateGeometry(geometryId);
   const updateSettingsMutation = useUpdateGeometrySettings(geometryId);
 
   const name = isNew ? 'New geometry' : (detailQuery.data?.name ?? id ?? 'New geometry');
@@ -62,11 +64,16 @@ export function GeometryEdit() {
     bladeNumber: '',
   });
 
-  // New geometry project config state — only these 3 fields are sent to POST /geometry/.
+  // Project config state — name/date/description, sent to POST /geometry/ on create
+  // or PUT /geometry/:id/ on edit. For edits, hydrated from GET /geometry/:id/.
   const [newName, setNewName] = useState('');
   const [newDate, setNewDate] = useState(todayISO());
   const [newDescription, setNewDescription] = useState('');
   const [duplicateHydrated, setDuplicateHydrated] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [baseline, setBaseline] = useState<{ name: string; date: string; description: string } | null>(
+    null
+  );
 
   // When Create is clicked, navigate replaces /geometry/new → /geometry/:id without
   // remounting (same route pattern). Switch to Global properties once isNew turns false.
@@ -75,6 +82,19 @@ export function GeometryEdit() {
       setActiveTab('global-properties');
     }
   }, [isNew]);
+
+  // Load the existing geometry's name/date/description into the form when editing.
+  useEffect(() => {
+    if (isNew || hydrated || detailQuery.isFetching || !detailQuery.data) return;
+    const g = detailQuery.data;
+    const hydratedDate = toDateInputValue(g.created_at);
+    const hydratedDescription = g.description ?? '';
+    setNewName(g.name);
+    setNewDate(hydratedDate);
+    setNewDescription(hydratedDescription);
+    setBaseline({ name: g.name, date: hydratedDate, description: hydratedDescription });
+    setHydrated(true);
+  }, [isNew, hydrated, detailQuery.isFetching, detailQuery.data]);
 
   useEffect(() => {
     if (
@@ -116,6 +136,19 @@ export function GeometryEdit() {
     } catch {
       // createMutation.isError already surfaces the failure in the UI — stay on this tab.
     }
+  }
+
+  async function handleUpdateGeneral() {
+    if (!newName.trim() || !newDate || !newDescription.trim() || !baseline) return;
+    if (newName === baseline.name && newDate === baseline.date && newDescription === baseline.description) {
+      return;
+    }
+    await updateGeneralMutation.mutateAsync({
+      name: newName.trim(),
+      created_at: toIsoDateTime(newDate),
+      description: newDescription.trim(),
+    });
+    setBaseline({ name: newName, date: newDate, description: newDescription });
   }
 
   async function handleSaveGlobalProperties() {
@@ -228,7 +261,17 @@ export function GeometryEdit() {
                     : 'w-[280px]'
           }`}
         >
-          {activeTab === 'create' && (
+          {activeTab === 'create' && !isNew && !hydrated && (detailQuery.isLoading || detailQuery.isFetching) && (
+            <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+              <p className="text-[14px] text-[#6b7280]">Loading geometry…</p>
+            </div>
+          )}
+          {activeTab === 'create' && !isNew && detailQuery.isError && (
+            <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+              <p className="text-[14px] text-[#dc2626]">Failed to load this geometry from the server.</p>
+            </div>
+          )}
+          {activeTab === 'create' && (isNew || (hydrated && !detailQuery.isError)) && (
             <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
               <div className="flex flex-col gap-1">
                 <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">
@@ -277,11 +320,13 @@ export function GeometryEdit() {
                 />
               </div>
 
-              {createMutation.isError && (
-                <p className="text-[13px] text-[#dc2626]">Failed to create geometry. Please try again.</p>
+              {(createMutation.isError || updateGeneralMutation.isError) && (
+                <p className="text-[13px] text-[#dc2626]">
+                  Failed to {isNew ? 'create' : 'update'} geometry. Please try again.
+                </p>
               )}
 
-              {isNew && (
+              {isNew ? (
                 <div className="flex items-center justify-end gap-2 pt-1">
                   <Link
                     to="/geometry"
@@ -296,6 +341,17 @@ export function GeometryEdit() {
                     className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
                   >
                     {createMutation.isPending ? 'Creating…' : 'Create'}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleUpdateGeneral}
+                    disabled={!newName.trim() || !newDate || !newDescription.trim() || updateGeneralMutation.isPending}
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
+                  >
+                    {updateGeneralMutation.isPending ? 'Updating…' : 'Update'}
                   </button>
                 </div>
               )}
