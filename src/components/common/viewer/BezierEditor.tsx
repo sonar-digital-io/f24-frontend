@@ -101,10 +101,14 @@ export function BezierEditor({
     let { x, y } = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
     y = clamp(y, yMin, yMax);
     const xEps = (xMax - xMin) * 0.001;
-    if (idx === 0 || idx === points.length - 1) {
-      // Endpoints move vertically only — pinned to their CURRENT x, not to
-      // xMin/xMax, so callers may keep endpoints inside the visible range.
-      x = points[idx].x;
+    if (idx === 0) {
+      // The first point represents the start position — draggable in x too,
+      // bounded by the chart's xMin and the next point.
+      const upper = points.length > 1 ? points[1].x - xEps : xMax;
+      x = clamp(x, xMin, upper);
+    } else if (idx === points.length - 1) {
+      const lower = points.length > 1 ? points[idx - 1].x + xEps : xMin;
+      x = clamp(x, lower, xMax);
     } else {
       x = clamp(x, points[idx - 1].x + xEps, points[idx + 1].x - xEps);
     }
@@ -270,7 +274,7 @@ export function BezierEditor({
               onPointerUp={(e) => handlePointerUp(idx, e)}
               onPointerCancel={(e) => handlePointerUp(idx, e)}
               onDoubleClick={(e) => handlePointDoubleClick(idx, e)}
-              tooltip={isEndpoint ? undefined : 'Drag to move · Double-click to remove'}
+              tooltip={isEndpoint ? 'Drag to move' : 'Drag to move · Double-click to remove'}
             />
           );
         })}

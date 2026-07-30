@@ -39,21 +39,27 @@ const SECTION_TO_REFERENCE: Record<SectionKey, string> = {
 
 // Initial control points for each curve.
 // (x in 0..1 = relative radius, y in 0..yMax = camber/position/thickness %)
+// The first point's x must match the default Start position below (0.05) — the
+// backend rejects a profile-generator payload whose curves start before the
+// declared start_position (which itself must be >= the geometry's root/nominal
+// radius).
+const DEFAULT_START_POSITION = 0.05;
+
 const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
   'maximum-camber': [
-    { x: 0, y: 0 },
+    { x: DEFAULT_START_POSITION, y: 0 },
     { x: 0.4186, y: 23.7654 },
     { x: 0.91, y: 22.13445 },
     { x: 1, y: 5.7 },
   ],
   'maximum-camber-position': [
-    { x: 0, y: 0 },
+    { x: DEFAULT_START_POSITION, y: 0 },
     { x: 0.35, y: 12 },
     { x: 0.7, y: 18 },
     { x: 1, y: 8 },
   ],
   thickness: [
-    { x: 0, y: 5 },
+    { x: DEFAULT_START_POSITION, y: 5 },
     { x: 0.3, y: 22 },
     { x: 0.7, y: 18 },
     { x: 1, y: 3 },
@@ -89,7 +95,7 @@ export function ProfileDistributionPanel({
   generateError,
 }: ProfileDistributionPanelProps) {
   const [type, setType] = useState('NACA 4 digit');
-  const [startPos, setStartPos] = useState('0.05');
+  const [startPos, setStartPos] = useState(String(DEFAULT_START_POSITION));
   const [endPos, setEndPos] = useState('1');
   const [profileCount, setProfileCount] = useState('6');
   const [subTab, setSubTab] = useState<SectionKey>('maximum-camber');
@@ -125,6 +131,38 @@ export function ProfileDistributionPanel({
     handleInputChange,
     handleInputBlur,
   } = useEditableSectionPoints(INITIAL_SECTION_POINTS, () => ({ min: 0, max: Y_MAX }), 2);
+
+  // The three curves' first point represents the shared start position (sent as
+  // start_position in the payload) — keep it in sync across all curves and the
+  // Start position field, in both directions.
+  function handleCurveChange(key: SectionKey, next: ControlPoint[]) {
+    const prevFirstX = sectionPoints[key][0]?.x;
+    const nextFirstX = next[0]?.x;
+    setPointsForSection(key, next);
+    if (nextFirstX === undefined || nextFirstX === prevFirstX) return;
+    setStartPos(nextFirstX.toFixed(4));
+    SECTION_KEYS.forEach((otherKey) => {
+      if (otherKey === key) return;
+      const otherPoints = sectionPoints[otherKey];
+      if (otherPoints[0]?.x === nextFirstX) return;
+      setPointsForSection(
+        otherKey,
+        otherPoints.map((p, i) => (i === 0 ? { ...p, x: nextFirstX } : p))
+      );
+    });
+  }
+
+  function handleStartPosChange(raw: string) {
+    setStartPos(raw);
+    const parsed = parseFloat(raw.replace(',', '.'));
+    if (!Number.isFinite(parsed)) return;
+    SECTION_KEYS.forEach((key) => {
+      const points = sectionPoints[key];
+      const upper = points[1] ? points[1].x - 0.001 : 1;
+      const x = Math.max(0, Math.min(upper, parsed));
+      setPointsForSection(key, points.map((p, i) => (i === 0 ? { ...p, x } : p)));
+    });
+  }
 
   function buildParams(): ProfileGeneratorParameters {
     return {
@@ -171,7 +209,7 @@ export function ProfileDistributionPanel({
             {showDistribution[key] && (
               <BezierEditor
                 points={points}
-                onChange={(next) => setPointsForSection(key, next)}
+                onChange={(next) => handleCurveChange(key, next)}
                 yMax={Y_MAX}
                 rootX={Number.isFinite(parseFloat(startPos)) ? parseFloat(startPos) : 0.05}
               />
@@ -265,7 +303,7 @@ export function ProfileDistributionPanel({
             <Input
               id="profile-start-pos"
               value={startPos}
-              onChange={(e) => setStartPos(e.target.value)}
+              onChange={(e) => handleStartPosChange(e.target.value)}
               className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
             />
           </div>

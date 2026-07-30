@@ -56,13 +56,29 @@ export function decimalsForStep(step: number): number {
 
 /**
  * Constrains a control point's x drag to stay within its neighbors (with a
- * small margin), while locking the first/last point to the 0..1 domain ends.
+ * small margin). The first/last point may move too, but stay within the
+ * xMin..xMax domain and can't cross their nearest neighbor — e.g. the first
+ * point represents the profile's start position, which must stay within the
+ * chart's range and can't pass the second point.
  */
-export function applyXConstraints(points: ControlPoint[], idx: number, nextX: number): number {
-  if (idx === 0) return 0;
-  if (idx === points.length - 1) return 1;
-  const minX = points[idx - 1].x + 0.001;
-  const maxX = points[idx + 1].x - 0.001;
+export function applyXConstraints(
+  points: ControlPoint[],
+  idx: number,
+  nextX: number,
+  xMin = 0,
+  xMax = 1
+): number {
+  const eps = (xMax - xMin) * 0.001 || 0.001;
+  if (idx === 0) {
+    const upper = points[1] ? points[1].x - eps : xMax;
+    return Math.max(xMin, Math.min(upper, nextX));
+  }
+  if (idx === points.length - 1) {
+    const lower = points[idx - 1] ? points[idx - 1].x + eps : xMin;
+    return Math.max(lower, Math.min(xMax, nextX));
+  }
+  const minX = points[idx - 1].x + eps;
+  const maxX = points[idx + 1].x - eps;
   return Math.max(minX, Math.min(maxX, nextX));
 }
 
