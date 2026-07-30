@@ -96,10 +96,6 @@ export function ProfileDistributionPanel({
 }: ProfileDistributionPanelProps) {
   const [type, setType] = useState('NACA 4 digit');
   const [startPos, setStartPos] = useState(String(DEFAULT_START_POSITION));
-  // Root indicator (yellow line) marks the geometry's fixed root/nominal
-  // radius reference — it must stay put even while the start position is
-  // being dragged, so it's captured once and never updated afterward.
-  const [rootX] = useState(() => parseFloat(startPos) || DEFAULT_START_POSITION);
   const [endPos, setEndPos] = useState('1');
   const [profileCount, setProfileCount] = useState('6');
   const [subTab, setSubTab] = useState<SectionKey>('maximum-camber');
@@ -136,15 +132,14 @@ export function ProfileDistributionPanel({
     handleInputBlur,
   } = useEditableSectionPoints(INITIAL_SECTION_POINTS, () => ({ min: 0, max: Y_MAX }), 2);
 
-  // The three curves' first point represents the shared start position (sent as
-  // start_position in the payload) — keep it in sync across all curves and the
-  // Start position field, in both directions.
+  // The three curves' first point stays in sync with each other, but is
+  // independent from the Start position field/yellow line — that field
+  // only controls where the reference indicator is drawn, not the curves.
   function handleCurveChange(key: SectionKey, next: ControlPoint[]) {
     const prevFirstX = sectionPoints[key][0]?.x;
     const nextFirstX = next[0]?.x;
     setPointsForSection(key, next);
     if (nextFirstX === undefined || nextFirstX === prevFirstX) return;
-    setStartPos(nextFirstX.toFixed(4));
     SECTION_KEYS.forEach((otherKey) => {
       if (otherKey === key) return;
       const otherPoints = sectionPoints[otherKey];
@@ -158,14 +153,6 @@ export function ProfileDistributionPanel({
 
   function handleStartPosChange(raw: string) {
     setStartPos(raw);
-    const parsed = parseFloat(raw.replace(',', '.'));
-    if (!Number.isFinite(parsed)) return;
-    SECTION_KEYS.forEach((key) => {
-      const points = sectionPoints[key];
-      const upper = points[1] ? points[1].x - 0.001 : 1;
-      const x = Math.max(0, Math.min(upper, parsed));
-      setPointsForSection(key, points.map((p, i) => (i === 0 ? { ...p, x } : p)));
-    });
   }
 
   function buildParams(): ProfileGeneratorParameters {
@@ -215,7 +202,7 @@ export function ProfileDistributionPanel({
                 points={points}
                 onChange={(next) => handleCurveChange(key, next)}
                 yMax={Y_MAX}
-                rootX={rootX}
+                rootX={Number.isFinite(parseFloat(startPos)) ? parseFloat(startPos) : DEFAULT_START_POSITION}
               />
             )}
           </div>
