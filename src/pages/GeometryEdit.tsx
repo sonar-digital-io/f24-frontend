@@ -72,9 +72,9 @@ function toApiProfile(p: Profile): GeometryProfile {
     type: UI_TO_API_PROFILE_TYPE[p.type] ?? p.type,
     file: null,
     parameters: [
-      { reference: 'max_camber', value: p.maxCamber },
-      { reference: 'max_camber_position', value: p.maxCamberPosition },
-      { reference: 'max_thickness', value: p.thickness },
+      { reference: 'max_camber', value: String(p.maxCamber) },
+      { reference: 'max_camber_position', value: String(p.maxCamberPosition) },
+      { reference: 'max_thickness', value: String(p.thickness) },
     ],
   };
 }
@@ -233,6 +233,7 @@ export function GeometryEdit() {
 
   async function handleSaveProfiles(profiles: Profile[]) {
     await updateProfilesMutation.mutateAsync({ profiles: profiles.map(toApiProfile) });
+    setActiveTab('stacking');
   }
 
   async function handleSaveProfileGeneratorParams(params: ProfileGeneratorParameters) {
