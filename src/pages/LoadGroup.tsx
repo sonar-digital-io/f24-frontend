@@ -70,8 +70,12 @@ export function LoadGroup() {
 
   async function handleConfirmDelete() {
     if (!pendingDelete) return;
-    await deleteMutation.mutateAsync(Number(pendingDelete.id));
-    setPendingDelete(null);
+    try {
+      await deleteMutation.mutateAsync(Number(pendingDelete.id));
+      setPendingDelete(null);
+    } catch {
+      // deleteMutation.isError surfaces the failure in the dialog — stay open so the user can retry.
+    }
   }
 
   const filtered = useMemo(
@@ -196,6 +200,7 @@ export function LoadGroup() {
         message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
         confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete'}
         confirmDisabled={deleteMutation.isPending}
+        errorMessage={deleteMutation.isError ? 'Failed to delete. Please try again.' : undefined}
         danger
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}

@@ -541,6 +541,15 @@ export function OccViewer({
         });
         mat.userData.baseOpacity = 1;
         if (wireframeRef.current) mat.opacity = 0;
+
+        // Dispose the loader-built material (and any texture it holds) before
+        // replacing it — otherwise it's simply orphaned, leaking GPU memory on
+        // every regenerate since the whole scene is rebuilt each time.
+        const oldMat = obj.material as THREE.Material | THREE.Material[];
+        (Array.isArray(oldMat) ? oldMat : [oldMat]).forEach((m) => {
+          Object.values(m).forEach((v) => { if (v instanceof THREE.Texture) v.dispose(); });
+          m.dispose();
+        });
         obj.material = mat;
         obj.castShadow = true;
         obj.receiveShadow = true;

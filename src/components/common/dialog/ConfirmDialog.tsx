@@ -13,6 +13,8 @@ interface ConfirmDialogProps {
   /** Red confirm button for destructive actions (e.g. delete). */
   danger?: boolean;
   confirmDisabled?: boolean;
+  /** Shown below the message when the confirmed action failed — dialog stays open so the user can retry. */
+  errorMessage?: string;
 }
 
 const TITLE_ID = 'confirm-dialog-title';
@@ -28,6 +30,7 @@ export function ConfirmDialog({
   onCancel,
   danger = false,
   confirmDisabled = false,
+  errorMessage,
 }: ConfirmDialogProps) {
   useBodyScrollLock(open);
   useEscapeKey(onCancel, open);
@@ -48,6 +51,7 @@ export function ConfirmDialog({
       >
         <DialogHeader title={title} titleId={TITLE_ID} onClose={onCancel} />
         <p className="text-[14px] leading-5 text-[#4b5563]">{message}</p>
+        {errorMessage && <p className="text-[13px] text-[#dc2626]">{errorMessage}</p>}
         <div className="flex justify-end gap-2">
           <button
             type="button"

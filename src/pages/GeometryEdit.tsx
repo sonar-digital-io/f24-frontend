@@ -259,9 +259,11 @@ export function GeometryEdit() {
     await updateEdgesMutation.mutateAsync({ edges });
   }
 
-  // GET /geometry/:id/result/ returns a raw STL file (unitless — vertices are
-  // fractions of nominal_radius), not JSON — fetched as an ArrayBuffer and
-  // handed to OccViewer's STL pipeline, scaled by the geometry's nominal_radius.
+  // GET /geometry/:id/result/ returns binary mesh data, not JSON — in
+  // practice either an ASCII/binary STL or a zip-based 3MF package (both
+  // unitless: vertices are fractions of nominal_radius). Fetched as an
+  // ArrayBuffer and handed to OccViewer, which sniffs the actual format and
+  // scales the result by the geometry's nominal_radius.
   async function handleGenerateResult() {
     setResultRequested(true);
     setResultStatus('loading');

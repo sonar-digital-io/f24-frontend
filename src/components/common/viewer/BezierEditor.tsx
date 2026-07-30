@@ -140,18 +140,28 @@ export function BezierEditor({
     if (!local) return;
     let { x, y } = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
     // Stay strictly between the two fixed endpoints (which may sit inside
-    // the xMin..xMax range), so the point array stays x-sorted.
-    const firstX = points[0]?.x ?? xMin;
-    const lastX = points[points.length - 1]?.x ?? xMax;
+    // the xMin..xMax range), so the point array stays x-sorted. With fewer
+    // than 2 points there's no "between" yet — fall back to the chart's
+    // own bounds instead (otherwise firstX === lastX and this always no-ops).
+    const firstX = points.length >= 2 ? points[0].x : xMin;
+    const lastX = points.length >= 2 ? points[points.length - 1].x : xMax;
     const margin = (xMax - xMin) * 0.02;
     if (lastX - firstX <= 2 * margin) return;
     x = clamp(x, firstX + margin, lastX - margin);
     y = clamp(y, yMin, yMax);
     // Skip if too close to an existing anchor
     if (points.some((p) => Math.abs(p.x - x) < (xMax - xMin) * 0.03)) return;
-    // Insert in x-sorted order (always before the last fixed endpoint)
-    const insertIdx = points.findIndex((p, i) => i > 0 && p.x >= x);
-    const idx = insertIdx === -1 ? points.length - 1 : insertIdx;
+    // Insert in x-sorted order. With 0 or 1 existing points there's no
+    // "middle" to find via neighbor comparison, so place explicitly instead.
+    const idx =
+      points.length === 0
+        ? 0
+        : points.length === 1
+          ? (x < points[0].x ? 0 : 1)
+          : (() => {
+              const insertIdx = points.findIndex((p, i) => i > 0 && p.x >= x);
+              return insertIdx === -1 ? points.length - 1 : insertIdx;
+            })();
     onChange([...points.slice(0, idx), { x, y }, ...points.slice(idx)]);
   }
 
