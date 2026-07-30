@@ -24,6 +24,7 @@ import {
   useUpdateProfileGenerator,
   useUpdateGeometryEdges,
   useGeometryEdges,
+  useGeometryResult,
 } from '@/hooks/api/useGeometry';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { API_TO_UI_PROFILE_TYPE, UI_TO_API_PROFILE_TYPE, type Profile } from '@/data/profiles';
@@ -91,6 +92,8 @@ export function GeometryEdit() {
   const updateGeneratorMutation = useUpdateProfileGenerator();
   const updateEdgesMutation = useUpdateGeometryEdges(geometryId);
   const edgesQuery = useGeometryEdges(geometryId);
+  const resultMutation = useGeometryResult();
+  const [resultIgesUrl, setResultIgesUrl] = useState<string | undefined>(undefined);
 
   const name = isNew ? 'New geometry' : (detailQuery.data?.name ?? id ?? 'New geometry');
 
@@ -254,6 +257,14 @@ export function GeometryEdit() {
     await updateEdgesMutation.mutateAsync({ edges });
   }
 
+  async function handleGenerateResult() {
+    const blob = await resultMutation.mutateAsync(geometryId);
+    setResultIgesUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(blob);
+    });
+  }
+
   function handleExit() {
     navigate('/geometry');
   }
@@ -265,7 +276,7 @@ export function GeometryEdit() {
       {/* Body: full-bleed 3D scene with floating overlays (incl. sub-toolbar) */}
       <main className="relative flex-1 overflow-hidden">
         {/* Three.js canvas fills the whole body, including under the sub-toolbar */}
-        <OccViewer wireframe={renderMode === 'wireframe'} />
+        <OccViewer wireframe={renderMode === 'wireframe'} igesUrl={resultIgesUrl} />
 
         {/* Floating sub-toolbar — transparent bg so the canvas shows through.
             Title is absolutely positioned at viewport center, independent of
@@ -530,11 +541,28 @@ export function GeometryEdit() {
               saveError={updateEdgesMutation.isError}
             />
           )}
+          {activeTab === 'spars' && (
+            <div className="flex w-full max-w-[404px] flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+              <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">Result</p>
+              <button
+                type="button"
+                onClick={handleGenerateResult}
+                disabled={resultMutation.isPending}
+                className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 self-start"
+              >
+                {resultMutation.isPending ? 'Generating…' : 'Generate result'}
+              </button>
+              {resultMutation.isError && (
+                <p className="text-[13px] text-[#dc2626]">Failed to generate. Please try again.</p>
+              )}
+            </div>
+          )}
           {activeTab !== 'create' &&
             activeTab !== 'global-properties' &&
             activeTab !== 'profile-distribution' &&
             activeTab !== 'profiles' &&
-            activeTab !== 'stacking' && (
+            activeTab !== 'stacking' &&
+            activeTab !== 'spars' && (
             <div className="flex flex-col items-center justify-center gap-2 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
               <p className="text-[14px] font-semibold text-[#0a0a0a]">
                 {activeTab.replace('-', ' ').replace(/^./, (c) => c.toUpperCase())}
