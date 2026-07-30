@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { isAxiosError } from 'axios';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { apiClient } from '@/api/client';
 import { Settings, Check, Undo2, Redo2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { OccViewer } from '@/components/common/viewer/OccViewer';
@@ -91,9 +93,11 @@ export function GeometryEdit() {
   const updateGeneratorMutation = useUpdateProfileGenerator();
   const updateEdgesMutation = useUpdateGeometryEdges(geometryId);
   const edgesQuery = useGeometryEdges(geometryId);
-  const [resultIgesUrl, setResultIgesUrl] = useState<string | undefined>(undefined);
+  const [resultStl, setResultStl] = useState<ArrayBuffer | undefined>(undefined);
+  const [resultScale, setResultScale] = useState(1);
   const [resultRequested, setResultRequested] = useState(false);
   const [resultStatus, setResultStatus] = useState<'loading' | 'ready' | 'error'>('ready');
+  const [resultError, setResultError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState(isNew ? 'create' : 'global-properties');
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
@@ -255,13 +259,34 @@ export function GeometryEdit() {
     await updateEdgesMutation.mutateAsync({ edges });
   }
 
-  // Let OccViewer fetch GET /geometry/:id/result/ itself (through the same
-  // dev proxy as every other API call) instead of double-fetching via axios
-  // + a blob: URL — a cache-busting query param forces a reload on re-click.
-  function handleGenerateResult() {
-    const base = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+  // GET /geometry/:id/result/ returns a raw STL file (unitless — vertices are
+  // fractions of nominal_radius), not JSON — fetched as an ArrayBuffer and
+  // handed to OccViewer's STL pipeline, scaled by the geometry's nominal_radius.
+  async function handleGenerateResult() {
     setResultRequested(true);
-    setResultIgesUrl(`${base}/geometry/${geometryId}/result/?t=${Date.now()}`);
+    setResultStatus('loading');
+    setResultError(null);
+    try {
+      const { data } = await apiClient.get<ArrayBuffer>(`/geometry/${geometryId}/result/`, {
+        responseType: 'arraybuffer',
+      });
+      setResultScale(Number(props.nominalRadius) || 1);
+      setResultStl(data);
+    } catch (err) {
+      const status = isAxiosError(err) ? err.response?.status : undefined;
+      setResultError(
+        status === 409
+          ? 'Geometry is invalid or incomplete (needs at least 2 profiles and a valid spline).'
+          : status === 403
+            ? 'You do not have permission to generate this result.'
+            : status === 404
+              ? 'Geometry not found.'
+              : status === 500
+                ? 'Result generation failed on the server.'
+                : 'Failed to generate. Please try again.'
+      );
+      setResultStatus('error');
+    }
   }
 
   function handleExit() {
@@ -277,7 +302,8 @@ export function GeometryEdit() {
         {/* Three.js canvas fills the whole body, including under the sub-toolbar */}
         <OccViewer
           wireframe={renderMode === 'wireframe'}
-          igesUrl={resultIgesUrl}
+          stlData={resultStl}
+          stlScale={resultScale}
           onStatusChange={setResultStatus}
         />
 
@@ -552,7 +578,9 @@ export function GeometryEdit() {
                 {resultRequested && resultStatus === 'loading' ? 'Generating…' : 'Generate result'}
               </button>
               {resultRequested && resultStatus === 'error' && (
-                <p className="text-[13px] text-[#dc2626]">Failed to generate. Please try again.</p>
+                <p className="text-[13px] text-[#dc2626]">
+                  {resultError ?? 'Failed to generate. Please try again.'}
+                </p>
               )}
             </div>
           )}

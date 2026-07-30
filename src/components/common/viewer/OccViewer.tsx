@@ -1,10 +1,16 @@
 /**
- * OccViewer — full-bleed Three.js canvas backed by a real IGES file loaded
- * through OpenCascade.js B-Rep → mesh tessellation.
+ * OccViewer — full-bleed Three.js canvas with two independent load pipelines:
  *
- * The IGES file is served from public/fan-object.igs and is fetched at
- * runtime, written into the OCC Emscripten virtual filesystem, parsed with
- * IGESControl_Reader, and tessellated into a Three.js BufferGeometry.
+ *  - IGES (default): a real IGES file loaded through OpenCascade.js B-Rep →
+ *    mesh tessellation. Served from public/fan-object.igs, fetched at
+ *    runtime, written into the OCC Emscripten virtual filesystem, parsed with
+ *    IGESControl_Reader, and tessellated into a Three.js BufferGeometry.
+ *  - STL (when `stlData` is passed): already-triangulated mesh data — e.g.
+ *    the backend's generated result — parsed directly with THREE.STLLoader,
+ *    no OCC involved. Its vertices are unitless (fractions of the geometry's
+ *    nominal_radius), so `stlScale` must be set to rescale it.
+ *
+ * `stlData` takes over rendering from the IGES pipeline whenever it's set.
  *
  * opencascade.js v1.1.1 API notes (v1.1.1 = OCC 7.5 bindings):
  *   Constructor overloads always use _N suffix (even if only one):
@@ -32,13 +38,19 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { getOcc } from '@/lib/occ-init';
 
 export interface OccViewerProps {
   wireframe?: boolean;
   className?: string;
-  /** URL of the IGES file to load (must be served from the same origin). */
+  /** URL of the IGES file to load (must be served from the same origin). Ignored when `stlData` is set. */
   igesUrl?: string;
+  /** Raw STL contents (unitless — see `stlScale`) — takes over rendering from the IGES pipeline when set. */
+  stlData?: ArrayBuffer | string;
+  /** Uniform scale applied to the STL mesh (e.g. the geometry's nominal_radius in meters, since the
+   *  backend exports STL vertices as fractions of it). Defaults to 1 (no rescale). */
+  stlScale?: number;
   /** Fires whenever the load status changes — lets callers surface loading/error state of their own. */
   onStatusChange?: (status: 'loading' | 'ready' | 'error') => void;
 }
@@ -194,6 +206,8 @@ export function OccViewer({
   wireframe = false,
   className = 'absolute inset-0 w-full h-full',
   igesUrl   = '/fan-object.igs',
+  stlData,
+  stlScale = 1,
   onStatusChange,
 }: OccViewerProps) {
   const containerRef  = useRef<HTMLDivElement>(null);
@@ -322,63 +336,89 @@ export function OccViewer({
     ro.observe(container);
     window.addEventListener('resize', onResize);
 
-    // ── OCC async: load IGES + tessellate ───────────────────────────────────
+    // ── Load + build the scene's mesh(es) ───────────────────────────────────
+    // Two independent pipelines: STL (pre-triangulated, no OCC involved — used
+    // for the backend's generated result, which ships unitless vertices scaled
+    // by stlScale) and IGES (B-Rep loaded + tessellated via OpenCascade.js —
+    // used for the static demo geometry).
     let disposed = false;
     setStatus('loading');
 
-    getOcc()
-      .then(async (oc) => {
-        if (disposed) return;
+    async function loadStl(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[] }> {
+      const loader = new STLLoader();
+      const geo = typeof stlData === 'string' ? loader.parse(stlData) : loader.parse(stlData as ArrayBuffer);
+      geo.computeVertexNormals();
 
-        // Load IGES file
-        let occShapes: Array<{ shape: any; color: number; opacity: number }>;   
+      const mat = new THREE.MeshPhysicalMaterial({
+        color: 0x94a3b8,
+        metalness: 0.3,
+        roughness: 0.4,
+        side: THREE.DoubleSide,
+      });
+      mat.userData.baseOpacity = 1;
+      if (wireframeRef.current) mat.opacity = 0;
+
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.scale.setScalar(stlScale);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+
+      const edgeGeo = new THREE.EdgesGeometry(geo, 15);
+      const edgeMat = new THREE.LineBasicMaterial({ color: 0x475569, opacity: 0.55, transparent: true });
+      const lines = new THREE.LineSegments(edgeGeo, edgeMat);
+      lines.scale.setScalar(stlScale);
+      lines.visible = wireframeRef.current;
+      scene.add(lines);
+
+      return { newMeshes: [mesh], newLines: [lines] };
+    }
+
+    async function loadIges(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[] }> {
+      const oc = await getOcc();
+
+      // Load IGES file
+      const occShapes = await loadIgesShapes(oc as any, igesUrl);
+
+      // Tessellate shapes
+      const newMeshes: THREE.Mesh[]         = [];
+      const newLines:  THREE.LineSegments[] = [];
+
+      for (const { shape, color, opacity } of occShapes) {
         try {
-           
-          occShapes = await loadIgesShapes(oc as any, igesUrl);
+
+          const mesh = tessellate(oc as any, shape, color, opacity);
+          if (!mesh) continue;
+          (mesh.material as THREE.MeshPhysicalMaterial).userData.baseOpacity = opacity;
+          if (wireframeRef.current) (mesh.material as THREE.MeshPhysicalMaterial).opacity = 0;
+          scene.add(mesh);
+          newMeshes.push(mesh);
+
+          // Edge overlay for wireframe mode
+          const edgeGeo = new THREE.EdgesGeometry(mesh.geometry, 15);
+          const edgeMat = new THREE.LineBasicMaterial({
+            color: 0x475569,
+            opacity: 0.55,
+            transparent: true,
+          });
+          const lines = new THREE.LineSegments(edgeGeo, edgeMat);
+          lines.visible = wireframeRef.current;
+          scene.add(lines);
+          newLines.push(lines);
         } catch (err) {
-          console.error('[OccViewer] IGES load failed:', err);
-          if (!disposed) setStatus('error');
-          return;
+          console.warn('[OccViewer] tessellation failed for one shape:', err);
+        } finally {
+          // Mesh data lives in the BufferGeometry now — the OCC shape can go
+          shape.delete();
         }
+      }
 
-        if (disposed) {
-          // Unmounted while loading — still free the OCC heap objects
-          occShapes.forEach(({ shape }) => shape.delete());
-          return;
-        }
+      return { newMeshes, newLines };
+    }
 
-        // Tessellate shapes
-        const newMeshes: THREE.Mesh[]         = [];
-        const newLines:  THREE.LineSegments[] = [];
-
-        for (const { shape, color, opacity } of occShapes) {
-          try {
-             
-            const mesh = tessellate(oc as any, shape, color, opacity);
-            if (!mesh) continue;
-            (mesh.material as THREE.MeshPhysicalMaterial).userData.baseOpacity = opacity;
-            if (wireframeRef.current) (mesh.material as THREE.MeshPhysicalMaterial).opacity = 0;
-            scene.add(mesh);
-            newMeshes.push(mesh);
-
-            // Edge overlay for wireframe mode
-            const edgeGeo = new THREE.EdgesGeometry(mesh.geometry, 15);
-            const edgeMat = new THREE.LineBasicMaterial({
-              color: 0x475569,
-              opacity: 0.55,
-              transparent: true,
-            });
-            const lines = new THREE.LineSegments(edgeGeo, edgeMat);
-            lines.visible = wireframeRef.current;
-            scene.add(lines);
-            newLines.push(lines);
-          } catch (err) {
-            console.warn('[OccViewer] tessellation failed for one shape:', err);
-          } finally {
-            // Mesh data lives in the BufferGeometry now — the OCC shape can go
-            shape.delete();
-          }
-        }
+    (stlData !== undefined ? loadStl() : loadIges())
+      .then(({ newMeshes, newLines }) => {
+        if (disposed) return;
 
         // ── Auto-fit camera + grid to loaded geometry ───────────────────────
         if (newMeshes.length > 0) {
@@ -426,7 +466,7 @@ export function OccViewer({
       })
       .catch((err) => {
         if (!disposed) {
-          console.error('[OccViewer] OCC init failed:', err);
+          console.error('[OccViewer] mesh load failed:', err);
           setStatus('error');
         }
       });
@@ -463,7 +503,7 @@ export function OccViewer({
       wireLineRef.current = [];
     };
      
-  }, [igesUrl]);
+  }, [igesUrl, stlData, stlScale]);
 
   return (
     <div ref={containerRef} className={className}>
