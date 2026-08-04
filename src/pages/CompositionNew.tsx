@@ -5,10 +5,7 @@ import { Check, Redo2, Undo2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LayupPickerDialog } from '@/components/composition/LayupPickerDialog';
-import {
-  DEFAULT_MAPPING_POINTS,
-  LayupMappingBezierDialog,
-} from '@/components/composition/LayupMappingBezierDialog';
+import { LayupMappingBezierDialog } from '@/components/composition/LayupMappingBezierDialog';
 import { TransversalMappingSection } from '@/components/composition/TransversalMappingSection';
 import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
 import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
@@ -17,6 +14,8 @@ import { CompositionLayupTab, type CompositionLayup } from '@/components/composi
 import { getMaterialColor, type Ply } from '@/components/layup/LayupBuilder';
 import { LayupMappingTable, type LayupMapping } from '@/components/composition/LayupMappingTable';
 import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
+import { computeMappingBounds, computeProfilesBoundingRect, niceStep } from '@/lib/bezierMath';
+import type { ControlPoint } from '@/types';
 import {
   useCreateComposition,
   useCompositionDetail,
@@ -28,7 +27,7 @@ import {
 import { useMaterialList } from '@/hooks/api/useMaterials';
 import { updateCompositionSettings } from '@/api/composition';
 import { getGeometryProfile } from '@/api/geometry';
-import { geometryKeys } from '@/hooks/api/useGeometry';
+import { geometryKeys, useGeometryTopView } from '@/hooks/api/useGeometry';
 
 export function CompositionNew() {
   const navigate = useNavigate();
@@ -50,15 +49,37 @@ export function CompositionNew() {
   const layupOptions = detailQuery.data?.layups ?? [];
   const materialsQuery = useMaterialList();
 
+  // Geometry pick
+  const [geomQuery, setGeomQuery] = useState('');
+  const [geomView, setGeomView] = useState<'list' | 'grid'>('grid');
+  const [selectedGeometryId, setSelectedGeometryId] = useState<string | null>(null);
+
+  // The top-view data (blade planform, used by the layup mapping charts) has
+  // to come from whichever geometry is current — the persisted composition's
+  // geometry once saved, but the locally-picked one during creation/before
+  // the first save, since there's no persisted composition yet to read it from.
+  const geometryId =
+    typeof detailQuery.data?.geometry === 'number'
+      ? detailQuery.data.geometry
+      : selectedGeometryId
+        ? Number(selectedGeometryId)
+        : NaN;
+  const topViewQuery = useGeometryTopView(geometryId);
+  const leadingEdge = (topViewQuery.data?.leading_edge ?? []).map(([x, y]) => ({ x, y }));
+  const trailingEdge = (topViewQuery.data?.trailing_edge ?? []).map(([x, y]) => ({ x, y }));
+  // Longitudinal/transversal mapping points are stored by the API as a
+  // fraction of the geometry's nominal_radius; the bezier editor works in
+  // that same absolute (real) scale as the top-view leading/trailing edge.
+  const nominalRadius = topViewQuery.data?.nominal_radius || 1;
+
   const [activeTab, setActiveTab] = useState<
     'general' | 'geometry' | 'layup' | 'layup-mapping' | 'transversal-mapping' | 'preview'
   >('general');
 
-  // General — hydrated from the backend for edit/duplicate. Geometry pick, layup
-  // mapping and transversal mapping stay on local mock state: the geometry picker
-  // lists mock geometries (string slug ids), and layup/transversal mapping carry
-  // rich shapes (bezier curves, per-side tables) the typed backend payloads don't
-  // describe — wiring those needs a real data-source swap, left for a follow-up.
+  // General — hydrated from the backend for edit/duplicate. Layup mapping and
+  // transversal mapping stay on local state: they carry rich shapes (bezier
+  // curves, per-side tables) the typed backend payloads don't fully describe
+  // yet — wiring those needs a real data-source swap, left for a follow-up.
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(todayISO());
@@ -103,11 +124,6 @@ export function CompositionNew() {
     setDate(typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO());
     setDuplicateHydrated(true);
   }, [isEditing, duplicateHydrated, duplicateSourceId, duplicateQuery.isFetching, duplicateQuery.data]);
-
-  // Geometry pick
-  const [geomQuery, setGeomQuery] = useState('');
-  const [geomView, setGeomView] = useState<'list' | 'grid'>('grid');
-  const [selectedGeometryId, setSelectedGeometryId] = useState<string | null>(null);
 
   // Layup — locally-created layups for this composition, separate from the
   // per-side layup mapping below (which maps the shared LAYUPS catalog).
@@ -161,16 +177,28 @@ export function CompositionNew() {
   const [mappingsHydrated, setMappingsHydrated] = useState(false);
 
   // Hydrate saved layup mapping rows (upper/lower side) from the backend.
+  // Waits on the top-view fetch too — the API stores longitudinal/transversal
+  // position as a fraction of nominal_radius; the bezier editor works in that
+  // same absolute scale (see the matching /nominalRadius conversion in
+  // handleSaveLayupMapping below).
   useEffect(() => {
-    if (!isEditing || mappingsHydrated || detailQuery.isFetching || !detailQuery.data) return;
-    // The API stores longitudinal/transversal position at 1/10th of the
-    // bezier editor's own working scale — see the matching /10 conversion
-    // in handleSaveLayupMapping below.
+    if (
+      !isEditing ||
+      mappingsHydrated ||
+      detailQuery.isFetching ||
+      !detailQuery.data ||
+      (Number.isFinite(geometryId) && !topViewQuery.data)
+    ) {
+      return;
+    }
     const toLayupMapping = (entry: NonNullable<typeof detailQuery.data.longitudinal_mapping>['upper_side'][number]): LayupMapping => ({
       id: String(entry.id),
       name: entry.name,
       layupId: String(entry.layup),
-      points: entry.mappings.map((m) => ({ x: m.longitudinal_position * 10, y: m.transversal_position * 10 })),
+      points: entry.mappings.map((m) => ({
+        x: m.longitudinal_position * nominalRadius,
+        y: m.transversal_position * nominalRadius,
+      })),
     });
     const longitudinalMapping = detailQuery.data.longitudinal_mapping;
     if (longitudinalMapping) {
@@ -178,7 +206,7 @@ export function CompositionNew() {
       setLowerMappings(longitudinalMapping.lower_side.map(toLayupMapping));
     }
     setMappingsHydrated(true);
-  }, [isEditing, mappingsHydrated, detailQuery.isFetching, detailQuery.data]);
+  }, [isEditing, mappingsHydrated, detailQuery.isFetching, detailQuery.data, geometryId, topViewQuery.data, nominalRadius]);
 
   const [layupPicker, setLayupPicker] = useState<{
     side: 'upper' | 'lower';
@@ -209,10 +237,35 @@ export function CompositionNew() {
     return `${sideLabel} / ${m?.name?.trim() || 'untitled'}`;
   })();
 
+  // Chart bounds — the blade's real leading/trailing edge extents (padded),
+  // expanded to fit any already-saved mapping point. See computeMappingBounds.
+  const mappingBounds = computeMappingBounds(
+    leadingEdge,
+    trailingEdge,
+    [...upperMappings, ...lowerMappings].flatMap((m) => m.points ?? []),
+  );
+  const mappingXStep = niceStep(mappingBounds.longitudinalMax - mappingBounds.longitudinalMin);
+  const mappingYStep = niceStep(mappingBounds.transversalMax - mappingBounds.transversalMin);
+
+  // A brand-new mapping's rectangle is seeded from the top-view API's
+  // `profiles` (root/tip cross-section boundary points, and any others) —
+  // the extreme top-left/top-right/bottom-left/bottom-right corners across
+  // all of them, padded 10% in each direction. See computeProfilesBoundingRect.
+  const profilePoints = (topViewQuery.data?.profiles ?? []).map((segment) =>
+    segment.map(([x, y]) => ({ x, y }))
+  );
+  const profileRect = computeProfilesBoundingRect(profilePoints);
+  const defaultMappingPoints: ControlPoint[] = [
+    { x: profileRect.longitudinalMin, y: profileRect.transversalMin },
+    { x: profileRect.longitudinalMin, y: profileRect.transversalMax },
+    { x: profileRect.longitudinalMax, y: profileRect.transversalMax },
+    { x: profileRect.longitudinalMax, y: profileRect.transversalMin },
+  ];
+
   const bezierPoints = (() => {
-    if (!bezierFor) return DEFAULT_MAPPING_POINTS;
+    if (!bezierFor) return defaultMappingPoints;
     const arr = bezierFor.side === 'upper' ? upperMappings : lowerMappings;
-    return arr.find((x) => x.id === bezierFor.mappingId)?.points ?? DEFAULT_MAPPING_POINTS;
+    return arr.find((x) => x.id === bezierFor.mappingId)?.points ?? defaultMappingPoints;
   })();
 
   function duplicateMapping(side: 'upper' | 'lower', id: string) {
@@ -315,17 +368,21 @@ export function CompositionNew() {
     fetchMappingTransversalMutation.isError;
 
   async function handleSaveLayupMapping() {
-    // The bezier editor works in its own scale (see LayupMappingBezierDialog);
-    // the API expects longitudinal/transversal position at 1/10th of that.
+    // The bezier editor works in the blade's absolute (real) scale; the API
+    // expects longitudinal/transversal position as a fraction of nominal_radius.
+    // A row's id is only a real backend id once hydrated (String(entry.id), a
+    // plain digit string) — rows added locally get nextLocalId's prefixed id
+    // (e.g. "u-kx3f2a1-4") and must not send one, so the backend creates it.
     const toEntries = (mappings: LayupMapping[]) =>
       mappings
         .filter((m) => m.layupId)
         .map((m) => ({
+          ...(/^\d+$/.test(m.id) ? { id: Number(m.id) } : {}),
           name: m.name,
           layup: Number(m.layupId),
-          mappings: (m.points ?? DEFAULT_MAPPING_POINTS).map((p) => ({
-            longitudinal_position: p.x / 10,
-            transversal_position: p.y / 10,
+          mappings: (m.points ?? defaultMappingPoints).map((p) => ({
+            longitudinal_position: p.x / nominalRadius,
+            transversal_position: p.y / nominalRadius,
           })),
         }));
 
@@ -337,7 +394,6 @@ export function CompositionNew() {
     setActiveTab('transversal-mapping');
     await fetchMappingTransversalMutation.mutateAsync(compositionId);
 
-    const geometryId = typeof detailQuery.data?.geometry === 'number' ? detailQuery.data.geometry : NaN;
     if (Number.isFinite(geometryId)) {
       await Promise.all(
         intersections.map(({ profile_id }) =>
@@ -538,7 +594,7 @@ export function CompositionNew() {
         {activeTab === 'preview' && (
           <CompositionPreviewTab
             compositionId={compositionId}
-            geometryId={typeof detailQuery.data?.geometry === 'number' ? detailQuery.data.geometry : NaN}
+            geometryId={geometryId}
           />
         )}
       </div>
@@ -572,6 +628,14 @@ export function CompositionNew() {
           title={bezierTitle}
           points={bezierPoints}
           onChange={(pts) => updateMapping(bezierFor.side, bezierFor.mappingId, { points: pts })}
+          leadingEdge={leadingEdge}
+          trailingEdge={trailingEdge}
+          xMin={mappingBounds.longitudinalMin}
+          xMax={mappingBounds.longitudinalMax}
+          xStep={mappingXStep}
+          yMin={mappingBounds.transversalMin}
+          yMax={mappingBounds.transversalMax}
+          yStep={mappingYStep}
           anchorRight={bezierFor.anchorRight}
           anchorTop={bezierFor.anchorTop}
           anchorLeft={bezierFor.anchorLeft}

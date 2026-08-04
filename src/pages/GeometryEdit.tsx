@@ -568,6 +568,7 @@ export function GeometryEdit() {
               folded={stackingFolded}
               onFoldToggle={() => setStackingFolded((f) => !f)}
               initialEdges={edgesQuery.data?.edges}
+              rootRadiusPercent={props.rootRadius}
               onSave={handleSaveEdges}
               saving={updateEdgesMutation.isPending}
               saveError={updateEdgesMutation.isError}

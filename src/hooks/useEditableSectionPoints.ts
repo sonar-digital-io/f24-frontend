@@ -15,7 +15,9 @@ type Field = 'x' | 'y';
 export function useEditableSectionPoints<K extends string>(
   initial: Record<K, ControlPoint[]>,
   getYBounds: (key: K) => { min: number; max: number },
-  yDecimals = 2
+  yDecimals = 2,
+  /** Point 0's relative radius can't be typed past this (e.g. the start position). */
+  getRootX?: (key: K) => number | undefined
 ) {
   const [sectionPoints, setSectionPoints] = useState<Record<K, ControlPoint[]>>(initial);
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
@@ -65,7 +67,7 @@ export function useEditableSectionPoints<K extends string>(
       const { min, max } = getYBounds(section);
       const nextList = list.map((p, i) => {
         if (i !== idx) return p;
-        if (field === 'x') return { ...p, x: applyXConstraints(list, idx, parsed) };
+        if (field === 'x') return { ...p, x: applyXConstraints(list, idx, parsed, 0, 1, getRootX?.(section)) };
         return { ...p, y: clamp(parsed, min, max) };
       });
       return { ...current, [section]: nextList };

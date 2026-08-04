@@ -108,7 +108,8 @@ export interface GeometrySparsPayload {
 export interface GeometryTopView {
   leading_edge: number[][];
   trailing_edge: number[][];
-  profiles: unknown[];
+  /** The root and tip cross-sections' vertical boundary lines, each [leadingEdgePoint, trailingEdgePoint]. */
+  profiles: [number, number][][];
   nominal_radius: number;
 }
 

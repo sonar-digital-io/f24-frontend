@@ -8,27 +8,18 @@ import { useChartZoomPan, CHART_ZOOM_MIN, CHART_ZOOM_MAX, CHART_ZOOM_STEP } from
 import { dataToPx, pxToData, clamp, computeTicks, decimalsForStep } from '@/lib/bezierMath';
 
 /**
- * Layup mapping chart — closed straight-line polygon over a static blade
- * planform background. All control points are freely draggable.
+ * Layup mapping chart — closed straight-line polygon over the blade's real
+ * planform background (leading + trailing edge, from GET /geometry/:id/top-view/).
+ * All control points are freely draggable.
  */
-
-// Blade planform outline in VB pixel coordinates.
-// Source: lapat.svg (viewBox 0 0 359 71), placed in the Figma chart at
-//   left=76px, top=103.76px, w=357px, h=69px with -scale-y-100 flip.
-// Grid: y=0 at inner-div top+8px (=bezier py=28), y=-14 at bezier py=243 → 215px/14m.
-// Blade bounding box in data: x 10..54.6 m, y -9.43..-4.94 m (after flip correction).
-// Transform: cx = 80.8 + svg_x * 1.0137,  cy = 162.8 - svg_y * 0.9845
-const BLADE_PATH =
-  'M 356.2 158.7 ' +
-  'C 275.9 164.8 126.1 161.2 61.2 158.7 ' +
-  'L 61.2 124.2 ' +
-  'L 172.8 94.1 ' +
-  'L 413.7 131.8 ' +
-  'C 428.0 138.3 436.6 152.7 356.2 158.7 Z';
 
 interface LayupMappingChartProps {
   points: ControlPoint[];
   onChange: (points: ControlPoint[]) => void;
+  /** Leading-edge points [longitudinal, transversal], in the chart's own data scale. */
+  leadingEdge: ControlPoint[];
+  /** Trailing-edge points [longitudinal, transversal], in the chart's own data scale. */
+  trailingEdge: ControlPoint[];
   xMin?: number;
   xMax?: number;
   xStep?: number;
@@ -41,6 +32,8 @@ interface LayupMappingChartProps {
 export function LayupMappingChart({
   points,
   onChange,
+  leadingEdge,
+  trailingEdge,
   xMin = 5,
   xMax = 55,
   xStep = 5,
@@ -81,6 +74,14 @@ export function LayupMappingChart({
     setDraggingIndex(null);
   }
 
+  // Double-click any point to remove it, same as the other bezier canvases —
+  // but the polygon always needs at least 3 points to stay a closed shape.
+  function handlePointDoubleClick(idx: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (points.length <= 3) return;
+    onChange(points.filter((_, i) => i !== idx));
+  }
+
   const yTicks = computeTicks(yMin, yMax, yStep);
   const xTicks = computeTicks(xMin, xMax, xStep);
   const yDecimals = decimalsForStep(yStep);
@@ -88,6 +89,14 @@ export function LayupMappingChart({
 
   // Closed polygon points string
   const polygonPoints = points
+    .map((p) => {
+      const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
+      return `${cx.toFixed(1)},${cy.toFixed(1)}`;
+    })
+    .join(' ');
+
+  // Blade planform background: leading edge forward, trailing edge back, closed.
+  const bladeOutlinePoints = [...leadingEdge, ...trailingEdge.slice().reverse()]
     .map((p) => {
       const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
       return `${cx.toFixed(1)},${cy.toFixed(1)}`;
@@ -141,9 +150,9 @@ export function LayupMappingChart({
           yDecimals={yDecimals}
         />
 
-        {/* Static blade planform background */}
-        <path
-          d={BLADE_PATH}
+        {/* Blade planform background — leading/trailing edge from GET /geometry/:id/top-view/ */}
+        <polygon
+          points={bladeOutlinePoints}
           fill="#f1f5f9"
           stroke="#1e293b"
           strokeWidth="1.5"
@@ -174,7 +183,8 @@ export function LayupMappingChart({
               onPointerMove={(e) => handlePointerMove(idx, e)}
               onPointerUp={(e) => handlePointerUp(idx, e)}
               onPointerCancel={(e) => handlePointerUp(idx, e)}
-              tooltip="Drag to move"
+              onDoubleClick={(e) => handlePointDoubleClick(idx, e)}
+              tooltip={points.length > 3 ? 'Drag to move · Double-click to remove' : 'Drag to move'}
             />
           );
         })}

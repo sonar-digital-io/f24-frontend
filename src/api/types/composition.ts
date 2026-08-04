@@ -70,9 +70,11 @@ export interface LongitudinalMappingPoint {
   transversal_position: number;
 }
 
-/** PUT /composition/:id/mapping/longitudinal/ entry shape — no id, whether
- *  creating a new row or updating an existing one. */
+/** PUT /composition/:id/mapping/longitudinal/ entry shape — `id` is present
+ *  when updating a row that already exists on the backend, and omitted for a
+ *  brand-new row (the backend assigns it one on creation). */
 export interface LongitudinalMappingEntry {
+  id?: number;
   name: string;
   layup: number;
   mappings: LongitudinalMappingPoint[];
@@ -89,8 +91,7 @@ export interface CompositionLongitudinalMapping {
 }
 
 /** PUT /composition/:id/mapping/longitudinal/ — sent flat (unlike the
- *  composition detail response, which nests this under `longitudinal_mapping`),
- *  and its entries never carry an id, whether creating or updating a row. */
+ *  composition detail response, which nests this under `longitudinal_mapping`). */
 export interface CompositionMappingLongitudinalPayload {
   upper_side: LongitudinalMappingEntry[];
   lower_side: LongitudinalMappingEntry[];

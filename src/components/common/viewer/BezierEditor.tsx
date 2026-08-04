@@ -6,7 +6,10 @@ import { ChartGrid } from '@/components/common/viewer/ChartGrid';
 import { ChartAnchorPoint } from '@/components/common/viewer/ChartAnchorPoint';
 import { useChartZoomPan, CHART_ZOOM_MIN, CHART_ZOOM_MAX, CHART_ZOOM_STEP } from '@/hooks/useChartZoomPan';
 import {
+  VB_WIDTH,
   VB_HEIGHT,
+  PAD_LEFT,
+  PAD_RIGHT,
   PAD_TOP,
   PAD_BOTTOM,
   dataToPx,
@@ -66,6 +69,9 @@ export function BezierEditor({
 }: BezierEditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  // True while dragging point 0 past rootX — shows the "can't go past start
+  // position" label instead of silently clamping without feedback.
+  const [blockedAtRoot, setBlockedAtRoot] = useState(false);
 
   // Ghost curve: snapshot of control points at the moment a drag starts.
   // Rendered in green while dragging, cleared (via draggingIndex→null) on release.
@@ -104,8 +110,11 @@ export function BezierEditor({
     const xEps = (xMax - xMin) * 0.001;
     if (idx === 0) {
       // The first point represents the start position — draggable in x too,
-      // bounded by the chart's xMin and the next point.
-      const upper = points.length > 1 ? points[1].x - xEps : xMax;
+      // bounded by the chart's xMin, the next point, and rootX (it can sit
+      // before the start position, but never past it).
+      const neighborUpper = points.length > 1 ? points[1].x - xEps : xMax;
+      const upper = Math.min(neighborUpper, rootX);
+      setBlockedAtRoot(x > rootX);
       x = clamp(x, xMin, upper);
     } else if (idx === points.length - 1) {
       const lower = points.length > 1 ? points[idx - 1].x + xEps : xMin;
@@ -123,6 +132,7 @@ export function BezierEditor({
     } catch { /* ignore */ }
     // Setting draggingIndex → null causes the ghost to disappear on next render
     setDraggingIndex(null);
+    setBlockedAtRoot(false);
   }
 
   // Double-click any anchor (including endpoints) to remove it. Down to 0
@@ -288,6 +298,22 @@ export function BezierEditor({
             />
           );
         })}
+
+        {/* Blocked-drag label — point 0 can't be dragged past the start position */}
+        {draggingIndex === 0 && blockedAtRoot && (() => {
+          const labelW = 172;
+          const labelH = 22;
+          const cx = clamp(rootPx, PAD_LEFT + labelW / 2, VB_WIDTH - PAD_RIGHT - labelW / 2);
+          const y = PAD_TOP + 6;
+          return (
+            <g style={{ pointerEvents: 'none' }}>
+              <rect x={cx - labelW / 2} y={y} width={labelW} height={labelH} rx={4} fill="#171717" />
+              <text x={cx} y={y + labelH / 2 + 4} textAnchor="middle" fontSize="11" fill="white">
+                Can&apos;t go past start position
+              </text>
+            </g>
+          );
+        })()}
       </svg>
     </div>
   );

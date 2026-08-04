@@ -47,6 +47,10 @@ const SECTION_Y_STEP: Record<SectionKey, number> = {
   chord: 1,
 };
 
+// Same fallback ProfileDistributionPanel uses before Global properties' root
+// radius has loaded.
+const DEFAULT_ROOT_X = 0.05;
+
 const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
   sweep: [
     { x: 0, y: 0 },
@@ -79,6 +83,9 @@ interface StackingPanelProps {
   onFoldToggle: () => void;
   /** Prefill from the backend (GET /geometry/:id/edges/) instead of the mock defaults. */
   initialEdges?: GeometryEdge[];
+  /** Global properties' root radius, as a percentage (e.g. "10" for 10%) —
+   *  same value as Profile distribution's Start position, as a fraction. */
+  rootRadiusPercent?: string;
   /** PUT /geometry/:id/edges/ — persist the current sweep/dihedral/twist/chord curves. */
   onSave?: (edges: GeometryEdgeInput[]) => void;
   saving?: boolean;
@@ -89,7 +96,9 @@ function edgeMap(initialEdges?: GeometryEdge[]): Map<string, GeometryEdge> {
   return new Map((initialEdges ?? []).map((e) => [e.edge_type, e]));
 }
 
-export function StackingPanel({ folded, onFoldToggle, initialEdges, onSave, saving, saveError }: StackingPanelProps) {
+export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPercent, onSave, saving, saveError }: StackingPanelProps) {
+  const rootXPercent = parseFloat((rootRadiusPercent ?? '').replace(',', '.'));
+  const rootX = Number.isFinite(rootXPercent) ? rootXPercent / 100 : DEFAULT_ROOT_X;
   const [subTab, setSubTab] = useState<SectionKey>('sweep');
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     sweep: true,
@@ -128,7 +137,8 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, onSave, savi
       };
     })(),
     (key) => yBounds[key],
-    5
+    5,
+    () => rootX
   );
 
   function toggleSection(key: SectionKey) {
@@ -165,7 +175,7 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, onSave, savi
           yMin={yBounds[key].min}
           yMax={yBounds[key].max}
           yStep={SECTION_Y_STEP[key]}
-          rootX={0.05}
+          rootX={rootX}
         />
         <BezierPointsTable
           points={points}

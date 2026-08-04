@@ -43,7 +43,6 @@ export function BezierPointsTable({
         </thead>
         <tbody>
           {points.map((_p, idx) => {
-            const xLocked = idx === 0 || idx === points.length - 1;
             return (
               <tr key={idx} className="border-b border-[#e5e7eb] last:border-b-0">
                 <td className="px-3 py-2 text-[#0a0a0a]">{idx}</td>
@@ -56,10 +55,9 @@ export function BezierPointsTable({
                     type="text"
                     inputMode="decimal"
                     value={getInputValue(idx, 'x')}
-                    disabled={xLocked}
                     onChange={(e) => onChange(idx, 'x', e.target.value)}
                     onBlur={() => onBlur(idx, 'x')}
-                    className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:bg-[#f8fafc] disabled:text-[#6b7280]"
+                    className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
                   />
                 </td>
                 <td className="px-2 py-2">

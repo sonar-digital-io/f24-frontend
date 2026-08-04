@@ -7,26 +7,6 @@ import { clamp } from '@/lib/bezierMath';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useDraggablePosition } from '@/hooks/useDraggablePosition';
 
-/** Layup mapping bezier: longitudinal (m) along x, transversal (m) along y.
- *  X range 0.55..10.45 m, Y range -1.225..0.225 m — these are the editor's
- *  own working scale; the API stores longitudinal/transversal position as
- *  1/10th of these (see the /10 and *10 conversions where points cross the
- *  API boundary in CompositionNew.tsx). */
-const X_MIN = 0.55;
-const X_MAX = 10.45;
-const X_STEP = 1;
-const Y_MIN = -1.225;
-const Y_MAX = 0.225;
-const Y_STEP = 0.25;
-
-/** Default curve for mapping rows that haven't been edited yet. */
-export const DEFAULT_MAPPING_POINTS: ControlPoint[] = [
-  { x: X_MIN, y: Y_MIN },
-  { x: X_MIN, y: Y_MAX },
-  { x: X_MAX, y: Y_MAX },
-  { x: X_MAX, y: Y_MIN },
-];
-
 const INIT_W = 986;
 const MIN_W = 640;
 const MIN_H_FLOOR = 300;
@@ -58,6 +38,16 @@ interface LayupMappingBezierDialogProps {
   /** Controlled: the parent owns the curve per mapping row. */
   points: ControlPoint[];
   onChange: (points: ControlPoint[]) => void;
+  /** Blade planform background — from GET /geometry/:id/top-view/, in the chart's own data scale. */
+  leadingEdge: ControlPoint[];
+  trailingEdge: ControlPoint[];
+  /** Chart axis bounds — computed from the blade's real geometry, see computeMappingBounds. */
+  xMin: number;
+  xMax: number;
+  xStep: number;
+  yMin: number;
+  yMax: number;
+  yStep: number;
   onClose: () => void;
   /** Right edge of the anchor panel — dialog opens to its right. */
   anchorRight?: number;
@@ -72,6 +62,14 @@ export function LayupMappingBezierDialog({
   title,
   points,
   onChange,
+  leadingEdge,
+  trailingEdge,
+  xMin,
+  xMax,
+  xStep,
+  yMin,
+  yMax,
+  yStep,
   onClose,
   anchorRight,
   anchorTop,
@@ -158,7 +156,7 @@ export function LayupMappingBezierDialog({
       points.map((p, i) => {
         if (i !== idx) return p;
         if (field === 'x') return { ...p, x: applyXConstraints(points, idx, parsed) };
-        return { ...p, y: clamp(parsed, Y_MIN, Y_MAX) };
+        return { ...p, y: clamp(parsed, yMin, yMax) };
       }),
     );
   }
@@ -241,12 +239,14 @@ export function LayupMappingBezierDialog({
               className="h-full"
               points={points}
               onChange={onChange}
-              xMin={X_MIN}
-              xMax={X_MAX}
-              xStep={X_STEP}
-              yMin={Y_MIN}
-              yMax={Y_MAX}
-              yStep={Y_STEP}
+              leadingEdge={leadingEdge}
+              trailingEdge={trailingEdge}
+              xMin={xMin}
+              xMax={xMax}
+              xStep={xStep}
+              yMin={yMin}
+              yMax={yMax}
+              yStep={yStep}
             />
           </div>
 
@@ -270,12 +270,11 @@ export function LayupMappingBezierDialog({
                         <Input
                           type="number"
                           step="0.01"
-                          min={X_MIN}
-                          max={X_MAX}
+                          min={xMin}
+                          max={xMax}
                           value={getInputValue(idx, 'x')}
                           onChange={(e) => handleInputChange(idx, 'x', e.target.value)}
                           onBlur={() => handleInputBlur(idx, 'x')}
-                          disabled={isEndpoint}
                           className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:opacity-60"
                         />
                       </td>
@@ -283,8 +282,8 @@ export function LayupMappingBezierDialog({
                         <Input
                           type="number"
                           step="0.001"
-                          min={Y_MIN}
-                          max={Y_MAX}
+                          min={yMin}
+                          max={yMax}
                           value={getInputValue(idx, 'y')}
                           onChange={(e) => handleInputChange(idx, 'y', e.target.value)}
                           onBlur={() => handleInputBlur(idx, 'y')}

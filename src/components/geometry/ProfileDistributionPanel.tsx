@@ -143,6 +143,8 @@ export function ProfileDistributionPanel({
     setOpenSections((s) => ({ ...s, [key]: !s[key] }));
   }
 
+  const rootX = Number.isFinite(parseFloat(startPos)) ? parseFloat(startPos) : DEFAULT_START_POSITION;
+
   const {
     sectionPoints,
     setPointsForSection,
@@ -150,11 +152,9 @@ export function ProfileDistributionPanel({
     getInputValue,
     handleInputChange,
     handleInputBlur,
-  } = useEditableSectionPoints(INITIAL_SECTION_POINTS, () => ({ min: 0, max: Y_MAX }), 2);
+  } = useEditableSectionPoints(INITIAL_SECTION_POINTS, () => ({ min: 0, max: Y_MAX }), 2, () => rootX);
 
-  // The three curves' first point stays in sync with each other, but is
-  // independent from the Start position field/yellow line — that field
-  // only controls where the reference indicator is drawn, not the curves.
+  // The three curves' first point stays in sync with each other.
   function handleCurveChange(key: SectionKey, next: ControlPoint[]) {
     const prevFirstX = sectionPoints[key][0]?.x;
     const nextFirstX = next[0]?.x;
@@ -170,6 +170,18 @@ export function ProfileDistributionPanel({
       );
     });
   }
+
+  // Point 0 (relative radius) defaults to the Start position field's value —
+  // pushed into all three curves whenever it changes (typed, or synced from
+  // Global properties' root radius).
+  useEffect(() => {
+    SECTION_KEYS.forEach((key) => {
+      const points = sectionPoints[key];
+      if (points[0]?.x === rootX) return;
+      setPointsForSection(key, points.map((p, i) => (i === 0 ? { ...p, x: rootX } : p)));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootX]);
 
   function handleStartPosChange(raw: string) {
     setStartPos(raw);
@@ -226,7 +238,7 @@ export function ProfileDistributionPanel({
                 points={points}
                 onChange={(next) => handleCurveChange(key, next)}
                 yMax={Y_MAX}
-                rootX={Number.isFinite(parseFloat(startPos)) ? parseFloat(startPos) : DEFAULT_START_POSITION}
+                rootX={rootX}
               />
             )}
           </div>

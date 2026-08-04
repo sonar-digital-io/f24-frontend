@@ -54,6 +54,91 @@ export function decimalsForStep(step: number): number {
   return step >= 1 ? 0 : Math.max(0, -Math.floor(Math.log10(step)));
 }
 
+/** "Nice" axis step (1/2/5 × 10^n) that gives roughly `targetTicks` grid lines over `range`. */
+export function niceStep(range: number, targetTicks = 8): number {
+  if (!(range > 0)) return 1;
+  const raw = range / targetTicks;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const nice = norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10;
+  return nice * mag;
+}
+
+export interface MappingBounds {
+  longitudinalMin: number;
+  longitudinalMax: number;
+  transversalMin: number;
+  transversalMax: number;
+}
+
+/**
+ * Longitudinal-mapping chart bounds — ported from the sibling project's
+ * `updateTopViewDrawing`: raw min/max over the blade's leading+trailing edge
+ * (both in absolute/real units, straight from GET /geometry/:id/top-view/),
+ * padded by `paddingRatio`, then expanded further so any already-saved
+ * mapping point (also absolute) is never clipped outside the chart.
+ */
+export function computeMappingBounds(
+  leadingEdge: ControlPoint[],
+  trailingEdge: ControlPoint[],
+  existingPoints: ControlPoint[],
+  paddingRatio = 0.1,
+): MappingBounds {
+  const edgePoints = [...leadingEdge, ...trailingEdge];
+  if (edgePoints.length === 0) {
+    return { longitudinalMin: 0, longitudinalMax: 1, transversalMin: -1, transversalMax: 1 };
+  }
+  const rawLongMin = Math.min(...edgePoints.map((p) => p.x));
+  const rawLongMax = Math.max(...edgePoints.map((p) => p.x));
+  const rawTransMin = Math.min(...edgePoints.map((p) => p.y));
+  const rawTransMax = Math.max(...edgePoints.map((p) => p.y));
+
+  // Reference project's formula multiplies the transversal range by
+  // paddingRatio*longitudinalRange then divides by that same transversal
+  // range again — it cancels out, leaving padding proportional to the
+  // longitudinal range only (kept as-is to match its actual behavior).
+  const longitudinalPadding = (rawLongMax - rawLongMin) * paddingRatio;
+  const transversalPadding = (paddingRatio * (rawLongMax - rawLongMin)) / 2;
+
+  let longitudinalMin = rawLongMin - longitudinalPadding;
+  let longitudinalMax = rawLongMax + longitudinalPadding;
+  let transversalMin = rawTransMin - transversalPadding;
+  let transversalMax = rawTransMax + transversalPadding;
+
+  existingPoints.forEach((p) => {
+    if (p.x > longitudinalMax) longitudinalMax = p.x;
+    if (p.x < longitudinalMin) longitudinalMin = p.x;
+    if (p.y > transversalMax) transversalMax = p.y;
+    if (p.y < transversalMin) transversalMin = p.y;
+  });
+
+  return { longitudinalMin, longitudinalMax, transversalMin, transversalMax };
+}
+
+/**
+ * Bounding box over every point of every top-view `profiles` segment (root,
+ * tip, and any others), padded by `paddingRatio` independently in each
+ * direction — used to seed a brand-new layup mapping's rectangle.
+ */
+export function computeProfilesBoundingRect(profiles: ControlPoint[][], paddingRatio = 0.1): MappingBounds {
+  const points = profiles.flat();
+  if (points.length === 0) {
+    return { longitudinalMin: 0, longitudinalMax: 1, transversalMin: -1, transversalMax: 1 };
+  }
+  const minX = Math.min(...points.map((p) => p.x));
+  const maxX = Math.max(...points.map((p) => p.x));
+  const minY = Math.min(...points.map((p) => p.y));
+  const maxY = Math.max(...points.map((p) => p.y));
+  const xPad = (maxX - minX) * paddingRatio;
+  const yPad = (maxY - minY) * paddingRatio;
+  return {
+    longitudinalMin: minX - xPad,
+    longitudinalMax: maxX + xPad,
+    transversalMin: minY - yPad,
+    transversalMax: maxY + yPad,
+  };
+}
+
 /**
  * Constrains a control point's x drag to stay within its neighbors (with a
  * small margin). The first/last point may move too, but stay within the
@@ -66,11 +151,14 @@ export function applyXConstraints(
   idx: number,
   nextX: number,
   xMin = 0,
-  xMax = 1
+  xMax = 1,
+  /** Point 0 additionally can't sit past this (e.g. the profile's start position). */
+  rootX?: number
 ): number {
   const eps = (xMax - xMin) * 0.001 || 0.001;
   if (idx === 0) {
-    const upper = points[1] ? points[1].x - eps : xMax;
+    const neighborUpper = points[1] ? points[1].x - eps : xMax;
+    const upper = rootX !== undefined ? Math.min(neighborUpper, rootX) : neighborUpper;
     return Math.max(xMin, Math.min(upper, nextX));
   }
   if (idx === points.length - 1) {
