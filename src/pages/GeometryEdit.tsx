@@ -93,6 +93,11 @@ export function GeometryEdit() {
   const updateGeneratorMutation = useUpdateProfileGenerator();
   const updateEdgesMutation = useUpdateGeometryEdges(geometryId);
   const edgesQuery = useGeometryEdges(geometryId);
+  // Profile distribution's tab unmounts on tab switch, so its bezier curves
+  // need to be remembered here — seeded from GET /geometry/:id/'s nested
+  // profile_generator_parameters on load, then kept in sync with whatever
+  // was last sent to PUT/POST /geometry/:id/tools/profile-generator/.
+  const [savedProfileParams, setSavedProfileParams] = useState<ProfileGeneratorParameters | undefined>(undefined);
   const [resultStl, setResultStl] = useState<ArrayBuffer | undefined>(undefined);
   const [resultScale, setResultScale] = useState(1);
   const [resultRequested, setResultRequested] = useState(false);
@@ -161,6 +166,10 @@ export function GeometryEdit() {
 
     if (g.profiles) {
       setHydratedProfiles(g.profiles.map(toUiProfile));
+    }
+
+    if (g.profile_generator_parameters) {
+      setSavedProfileParams(g.profile_generator_parameters);
     }
 
     setHydrated(true);
@@ -240,10 +249,12 @@ export function GeometryEdit() {
 
   async function handleSaveProfileGeneratorParams(params: ProfileGeneratorParameters) {
     await updateGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
+    setSavedProfileParams(params);
   }
 
   async function handleGenerateProfiles(params: ProfileGeneratorParameters) {
     await runGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
+    setSavedProfileParams(params);
   }
 
   // Generate profiles from the distribution curves, persist them via
@@ -254,6 +265,7 @@ export function GeometryEdit() {
       payload: { profile_generator_parameters: params },
     });
     await updateProfilesMutation.mutateAsync({ profiles });
+    setSavedProfileParams(params);
     setHydratedProfiles(profiles.map((p, i) => toUiProfile({ ...p, id: i, file: null })));
     setActiveTab('profiles');
   }
@@ -543,6 +555,7 @@ export function GeometryEdit() {
               folded={profileFolded}
               onFoldToggle={() => setProfileFolded((f) => !f)}
               rootRadiusPercent={props.rootRadius}
+              initialParameters={savedProfileParams}
               onSaveParameters={handleSaveProfileGeneratorParams}
               onGenerate={handleGenerateProfiles}
               onSaveAndNext={handleSaveAndNextDistribution}

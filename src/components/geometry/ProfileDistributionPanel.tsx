@@ -77,6 +77,11 @@ interface ProfileDistributionPanelProps {
   /** Global properties' root radius, as a percentage (e.g. "10" for 10%) —
    *  kept in sync with Start position, which is the same value as a fraction (0.1). */
   rootRadiusPercent?: string;
+  /** Previously saved parameters — from GET /geometry/:id/'s nested
+   *  profile_generator_parameters, or whatever was last sent to PUT/POST
+   *  /geometry/:id/tools/profile-generator/ — hydrated into profile count,
+   *  end position and the three curves. */
+  initialParameters?: ProfileGeneratorParameters;
   /** PUT /geometry/:id/tools/profile-generator/ — persist the current parameters. */
   onSaveParameters?: (params: ProfileGeneratorParameters) => void;
   /** POST /geometry/:id/tools/profile-generator/ — run the generator. */
@@ -95,6 +100,7 @@ export function ProfileDistributionPanel({
   folded,
   onFoldToggle,
   rootRadiusPercent,
+  initialParameters,
   onSaveParameters,
   onGenerate,
   onSaveAndNext,
@@ -116,8 +122,8 @@ export function ProfileDistributionPanel({
     setStartPos(String(percent / 100));
   }, [rootRadiusPercent]);
 
-  const [endPos, setEndPos] = useState('1');
-  const [profileCount, setProfileCount] = useState('6');
+  const [endPos, setEndPos] = useState(String(initialParameters?.end_position ?? 1));
+  const [profileCount, setProfileCount] = useState(String(initialParameters?.profile_count ?? 6));
   const [subTab, setSubTab] = useState<SectionKey>('maximum-camber');
   // Per-section: in folded mode all three sections render their own switch,
   // so a shared boolean would flip all of them at once.
@@ -152,7 +158,19 @@ export function ProfileDistributionPanel({
     getInputValue,
     handleInputChange,
     handleInputBlur,
-  } = useEditableSectionPoints(INITIAL_SECTION_POINTS, () => ({ min: 0, max: Y_MAX }), 2, () => rootX);
+  } = useEditableSectionPoints(
+    (() => {
+      const parameterMap = new Map((initialParameters?.parameters ?? []).map((p) => [p.reference, p]));
+      return SECTION_KEYS.reduce((acc, key) => {
+        const saved = parameterMap.get(SECTION_TO_REFERENCE[key]);
+        acc[key] = saved?.control_points ?? INITIAL_SECTION_POINTS[key];
+        return acc;
+      }, {} as Record<SectionKey, ControlPoint[]>);
+    })(),
+    () => ({ min: 0, max: Y_MAX }),
+    2,
+    () => rootX
+  );
 
   // The three curves' first point stays in sync with each other.
   function handleCurveChange(key: SectionKey, next: ControlPoint[]) {

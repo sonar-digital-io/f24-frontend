@@ -86,6 +86,7 @@ export interface GeometryProfilesWritePayload {
 export interface GeometryDetail extends Geometry {
   settings?: KeyValuePair[];
   profiles?: GeometryProfile[];
+  profile_generator_parameters?: ProfileGeneratorParameters;
 }
 
 export interface GeometryProfilePreviewPayload {
