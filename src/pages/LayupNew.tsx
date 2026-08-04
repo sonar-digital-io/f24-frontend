@@ -5,7 +5,7 @@ import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { LayupBuilder } from '@/components/layup/LayupBuilder';
+import { LayupBuilder, type Ply } from '@/components/layup/LayupBuilder';
 import { LAYUPS, createLayup, updateLayup } from '@/data/layups';
 
 const TABS = [
@@ -65,6 +65,7 @@ export function LayupNew() {
   const [name, setName] = useState(existing?.name ?? '');
   const [description, setDescription] = useState(existing?.description ?? '');
   const [laminateArchitecture, setLaminateArchitecture] = useState<LaminateArchitecture | ''>('');
+  const [plies, setPlies] = useState<Ply[]>([]);
 
   // Sub-toolbar title: current name when set, else the existing layup name, else "New layup"
   const titleText = name.trim() || existing?.name || 'New layup';
@@ -154,7 +155,7 @@ export function LayupNew() {
           </form>
         )}
 
-        {activeTab === 'layup-building' && <LayupBuilder />}
+        {activeTab === 'layup-building' && <LayupBuilder plies={plies} onPliesChange={setPlies} />}
       </main>
     </div>
   );

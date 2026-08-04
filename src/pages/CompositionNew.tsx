@@ -12,22 +12,19 @@ import { TransversalMappingSection } from '@/components/composition/TransversalM
 import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
 import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
 import { CompositionLayupTab, type CompositionLayup } from '@/components/composition/CompositionLayupTab';
+import { getMaterialColor, type Ply } from '@/components/layup/LayupBuilder';
 import { LayupMappingTable, type LayupMapping } from '@/components/composition/LayupMappingTable';
 import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
-import { useCreateComposition, useCompositionDetail, useUpdateComposition } from '@/hooks/api/useComposition';
+import {
+  useCreateComposition,
+  useCompositionDetail,
+  useUpdateComposition,
+  useUpdateCompositionMappingLongitudinal,
+  useFetchCompositionIntersections,
+  useFetchCompositionMappingTransversal,
+} from '@/hooks/api/useComposition';
+import { useMaterialList } from '@/hooks/api/useMaterials';
 import { updateCompositionSettings } from '@/api/composition';
-
-const DEFAULT_UPPER_MAPPINGS: LayupMapping[] = [
-  { id: 'u0', name: 'OUTER-SHELL', layupId: 'biax-skin-04' },
-  { id: 'u1', name: 'MID-SHELL',   layupId: 'biax-skin-08' },
-  { id: 'u2', name: 'INNER-SHELL', layupId: 'hyb-trans-12' },
-];
-
-const DEFAULT_LOWER_MAPPINGS: LayupMapping[] = [
-  { id: 'l0', name: 'OUTER-SHELL copy', layupId: 'biax-skin-04' },
-  { id: 'l1', name: 'MID-SHELL copy',   layupId: 'biax-skin-08' },
-  { id: 'l2', name: 'INNER-SHELL copy', layupId: 'hyb-trans-12' },
-];
 
 export function CompositionNew() {
   const navigate = useNavigate();
@@ -42,6 +39,11 @@ export function CompositionNew() {
   const duplicateQuery = useCompositionDetail(duplicateSourceId);
   const createMutation = useCreateComposition();
   const updateMutation = useUpdateComposition(compositionId);
+  const updateMappingLongitudinalMutation = useUpdateCompositionMappingLongitudinal(compositionId);
+  const fetchIntersectionsMutation = useFetchCompositionIntersections();
+  const fetchMappingTransversalMutation = useFetchCompositionMappingTransversal();
+  const layupOptions = detailQuery.data?.layups ?? [];
+  const materialsQuery = useMaterialList();
 
   const [activeTab, setActiveTab] = useState<
     'general' | 'geometry' | 'layup' | 'layup-mapping' | 'transversal-mapping'
@@ -69,9 +71,12 @@ export function CompositionNew() {
     const hydratedDescription = c.description ?? '';
     const hydratedDate =
       typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO();
+    const hydratedTargetWeight = c.settings?.find((s) => s.reference === 'target_weight')?.value;
     setName(c.name);
     setDescription(hydratedDescription);
     setDate(hydratedDate);
+    if (hydratedTargetWeight !== undefined) setTargetWeight(String(hydratedTargetWeight));
+    if (c.geometry != null) setSelectedGeometryId(String(c.geometry));
     setBaseline({ name: c.name, description: hydratedDescription, date: hydratedDate });
     setHydrated(true);
   }, [isEditing, hydrated, detailQuery.isFetching, detailQuery.data]);
@@ -101,17 +106,74 @@ export function CompositionNew() {
   // Layup — locally-created layups for this composition, separate from the
   // per-side layup mapping below (which maps the shared LAYUPS catalog).
   const [layups, setLayups] = useState<CompositionLayup[]>([]);
+  const [layupsHydrated, setLayupsHydrated] = useState(false);
   function addLayup(name: string) {
-    setLayups((arr) => [...arr, { id: nextLocalId('layup'), name }]);
+    setLayups((arr) => [...arr, { id: nextLocalId('layup'), name, plies: [] }]);
+  }
+  function updateLayupPlies(layupId: string, updater: (current: Ply[]) => Ply[]) {
+    setLayups((arr) => arr.map((l) => (l.id === layupId ? { ...l, plies: updater(l.plies) } : l)));
   }
 
-  // Layup mapping — pre-filled with defaults for existing compositions
-  const [upperMappings, setUpperMappings] = useState<LayupMapping[]>(
-    isEditing ? DEFAULT_UPPER_MAPPINGS : [{ id: 'u0', name: '', layupId: null }],
-  );
-  const [lowerMappings, setLowerMappings] = useState<LayupMapping[]>(
-    isEditing ? DEFAULT_LOWER_MAPPINGS : [{ id: 'l0', name: '', layupId: null }],
-  );
+  // Hydrate saved layups (and their layers) from the backend — separate from
+  // the general hydration above since it also needs the materials list
+  // loaded, to resolve each layer's material id back to a name.
+  useEffect(() => {
+    if (
+      !isEditing ||
+      layupsHydrated ||
+      detailQuery.isFetching ||
+      !detailQuery.data ||
+      materialsQuery.isLoading
+    ) {
+      return;
+    }
+    const materials = materialsQuery.data ?? [];
+    const savedLayups = detailQuery.data.layups ?? [];
+    setLayups(
+      savedLayups.map((l) => ({
+        id: String(l.id),
+        name: l.name,
+        plies: l.layers.map((layer) => {
+          const materialName = materials.find((m) => m.id === layer.material)?.name ?? 'Select';
+          return {
+            id: String(layer.id),
+            name: layer.name,
+            material: materialName,
+            thickness: layer.thickness,
+            orientation: layer.orientation,
+            color: getMaterialColor(materialName),
+          };
+        }),
+      }))
+    );
+    setLayupsHydrated(true);
+  }, [isEditing, layupsHydrated, detailQuery.isFetching, detailQuery.data, materialsQuery.isLoading, materialsQuery.data]);
+
+  // Layup mapping — no mapping rows by default; the user adds them explicitly.
+  const [upperMappings, setUpperMappings] = useState<LayupMapping[]>([]);
+  const [lowerMappings, setLowerMappings] = useState<LayupMapping[]>([]);
+  const [mappingsHydrated, setMappingsHydrated] = useState(false);
+
+  // Hydrate saved layup mapping rows (upper/lower side) from the backend.
+  useEffect(() => {
+    if (!isEditing || mappingsHydrated || detailQuery.isFetching || !detailQuery.data) return;
+    // The API stores longitudinal/transversal position at 1/10th of the
+    // bezier editor's own working scale — see the matching /10 conversion
+    // in handleSaveLayupMapping below.
+    const toLayupMapping = (entry: NonNullable<typeof detailQuery.data.longitudinal_mapping>['upper_side'][number]): LayupMapping => ({
+      id: String(entry.id),
+      name: entry.name,
+      layupId: String(entry.layup),
+      points: entry.mappings.map((m) => ({ x: m.longitudinal_position * 10, y: m.transversal_position * 10 })),
+    });
+    const longitudinalMapping = detailQuery.data.longitudinal_mapping;
+    if (longitudinalMapping) {
+      setUpperMappings(longitudinalMapping.upper_side.map(toLayupMapping));
+      setLowerMappings(longitudinalMapping.lower_side.map(toLayupMapping));
+    }
+    setMappingsHydrated(true);
+  }, [isEditing, mappingsHydrated, detailQuery.isFetching, detailQuery.data]);
+
   const [layupPicker, setLayupPicker] = useState<{
     side: 'upper' | 'lower';
     mappingId: string;
@@ -232,6 +294,39 @@ export function CompositionNew() {
     setUpperMappings(lowerMappings.map((m) => ({ ...m, id: nextLocalId('u-copy'), name: m.name ? `${m.name} copy` : '' })));
   }
 
+  const layupMappingSavePending =
+    updateMappingLongitudinalMutation.isPending ||
+    fetchIntersectionsMutation.isPending ||
+    fetchMappingTransversalMutation.isPending;
+  const layupMappingSaveError =
+    updateMappingLongitudinalMutation.isError ||
+    fetchIntersectionsMutation.isError ||
+    fetchMappingTransversalMutation.isError;
+
+  async function handleSaveLayupMapping() {
+    // The bezier editor works in its own scale (see LayupMappingBezierDialog);
+    // the API expects longitudinal/transversal position at 1/10th of that.
+    const toEntries = (mappings: LayupMapping[]) =>
+      mappings
+        .filter((m) => m.layupId)
+        .map((m) => ({
+          name: m.name,
+          layup: Number(m.layupId),
+          mappings: (m.points ?? DEFAULT_MAPPING_POINTS).map((p) => ({
+            longitudinal_position: p.x / 10,
+            transversal_position: p.y / 10,
+          })),
+        }));
+
+    await updateMappingLongitudinalMutation.mutateAsync({
+      upper_side: toEntries(upperMappings),
+      lower_side: toEntries(lowerMappings),
+    });
+    await fetchIntersectionsMutation.mutateAsync(compositionId);
+    setActiveTab('transversal-mapping');
+    await fetchMappingTransversalMutation.mutateAsync(compositionId);
+  }
+
   return (
     <div className="flex min-h-screen w-full flex-col">
       <MainNav />
@@ -303,11 +398,26 @@ export function CompositionNew() {
               {savePending ? 'Saving…' : isEditing ? 'Update composition' : 'Create composition'}
             </button>
           )}
+          {activeTab === 'layup-mapping' && (
+            <button
+              type="button"
+              onClick={handleSaveLayupMapping}
+              disabled={layupMappingSavePending}
+              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {layupMappingSavePending ? 'Saving…' : 'Save'}
+            </button>
+          )}
         </div>
       </div>
       {saveError && (
         <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
           Failed to {isEditing ? 'update' : 'create'} composition. Please try again.
+        </div>
+      )}
+      {layupMappingSaveError && (
+        <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
+          Failed to save layup mapping. Please try again.
         </div>
       )}
 
@@ -343,7 +453,13 @@ export function CompositionNew() {
         )}
 
         {activeTab === 'layup' && (
-          <CompositionLayupTab layups={layups} onAddLayup={addLayup} />
+          <CompositionLayupTab
+            compositionId={compositionId}
+            layups={layups}
+            onAddLayup={addLayup}
+            onUpdateLayupPlies={updateLayupPlies}
+            onSaved={() => setActiveTab('layup-mapping')}
+          />
         )}
 
         {/* Always mounted — hidden instead of unmounted so mapping state survives tab switches */}
@@ -352,6 +468,7 @@ export function CompositionNew() {
               title="Upper side"
               copyLabel="Copy to lower side"
               mappings={upperMappings}
+              layupOptions={layupOptions}
               activeMappingId={bezierFor?.side === 'upper' ? bezierFor.mappingId : null}
               onAdd={addUpper}
               onDelete={(id) => deleteMapping('upper', id)}
@@ -370,6 +487,7 @@ export function CompositionNew() {
               title="Lower side"
               copyLabel="Copy to upper side"
               mappings={lowerMappings}
+              layupOptions={layupOptions}
               activeMappingId={bezierFor?.side === 'lower' ? bezierFor.mappingId : null}
               onAdd={addLower}
               onDelete={(id) => deleteMapping('lower', id)}
@@ -388,14 +506,15 @@ export function CompositionNew() {
         {/* Always mounted — hidden instead of unmounted so internal state survives tab switches */}
         <div className={`pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto${activeTab !== 'transversal-mapping' ? ' hidden' : ''}`}>
           <TransversalMappingSection
+            compositionId={compositionId}
             useDefaultData={isEditing}
-            upperMappingNames={upperMappings.map((m) => m.name)}
           />
         </div>
       </div>
       </main>
 
       <LayupPickerDialog
+        compositionId={compositionId}
         open={layupPicker !== null}
         currentLayupId={pickerCurrentLayupId}
         onSelect={(layupId) => {

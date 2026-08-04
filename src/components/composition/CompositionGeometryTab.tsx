@@ -2,7 +2,7 @@ import { CheckCircle2, LayoutGrid, List as ListIcon, Search, XCircle } from 'luc
 import { Input } from '@/components/ui/input';
 import { GeometryCard } from '@/components/common/card/GeometryCard';
 import { type Geometry as GeometryItem, type BladeType } from '@/data/geometries';
-import { useGeometryList } from '@/hooks/api/useGeometry';
+import { useGeometryList, useFetchGeometryTopView } from '@/hooks/api/useGeometry';
 import { useFetchCompositionIntersections, useUpdateCompositionGeometry } from '@/hooks/api/useComposition';
 import type { Geometry as BackendGeometry } from '@/api/types/geometry';
 
@@ -42,7 +42,8 @@ export function CompositionGeometryTab({
   const geometries = backendGeometries ?? [];
   const updateGeometryMutation = useUpdateCompositionGeometry(compositionId);
   const intersectionsMutation = useFetchCompositionIntersections();
-  const selectPending = updateGeometryMutation.isPending || intersectionsMutation.isPending;
+  const topViewMutation = useFetchGeometryTopView();
+  const selectPending = updateGeometryMutation.isPending || intersectionsMutation.isPending || topViewMutation.isPending;
 
   const filteredGeometries = geometries.filter(
     (g) =>
@@ -55,6 +56,7 @@ export function CompositionGeometryTab({
     onSelectGeometry(String(g.id));
     await updateGeometryMutation.mutateAsync({ geometry: g.id });
     await intersectionsMutation.mutateAsync(compositionId);
+    await topViewMutation.mutateAsync(g.id);
     onAfterSelect();
   }
 
@@ -104,7 +106,7 @@ export function CompositionGeometryTab({
         </div>
       </div>
 
-      {(updateGeometryMutation.isError || intersectionsMutation.isError) && (
+      {(updateGeometryMutation.isError || intersectionsMutation.isError || topViewMutation.isError) && (
         <p className="mt-3 text-[13px] text-[#dc2626]">Failed to select geometry. Please try again.</p>
       )}
 
@@ -185,9 +187,13 @@ export function CompositionGeometryTab({
                         type="button"
                         onClick={() => handleSelect(g)}
                         disabled={selectPending}
-                        className="inline-flex h-8 items-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
+                        className={
+                          isSelected
+                            ? 'inline-flex h-8 items-center rounded-md border border-[#006496] bg-white px-3 text-[12px] font-medium text-[#006496] hover:bg-[#eef9ff] disabled:cursor-not-allowed disabled:opacity-40'
+                            : 'inline-flex h-8 items-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40'
+                        }
                       >
-                        Select
+                        {isSelected ? 'Selected' : 'Select'}
                       </button>
                     </td>
                   </tr>

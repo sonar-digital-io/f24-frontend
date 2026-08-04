@@ -24,7 +24,7 @@ function hashString(s: string): number {
   return h;
 }
 
-function getMaterialColor(materialName: string): string {
+export function getMaterialColor(materialName: string): string {
   if (!materialName || materialName === 'Select') return FALLBACK_COLOR;
   return PLY_COLOR_PALETTE[hashString(materialName) % PLY_COLOR_PALETTE.length];
 }
@@ -38,11 +38,15 @@ export interface Ply {
   color: string; // hex
 }
 
-
-const INITIAL_PLIES: Ply[] = [];
+export interface LayupBuilderProps {
+  plies: Ply[];
+  onPliesChange: (updater: (current: Ply[]) => Ply[]) => void;
+}
 
 /**
- * Drag-and-drop reorderable ply list + isometric schematic.
+ * Drag-and-drop reorderable ply list + isometric schematic. Controlled —
+ * the caller owns `plies` (e.g. LayupNew's own state, or one composition
+ * layup's slice of state), so multiple builders can coexist independently.
  *
  * - HTML5 native DnD on each row. `draggable={true}` on the `<tr>`, plus
  *   onDragStart sets the source index in the dataTransfer payload.
@@ -52,14 +56,13 @@ const INITIAL_PLIES: Ply[] = [];
  * - Touch devices: HTML5 DnD doesn't fire on mobile. If touch support is
  *   needed, swap to `dnd-kit` (modular drop-in) — see lessons.md.
  */
-export function LayupBuilder() {
-  const [plies, setPlies] = useState<Ply[]>(INITIAL_PLIES);
+export function LayupBuilder({ plies, onPliesChange }: LayupBuilderProps) {
   const [materialPickerPlyId, setMaterialPickerPlyId] = useState<string | null>(null);
   const { data: materialData } = useMaterialList();
   const materials = materialData ?? [];
 
   function reorderPlies(fromIdx: number, toIdx: number) {
-    setPlies((current) => {
+    onPliesChange((current) => {
       const next = [...current];
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
@@ -70,7 +73,7 @@ export function LayupBuilder() {
   const { draggingIdx, insertBeforeIdx, getHandleProps, getRowDragProps } = useDragReorder(reorderPlies);
 
   function updatePly<K extends keyof Ply>(idx: number, key: K, value: Ply[K]) {
-    setPlies((current) =>
+    onPliesChange((current) =>
       current.map((p, i) => {
         if (i !== idx) return p;
         return { ...p, [key]: value };
@@ -79,7 +82,7 @@ export function LayupBuilder() {
   }
 
   function handleDelete(idx: number) {
-    setPlies((current) => current.filter((_, i) => i !== idx));
+    onPliesChange((current) => current.filter((_, i) => i !== idx));
   }
 
   function handleAdd() {
@@ -91,7 +94,7 @@ export function LayupBuilder() {
       orientation: 0,
       color: FALLBACK_COLOR,
     };
-    setPlies((current) => [...current, newPly]);
+    onPliesChange((current) => [...current, newPly]);
   }
 
   return (

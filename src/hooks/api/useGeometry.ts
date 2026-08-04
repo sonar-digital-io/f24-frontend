@@ -176,6 +176,12 @@ export function useGeometryTopView(geometryId: number) {
   });
 }
 
+export function useFetchGeometryTopView() {
+  return useMutation({
+    mutationFn: (geometryId: number) => geometryApi.getGeometryTopView(geometryId),
+  });
+}
+
 export function useRunProfileGenerator() {
   return useMutation({
     mutationFn: ({ geometryId, payload }: { geometryId: number; payload: ProfileGeneratorPayload }) =>

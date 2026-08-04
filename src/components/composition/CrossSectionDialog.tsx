@@ -1,23 +1,19 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import type { Profile } from '@/data/profiles';
-import { LAYUPS } from '@/data/layups';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import {
-  CROSS_SECTION_N as N,
-  buildAllPts,
   offsetSvgPts,
   computeArcFractions,
-  signedToIdx,
+  fracToIdx,
   perimeterLabel,
-  chordLabel,
   getSegPts,
   segD,
+  fitPointsToSvg,
 } from '@/lib/crossSectionGeometry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface CsLayup {
+interface CsRing {
   id: string;
   badge: string;
   layupName: string;
@@ -27,32 +23,37 @@ interface CsLayup {
   /** Value shown in the End position table column */
   displayEnd: number;
   endLockedTo: string;
-  surface: 'upper' | 'lower' | 'transversal';
   /** First allPts index of the segment */
   segLo: number;
   /** Last allPts index of the segment */
   segHi: number;
-  /** True when the transversal wraps around the trailing edge */
+  /** True when the segment wraps around the 0/1 perimeter-fraction seam */
   wrapArc: boolean;
   color: string;
   /** Inward perpendicular offset in SVG-viewport units */
   svgOffset: number;
 }
 
-export interface TransversalEntryForCs {
+export interface TransversalMappingEntryForCs {
   id: string;
   name: string;
   layupName: string;
-  /** Signed chord position, −1..1 */
-  startPos: number;
-  endPos: number;
+  /** Perimeter fraction along the profile outline, 0..1 */
+  startFrac: number;
+  endFrac: number;
+  /** Resolved from GET /composition/:id/intersections/ (start_locked_to /
+   *  end_locked_to point to intersection ids there) — falls back to a
+   *  geometric guess when not provided. */
+  startLockedToLabel?: string;
+  endLockedToLabel?: string;
 }
 
 interface CrossSectionDialogProps {
-  profile: Profile;
-  transversalEntries: TransversalEntryForCs[];
-  /** Display names from the parent's upper layup mapping rows (OUTER-SHELL, MID-SHELL, …). */
-  layupMappingNames?: string[];
+  profileName: string;
+  /** Raw [x, y] cross-section points from GET /geometry/:id/profiles/:profileId/ — a closed loop. */
+  points: [number, number][];
+  /** From GET /composition/:id/mapping/transversal/, for this profile. */
+  entries: TransversalMappingEntryForCs[];
   onClose: () => void;
 }
 
@@ -66,122 +67,51 @@ const INNER_W = VB_W - 2 * PAD_X;
 const INNER_H = VB_H - 2 * PAD_Y;
 
 const RING_OFFSET = 5; // SVG-viewport units between consecutive rings
-const NUM_PAIRS = 3;   // number of concentric sandwich pairs
 
-// 6 unique colors: first 3 for uppers (layup0..2), last 3 for lowers (copies)
-const REGULAR_COLORS = [
-  '#22c55e', // layup0      – green
-  '#3b82f6', // layup1      – blue
-  '#f59e0b', // layup2      – amber
-  '#e11d48', // layup0 copy – rose
-  '#8b5cf6', // layup1 copy – violet
-  '#0891b2', // layup2 copy – cyan
-];
-const TRANSVERSAL_COLORS = ['#64748b', '#ca8a04', '#be185d', '#14b8a6', '#ef4444'];
+// Cycled by index — supports any number of mapping segments.
+const RING_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#e11d48', '#8b5cf6', '#0891b2', '#64748b', '#ca8a04'];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function CrossSectionDialog({
-  profile,
-  transversalEntries,
-  layupMappingNames,
-  onClose,
-}: CrossSectionDialogProps) {
+export function CrossSectionDialog({ profileName, points, entries, onClose }: CrossSectionDialogProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   useEscapeKey(onClose);
 
-  const baseM = profile.maxCamber / 100;
-  const baseP = Math.max(0.001, Math.min(0.999, profile.maxCamberPosition / 100));
-  const baseT = profile.thickness / 100;
-
-  // Build NACA pts and compute y bounds so the SVG scales to fit any profile
-  const nacaPts = buildAllPts(baseM, baseP, baseT);
-  const nacaYs = nacaPts.map(([, y]) => y);
-  const yMax = Math.max(...nacaYs);
-  const yMin = Math.min(...nacaYs);
-  const yRange = Math.max(yMax - yMin, 1e-6);
-
-  // Maps NACA data-space → SVG viewport, fitting the profile within PAD_Y margins
-  function toSvg([x, y]: [number, number]): [number, number] {
-    return [PAD_X + x * INNER_W, PAD_Y + ((yMax - y) / yRange) * INNER_H];
-  }
-
-  const svgBasePts: [number, number][] = nacaPts.map(toSvg);
+  // Fit the raw profile points into the SVG viewport (uniform scale, both axes).
+  const svgBasePts: [number, number][] = fitPointsToSvg(points, INNER_W, INNER_H, PAD_X, PAD_Y);
   const arcFracs = computeArcFractions(svgBasePts);
-  // LE perimeter fraction — for NACA 2412 this is ~0.5343 (upper surface is slightly longer)
-  const leFrac = arcFracs[N];
+  // Leading edge = midpoint of the closed loop (TE → upper → LE → lower → TE).
+  const halfN = Math.floor((svgBasePts.length - 1) / 2);
+  const leFrac = arcFracs[halfN];
 
-  // Pull the first NUM_PAIRS layups from the database
-  const layupData = LAYUPS.slice(0, NUM_PAIRS);
-
-  // Upper surface entries
-  const upperEntries: CsLayup[] = layupData.map((layup, i) => ({
-    id: `upper-${i}`,
-    badge: layupMappingNames?.[i] || `layup${i}`,
-    layupName: layup.name,
-    displayStart: 0,
-    startLockedTo: perimeterLabel(0, leFrac),
-    displayEnd: leFrac,
-    endLockedTo: perimeterLabel(leFrac, leFrac),
-    surface: 'upper' as const,
-    segLo: 0,
-    segHi: N,
-    wrapArc: false,
-    color: REGULAR_COLORS[i],
-    svgOffset: (i + 1) * RING_OFFSET,
-  }));
-
-  // Lower surface entries (copies of upper)
-  const lowerEntries: CsLayup[] = layupData.map((layup, i) => ({
-    id: `lower-${i}`,
-    badge: `${layupMappingNames?.[i] || `layup${i}`} copy`,
-    layupName: layup.name,
-    displayStart: leFrac,
-    startLockedTo: perimeterLabel(leFrac, leFrac),
-    displayEnd: 1,
-    endLockedTo: perimeterLabel(1, leFrac),
-    surface: 'lower' as const,
-    segLo: N,
-    segHi: 2 * N,
-    wrapArc: false,
-    color: REGULAR_COLORS[NUM_PAIRS + i],
-    svgOffset: (i + 1) * RING_OFFSET,
-  }));
-
-  // Transversal entries (innermost)
-  const transversalLayups: CsLayup[] = transversalEntries.map((entry, i) => {
-    const idxA = signedToIdx(entry.startPos);
-    const idxB = signedToIdx(entry.endPos);
+  const rings: CsRing[] = entries.map((entry, i) => {
+    const idxA = fracToIdx(arcFracs, entry.startFrac);
+    const idxB = fracToIdx(arcFracs, entry.endFrac);
     const lo = Math.min(idxA, idxB);
     const hi = Math.max(idxA, idxB);
-    const wrap = hi - lo > N;
     return {
       id: entry.id,
-      badge: entry.name || `transversal${i + 1}`,
+      badge: entry.name || `segment${i + 1}`,
       layupName: entry.layupName,
-      displayStart: entry.startPos,
-      startLockedTo: chordLabel(entry.startPos),
-      displayEnd: entry.endPos,
-      endLockedTo: chordLabel(entry.endPos),
-      surface: 'transversal' as const,
+      displayStart: entry.startFrac,
+      startLockedTo: entry.startLockedToLabel ?? perimeterLabel(entry.startFrac, leFrac),
+      displayEnd: entry.endFrac,
+      endLockedTo: entry.endLockedToLabel ?? perimeterLabel(entry.endFrac, leFrac),
       segLo: lo,
       segHi: hi,
-      wrapArc: wrap,
-      color: TRANSVERSAL_COLORS[i % TRANSVERSAL_COLORS.length],
-      svgOffset: (NUM_PAIRS + 1 + i) * RING_OFFSET,
+      wrapArc: entry.endFrac < entry.startFrac,
+      color: RING_COLORS[i % RING_COLORS.length],
+      svgOffset: (i + 1) * RING_OFFSET,
     };
   });
 
-  // Table order: uppers (layup0,1,2), lowers (copies), transversals
-  const tableLayups = [...upperEntries, ...lowerEntries, ...transversalLayups];
-
   // Render order: outermost ring first (underneath), innermost last (on top)
-  const renderLayups = [...tableLayups].sort((a, b) => a.svgOffset - b.svgOffset);
+  const renderRings = [...rings].sort((a, b) => a.svgOffset - b.svgOffset);
 
   // Pre-compute offset SVG points per unique svgOffset
   const svgOffsetCache = new Map<number, [number, number][]>();
-  for (const entry of tableLayups) {
+  for (const entry of rings) {
     if (!svgOffsetCache.has(entry.svgOffset)) {
       svgOffsetCache.set(entry.svgOffset, offsetSvgPts(svgBasePts, entry.svgOffset));
     }
@@ -195,7 +125,7 @@ export function CrossSectionDialog({
       <div className="pointer-events-auto flex max-h-[90vh] w-[900px] max-w-[95vw] flex-col overflow-hidden rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.1),0px_8px_10px_-6px_rgba(0,0,0,0.1)]">
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#e5e7eb] px-6 py-4">
-          <h2 className="text-[18px] font-semibold text-[#0a0a0a]">{profile.name}</h2>
+          <h2 className="text-[18px] font-semibold text-[#0a0a0a]">{profileName}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -213,7 +143,7 @@ export function CrossSectionDialog({
             className="h-[180px] w-full"
             preserveAspectRatio="xMidYMid meet"
           >
-            {renderLayups.map((entry) => {
+            {renderRings.map((entry) => {
               const svgPts = svgOffsetCache.get(entry.svgOffset)!;
               const pts = getSegPts(svgPts, entry.segLo, entry.segHi, entry.wrapArc);
               if (pts.length < 2) return null;
@@ -263,7 +193,7 @@ export function CrossSectionDialog({
               </tr>
             </thead>
             <tbody>
-              {tableLayups.map((entry) => {
+              {rings.map((entry) => {
                 const isHovered = hoveredId === entry.id;
                 return (
                   <tr

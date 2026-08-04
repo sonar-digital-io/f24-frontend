@@ -6,6 +6,10 @@ import type {
   CompositionGeometryPayload,
   CompositionLayupPayload,
   CompositionCoreMaterialPayload,
+  CompositionMappingLongitudinalPayload,
+  CompositionMappingTransversalResponse,
+  CompositionProfileIntersections,
+  CompositionLayupSaveResponse,
 } from './types/composition';
 
 export async function createComposition(payload: CompositionPayload): Promise<Composition> {
@@ -42,12 +46,12 @@ export async function updateCompositionGeometry(compositionId: number, payload: 
   return data;
 }
 
-export async function updateCompositionLayup(compositionId: number, payload: CompositionLayupPayload): Promise<unknown> {
-  const { data } = await apiClient.put(`/composition/${compositionId}/layup/`, payload);
+export async function updateCompositionLayup(compositionId: number, payload: CompositionLayupPayload): Promise<CompositionLayupSaveResponse> {
+  const { data } = await apiClient.put<CompositionLayupSaveResponse>(`/composition/${compositionId}/layup/`, payload);
   return data;
 }
 
-export async function updateCompositionMappingLongitudinal(compositionId: number, payload: unknown): Promise<unknown> {
+export async function updateCompositionMappingLongitudinal(compositionId: number, payload: CompositionMappingLongitudinalPayload): Promise<unknown> {
   const { data } = await apiClient.put(`/composition/${compositionId}/mapping/longitudinal/`, payload);
   return data;
 }
@@ -57,8 +61,13 @@ export async function updateCompositionMappingTransversal(compositionId: number,
   return data;
 }
 
-export async function getCompositionIntersections(compositionId: number): Promise<unknown> {
-  const { data } = await apiClient.get(`/composition/${compositionId}/intersections/`);
+export async function getCompositionMappingTransversal(compositionId: number): Promise<CompositionMappingTransversalResponse> {
+  const { data } = await apiClient.get<CompositionMappingTransversalResponse>(`/composition/${compositionId}/mapping/transversal/`);
+  return data;
+}
+
+export async function getCompositionIntersections(compositionId: number): Promise<CompositionProfileIntersections[]> {
+  const { data } = await apiClient.get<CompositionProfileIntersections[]>(`/composition/${compositionId}/intersections/`);
   return data;
 }
 

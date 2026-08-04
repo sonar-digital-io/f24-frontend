@@ -7,13 +7,13 @@ import {
   TooltipRoot,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { LAYUPS } from '@/data/layups';
 import type { ControlPoint } from '@/types';
 import { useDragReorder } from '@/hooks/useDragReorder';
 
 export interface LayupMapping {
   id: string;
   name: string;
+  /** Id (as a string) of one of the composition's own saved layups — needed as a number when saving. */
   layupId: string | null;
   /** Bezier curve edited in LayupMappingBezierDialog; undefined = default curve. */
   points?: ControlPoint[];
@@ -23,6 +23,8 @@ export interface LayupMappingTableProps {
   title: string;
   copyLabel: string;
   mappings: LayupMapping[];
+  /** Composition's own saved layups, for resolving `layupId` to a display name. */
+  layupOptions: { id: number; name: string }[];
   activeMappingId?: string | null;
   onAdd: () => void;
   onDelete: (id: string) => void;
@@ -38,6 +40,7 @@ export function LayupMappingTable({
   title,
   copyLabel,
   mappings,
+  layupOptions,
   activeMappingId,
   onAdd,
   onDelete,
@@ -75,7 +78,7 @@ export function LayupMappingTable({
         </thead>
         <tbody>
           {mappings.flatMap((m, idx) => {
-            const layupLabel = LAYUPS.find((l) => l.id === m.layupId)?.name;
+            const layupLabel = layupOptions.find((l) => String(l.id) === m.layupId)?.name;
             const isDragging = draggingIdx === idx;
             const insertLine = (key: string) => (
               <tr key={key} className="pointer-events-none">

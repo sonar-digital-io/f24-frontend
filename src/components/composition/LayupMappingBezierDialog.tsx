@@ -8,20 +8,23 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useDraggablePosition } from '@/hooks/useDraggablePosition';
 
 /** Layup mapping bezier: longitudinal (m) along x, transversal (m) along y.
- *  X range 5..55 m, Y range -14..0 m (default — caller can override). */
-const X_MIN = 5;
-const X_MAX = 55;
-const X_STEP = 5;
-const Y_MIN = -14;
-const Y_MAX = 0;
-const Y_STEP = 2;
+ *  X range 0.55..10.45 m, Y range -1.225..0.225 m — these are the editor's
+ *  own working scale; the API stores longitudinal/transversal position as
+ *  1/10th of these (see the /10 and *10 conversions where points cross the
+ *  API boundary in CompositionNew.tsx). */
+const X_MIN = 0.55;
+const X_MAX = 10.45;
+const X_STEP = 1;
+const Y_MIN = -1.225;
+const Y_MAX = 0.225;
+const Y_STEP = 0.25;
 
 /** Default curve for mapping rows that haven't been edited yet. */
 export const DEFAULT_MAPPING_POINTS: ControlPoint[] = [
-  { x: 8, y: -13.598 },
-  { x: 8, y: 1.13015 },
-  { x: 52, y: 1.14 },
-  { x: 52, y: -13.5 },
+  { x: X_MIN, y: Y_MIN },
+  { x: X_MIN, y: Y_MAX },
+  { x: X_MAX, y: Y_MAX },
+  { x: X_MAX, y: Y_MIN },
 ];
 
 const INIT_W = 986;

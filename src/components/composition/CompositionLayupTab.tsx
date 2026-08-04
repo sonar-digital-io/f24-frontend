@@ -2,22 +2,37 @@ import { useState } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { LayupBuilder } from '@/components/layup/LayupBuilder';
+import { LayupBuilder, type Ply } from '@/components/layup/LayupBuilder';
+import { useMaterialList } from '@/hooks/api/useMaterials';
+import { useUpdateCompositionLayup } from '@/hooks/api/useComposition';
 
 export interface CompositionLayup {
   id: string;
   name: string;
+  plies: Ply[];
 }
 
 export interface CompositionLayupTabProps {
+  compositionId: number;
   layups: CompositionLayup[];
   onAddLayup: (name: string) => void;
+  onUpdateLayupPlies: (layupId: string, updater: (current: Ply[]) => Ply[]) => void;
+  onSaved: () => void;
 }
 
-export function CompositionLayupTab({ layups, onAddLayup }: CompositionLayupTabProps) {
+export function CompositionLayupTab({
+  compositionId,
+  layups,
+  onAddLayup,
+  onUpdateLayupPlies,
+  onSaved,
+}: CompositionLayupTabProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { data: materialData } = useMaterialList();
+  const materials = materialData ?? [];
+  const saveMutation = useUpdateCompositionLayup(compositionId);
 
   function handleAdd() {
     if (!name.trim()) return;
@@ -26,19 +41,48 @@ export function CompositionLayupTab({ layups, onAddLayup }: CompositionLayupTabP
     setFormOpen(false);
   }
 
+  async function handleSave() {
+    await saveMutation.mutateAsync({
+      layups: layups.map((l) => ({
+        name: l.name,
+        layers: l.plies.map((p) => ({
+          name: p.name,
+          material: materials.find((m) => m.name === p.material)?.id ?? 0,
+          thickness: p.thickness,
+          orientation: p.orientation,
+        })),
+      })),
+    });
+    onSaved();
+  }
+
   return (
     <div className="pointer-events-auto flex max-h-[calc(100vh-145px)] w-full max-w-[1300px] flex-col gap-4 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Layups</h2>
-        <button
-          type="button"
-          onClick={() => setFormOpen(true)}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#006496] px-3 text-[13px] font-medium text-[#fafafa] hover:bg-[#005580]"
-        >
-          <Plus className="h-4 w-4" strokeWidth={2} />
-          Add layup
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFormOpen(true)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#006496] px-3 text-[13px] font-medium text-[#fafafa] hover:bg-[#005580]"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2} />
+            Add layup
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={layups.length === 0 || saveMutation.isPending}
+            className="inline-flex h-9 items-center rounded-md border border-[#e2e8f0] bg-white px-3 text-[13px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {saveMutation.isPending ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
+
+      {saveMutation.isError && (
+        <p className="text-[13px] text-[#dc2626]">Failed to save layups. Please try again.</p>
+      )}
 
       {formOpen && (
         <form
@@ -104,7 +148,7 @@ export function CompositionLayupTab({ layups, onAddLayup }: CompositionLayupTabP
                 </button>
                 {/* Always mounted — hidden instead of unmounted so each layup's ply state survives collapsing */}
                 <div className={expanded ? 'border-t border-[#e5e7eb] p-4' : 'hidden'}>
-                  <LayupBuilder />
+                  <LayupBuilder plies={l.plies} onPliesChange={(updater) => onUpdateLayupPlies(l.id, updater)} />
                 </div>
               </li>
             );

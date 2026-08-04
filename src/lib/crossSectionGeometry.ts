@@ -1,49 +1,5 @@
-/** Pure, framework-independent NACA airfoil + SVG geometry helpers for
- *  `CrossSectionDialog`'s cross-section rendering. */
-
-const N = 50;
-
-// ─── NACA math ────────────────────────────────────────────────────────────────
-
-// allPts[0] = upper TE (x=1), allPts[N] = LE (x=0), allPts[2N] = lower TE (x=1)
-export function buildAllPts(m: number, p: number, t: number): [number, number][] {
-  function yt(x: number) {
-    return (
-      (t / 0.2) *
-      (0.2969 * Math.sqrt(x) -
-        0.126 * x -
-        0.3516 * x * x +
-        0.2843 * x * x * x -
-        0.1015 * x * x * x * x)
-    );
-  }
-  function yc(x: number) {
-    return x < p
-      ? (m / (p * p)) * (2 * p * x - x * x)
-      : (m / ((1 - p) * (1 - p))) * (1 - 2 * p + 2 * p * x - x * x);
-  }
-  function dycDx(x: number) {
-    return x < p
-      ? ((2 * m) / (p * p)) * (p - x)
-      : ((2 * m) / ((1 - p) * (1 - p))) * (p - x);
-  }
-  function nacaPt(x: number, upper: boolean): [number, number] {
-    const theta = Math.atan(dycDx(x));
-    const ytx = yt(x);
-    const ycx = yc(x);
-    return upper
-      ? [x - ytx * Math.sin(theta), ycx + ytx * Math.cos(theta)]
-      : [x + ytx * Math.sin(theta), ycx - ytx * Math.cos(theta)];
-  }
-  const upper: [number, number][] = [];
-  const lower: [number, number][] = [];
-  for (let i = 0; i <= N; i++) {
-    const x = 0.5 * (1 - Math.cos((Math.PI * i) / N));
-    upper.push(nacaPt(x, true));
-    lower.push(nacaPt(x, false));
-  }
-  return [...upper.slice().reverse(), ...lower];
-}
+/** Pure, framework-independent SVG geometry helpers for `CrossSectionDialog`'s
+ *  cross-section rendering. */
 
 /**
  * Shift every SVG-space point inward along the local perpendicular by `offset`
@@ -77,27 +33,26 @@ export function computeArcFractions(svgPts: [number, number][]): number[] {
   return total > 0 ? cum.map((l) => l / total) : cum;
 }
 
-// signed chord position (−1..1) → allPts index
-export function signedToIdx(pos: number): number {
-  const x = Math.abs(pos);
-  const j = Math.round((N / Math.PI) * Math.acos(Math.max(-1, Math.min(1, 1 - 2 * x))));
-  return pos >= 0 ? N - j : N + j;
+/** Perimeter-fraction (0..1, as returned by the transversal mapping endpoint)
+ *  → nearest point index, via binary search over the monotonically
+ *  increasing arc fractions from `computeArcFractions`. */
+export function fracToIdx(arcFracs: number[], frac: number): number {
+  let lo = 0;
+  let hi = arcFracs.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (arcFracs[mid] < frac) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
-/** Label for a regular-layup perimeter fraction. */
+/** Label for a perimeter fraction (0..1) relative to the leading edge. */
 export function perimeterLabel(frac: number, leFrac: number): string {
   if (frac < 0.005) return 'Upper TE';
   if (frac > 0.995) return 'Lower TE';
   if (Math.abs(frac - leFrac) < 0.02) return 'Leading edge';
   return frac < leFrac ? `Upper ${frac.toFixed(2)}` : `Lower ${(1 - frac).toFixed(2)}`;
-}
-
-/** Label for a signed chord position (transversal). */
-export function chordLabel(pos: number): string {
-  if (Math.abs(pos) < 0.015) return 'Leading edge';
-  if (Math.abs(pos - 1) < 0.015) return 'Upper TE';
-  if (Math.abs(pos + 1) < 0.015) return 'Lower TE';
-  return pos > 0 ? `Upper ${pos.toFixed(2)}` : `Lower ${Math.abs(pos).toFixed(2)}`;
 }
 
 /** Extract path points from pre-computed SVG-offset point array. */
@@ -115,4 +70,32 @@ export function segD(pts: [number, number][]): string {
   return 'M ' + pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' L ');
 }
 
-export const CROSS_SECTION_N = N;
+/** Fit arbitrary data-space points into an SVG viewport: uniform scale (both
+ *  axes, so the true shape/aspect ratio is preserved), centered within the
+ *  padded area, Y flipped (data-space up = smaller SVG y). */
+export function fitPointsToSvg(
+  points: [number, number][],
+  innerW: number,
+  innerH: number,
+  padX: number,
+  padY: number,
+): [number, number][] {
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  const xMin = Math.min(...xs);
+  const xMax = Math.max(...xs);
+  const yMin = Math.min(...ys);
+  const yMax = Math.max(...ys);
+  const xRange = Math.max(xMax - xMin, 1e-9);
+  const yRange = Math.max(yMax - yMin, 1e-9);
+  const scale = Math.min(innerW / xRange, innerH / yRange);
+  const drawW = xRange * scale;
+  const drawH = yRange * scale;
+  const offsetX = padX + (innerW - drawW) / 2;
+  const offsetY = padY + (innerH - drawH) / 2;
+  return points.map(([x, y]) => [
+    offsetX + (x - xMin) * scale,
+    offsetY + (yMax - y) * scale,
+  ]);
+}
+

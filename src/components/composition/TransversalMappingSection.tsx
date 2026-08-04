@@ -6,8 +6,14 @@ import { LayupPickerDialog } from '@/components/composition/LayupPickerDialog';
 import { SelectField } from '@/components/composition/SelectField';
 import { ProfileEditorPopover } from '@/components/composition/ProfileEditorPopover';
 import { INITIAL_PROFILES } from '@/data/profiles';
-import { LAYUPS } from '@/data/layups';
 import { nextLocalId } from '@/lib/utils';
+import {
+  useCompositionDetail,
+  useCompositionMappingTransversal,
+  useCompositionIntersections,
+} from '@/hooks/api/useComposition';
+import type { CompositionIntersection } from '@/api/types/composition';
+import { useGeometryProfiles, useGeometryProfile } from '@/hooks/api/useGeometry';
 
 interface TransversalMapping {
   id: string;
@@ -41,7 +47,7 @@ const DEFAULT_MAPPINGS: TransversalMapping[] = [
   {
     id: 'tm-0',
     name: 'SHELL-REINFORCED',
-    layupId: 'le-rein-06',
+    layupId: null,
     startProfileId: 'p0',
     endProfileId: 'p5',
     chordStart: -0.2,
@@ -52,21 +58,46 @@ const DEFAULT_MAPPINGS: TransversalMapping[] = [
 ];
 
 interface TransversalMappingSectionProps {
+  compositionId: number;
   useDefaultData?: boolean;
-  upperMappingNames?: string[];
 }
 
-export function TransversalMappingSection({ useDefaultData = false, upperMappingNames }: TransversalMappingSectionProps) {
+/** "Start/end locked to" describes what an intersection point actually is —
+ *  either a profile edge (leading/trailing) or a specific longitudinal
+ *  mapping's boundary. */
+function describeIntersection(entry: CompositionIntersection | undefined): string {
+  if (!entry) return '—';
+  if (entry.type === 'edge') return entry.position < 0.5 ? 'Trailing edge' : 'Leading edge';
+  const name = entry.longitudinal_mapping_name ?? 'Mapping';
+  return entry.side ? `${name} (${entry.side})` : name;
+}
+
+export function TransversalMappingSection({
+  compositionId,
+  useDefaultData = false,
+}: TransversalMappingSectionProps) {
   const [mappings, setMappings] = useState<TransversalMapping[]>(
     useDefaultData ? DEFAULT_MAPPINGS : INITIAL_MAPPINGS,
   );
+  const { data: compositionDetail } = useCompositionDetail(compositionId);
+  const layupOptions = compositionDetail?.layups ?? [];
+  const geometryId = typeof compositionDetail?.geometry === 'number' ? compositionDetail.geometry : NaN;
+  const { data: geometryProfilesData } = useGeometryProfiles(geometryId);
+  const crossSectionProfiles = geometryProfilesData?.profiles ?? [];
+  const { data: transversalMappingData } = useCompositionMappingTransversal(compositionId);
+  const { data: intersectionsData } = useCompositionIntersections(compositionId);
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [editingProfileFor, setEditingProfileFor] = useState<{
     mappingId: string;
     side: 'start' | 'end';
   } | null>(null);
   const [layupPickerFor, setLayupPickerFor] = useState<string | null>(null);
+  // Real geometry profile id (as a string) for the Cross-section view — distinct
+  // from the mock Start/End profile pickers below, which aren't wired to the
+  // backend yet.
   const [crossSectionProfile, setCrossSectionProfile] = useState<string | null>(null);
+  const crossSectionProfileId = crossSectionProfile ? Number(crossSectionProfile) : NaN;
+  const { data: crossSectionPoints } = useGeometryProfile(geometryId, crossSectionProfileId);
 
   const profileOptions = INITIAL_PROFILES.map((p) => ({ value: p.id, label: p.name }));
 
@@ -158,7 +189,7 @@ export function TransversalMappingSection({ useDefaultData = false, upperMapping
                   </td>
                   <td className="px-2 py-2">
                     {(() => {
-                      const layupLabel = LAYUPS.find((l) => l.id === m.layupId)?.name;
+                      const layupLabel = layupOptions.find((l) => String(l.id) === m.layupId)?.name;
                       return (
                         <button
                           type="button"
@@ -271,13 +302,13 @@ export function TransversalMappingSection({ useDefaultData = false, upperMapping
         <div className="flex w-[150px] shrink-0 flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white p-4 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
           <span className="text-[12px] font-medium leading-none text-[#6b7280]">Cross-section view</span>
           <ul className="flex flex-col gap-1">
-            {INITIAL_PROFILES.map((prof) => (
+            {crossSectionProfiles.map((prof) => (
               <li key={prof.id}>
                 <button
                   type="button"
-                  onClick={() => setCrossSectionProfile(prof.id)}
+                  onClick={() => setCrossSectionProfile(String(prof.id))}
                   className={`w-full rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
-                    crossSectionProfile === prof.id
+                    crossSectionProfile === String(prof.id)
                       ? 'bg-[#eef9ff] text-[#0a0a0a]'
                       : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
                   }`}
@@ -306,38 +337,38 @@ export function TransversalMappingSection({ useDefaultData = false, upperMapping
         )}
       </div>
 
-      {/* Cross-section view dialog */}
-      {crossSectionProfile && (() => {
-        const prof = INITIAL_PROFILES.find((p) => p.id === crossSectionProfile);
+      {/* Cross-section view dialog — SVG rings + table both come straight
+          from GET /composition/:id/mapping/transversal/ for this profile. */}
+      {crossSectionProfile && crossSectionPoints && (() => {
+        const prof = crossSectionProfiles.find((p) => String(p.id) === crossSectionProfile);
         if (!prof) return null;
-        // Only include transversal mappings whose profile span covers this profile
-        const transversalEntries = mappings
-          .filter((m) => {
-            if (!m.startProfileId || !m.endProfileId) return false;
-            const startIdx = INITIAL_PROFILES.findIndex((p) => p.id === m.startProfileId);
-            const endIdx = INITIAL_PROFILES.findIndex((p) => p.id === m.endProfileId);
-            const profIdx = INITIAL_PROFILES.findIndex((p) => p.id === crossSectionProfile);
-            if (startIdx < 0 || endIdx < 0 || profIdx < 0) return false;
-            return profIdx >= Math.min(startIdx, endIdx) && profIdx <= Math.max(startIdx, endIdx);
-          })
-          .map((m) => ({
-            id: m.id,
-            name: m.name,
-            layupName: LAYUPS.find((l) => l.id === m.layupId)?.name ?? 'Unknown layup',
-            startPos: m.chordStart,
-            endPos: m.chordEnd,
-          }));
+        const profileMappings =
+          transversalMappingData?.transversal_mapping.find((p) => p.profile_id === Number(crossSectionProfile))
+            ?.mappings ?? [];
+        const profileIntersections =
+          intersectionsData?.find((p) => p.profile_id === Number(crossSectionProfile))?.intersections ?? [];
+        const entries = profileMappings.map((m, i) => ({
+          id: m.group_id || `${crossSectionProfile}-${i}`,
+          name: m.name,
+          layupName: layupOptions.find((l) => l.id === m.layup)?.name ?? 'Unknown layup',
+          startFrac: m.start_position,
+          endFrac: m.end_position,
+          startLockedToLabel: describeIntersection(profileIntersections.find((i) => i.id === m.start_locked_to)),
+          endLockedToLabel: describeIntersection(profileIntersections.find((i) => i.id === m.end_locked_to)),
+        }));
+
         return (
           <CrossSectionDialog
-            profile={prof}
-            transversalEntries={transversalEntries}
-            layupMappingNames={upperMappingNames}
+            profileName={prof.name}
+            points={crossSectionPoints as [number, number][]}
+            entries={entries}
             onClose={() => setCrossSectionProfile(null)}
           />
         );
       })()}
 
       <LayupPickerDialog
+        compositionId={compositionId}
         open={layupPickerFor !== null}
         currentLayupId={mappings.find((m) => m.id === layupPickerFor)?.layupId}
         onSelect={(layupId) => {

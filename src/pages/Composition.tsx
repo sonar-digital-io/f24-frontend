@@ -23,6 +23,19 @@ import type { Composition as BackendComposition } from '@/api/types/composition'
 
 const PAGE_SIZE = 10;
 
+function formatDateTime(value?: string): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function toUiComposition(c: BackendComposition): CompositionItem {
   return {
     id: String(c.id),
@@ -30,7 +43,7 @@ function toUiComposition(c: BackendComposition): CompositionItem {
     description: c.description ?? '',
     nominalRadius: 0,
     type: '—' as BladeType,
-    lastUpdated: '—',
+    lastUpdated: formatDateTime(c.last_modified),
   };
 }
 
