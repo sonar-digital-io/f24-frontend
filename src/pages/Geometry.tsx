@@ -14,6 +14,7 @@ import { ViewModeToggle } from '@/components/common/list/ViewModeToggle';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { Input } from '@/components/ui/input';
+import { formatDateTime } from '@/lib/utils';
 import { GeometryCard } from '@/components/common/card/GeometryCard';
 import { type Geometry as GeometryItem, type BladeType } from '@/data/geometries';
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
@@ -29,7 +30,7 @@ function toUiGeometry(g: BackendGeometry): GeometryItem {
     description: g.description ?? '',
     nominalRadius: 0,
     type: '—' as BladeType,
-    lastUpdated: g.last_modified,
+    lastUpdated: formatDateTime(g.last_modified),
   };
 }
 

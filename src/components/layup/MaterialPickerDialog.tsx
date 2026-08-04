@@ -1,4 +1,5 @@
 import { TablePickerDialog, type TablePickerColumn } from '@/components/common/dialog/TablePickerDialog';
+import { formatDateTime } from '@/lib/utils';
 import { useMaterialList } from '@/hooks/api/useMaterials';
 import type { Material } from '@/api/types/materials';
 
@@ -18,7 +19,7 @@ const COLUMNS: TablePickerColumn<Material>[] = [
     label: 'Last updated',
     widthClassName: 'w-[140px] whitespace-nowrap',
     sortValue: (m) => m.last_modified,
-    render: (m) => m.last_modified,
+    render: (m) => formatDateTime(m.last_modified),
   },
 ];
 

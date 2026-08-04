@@ -18,3 +18,17 @@ export function toDateInputValue(isoDateTime: string): string {
   const d = new Date(normalized);
   return Number.isNaN(d.getTime()) ? todayISO() : d.toISOString().slice(0, 10);
 }
+
+/** Standard display format for any backend datetime, e.g. "8/4/2026, 11:24 AM". */
+export function formatDateTime(value?: string): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}

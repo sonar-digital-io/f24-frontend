@@ -1,5 +1,6 @@
 import { Copy, Download, Pencil, Trash2 } from 'lucide-react';
 import { rowInteractionProps } from '@/lib/listTable';
+import { formatDateTime } from '@/lib/utils';
 import { DetailRow } from '@/components/common/list/DetailRow';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { ExpandToggleCell } from '@/components/common/list/ExpandToggleCell';
@@ -70,7 +71,7 @@ export function MaterialRow({ material, expanded, onToggle, onOpen, onDuplicate,
           {material.description}
         </td>
         <td className="w-[160px] px-3 py-4 align-top text-[14px] leading-5 text-[#0a0a0a]">
-          {material.lastUpdated}
+          {formatDateTime(material.lastUpdated)}
         </td>
         <td className="w-[208px] px-3 py-4 align-top">
           <div

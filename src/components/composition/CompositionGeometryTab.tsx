@@ -1,5 +1,6 @@
 import { CheckCircle2, LayoutGrid, List as ListIcon, Search, XCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { formatDateTime } from '@/lib/utils';
 import { GeometryCard } from '@/components/common/card/GeometryCard';
 import { type Geometry as GeometryItem, type BladeType } from '@/data/geometries';
 import { useGeometryList, useFetchGeometryTopView } from '@/hooks/api/useGeometry';
@@ -177,7 +178,7 @@ export function CompositionGeometryTab({
                       )}
                     </td>
                     <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>
-                      {new Date(g.created_at).toLocaleDateString()}
+                      {formatDateTime(g.created_at)}
                     </td>
                     <td className={`px-3 py-3 font-medium text-[#0a0a0a] ${cellBorder}`}>{g.name}</td>
                     <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>{g.user}</td>

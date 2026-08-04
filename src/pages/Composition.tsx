@@ -14,6 +14,7 @@ import { ViewModeToggle } from '@/components/common/list/ViewModeToggle';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { Input } from '@/components/ui/input';
+import { formatDateTime } from '@/lib/utils';
 import { CompositionCard } from '@/components/composition/CompositionCard';
 import { type Composition as CompositionItem } from '@/data/compositions';
 import { type BladeType } from '@/data/geometries';
@@ -22,19 +23,6 @@ import { useCompositionList, useDeleteComposition } from '@/hooks/api/useComposi
 import type { Composition as BackendComposition } from '@/api/types/composition';
 
 const PAGE_SIZE = 10;
-
-function formatDateTime(value?: string): string {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 function toUiComposition(c: BackendComposition): CompositionItem {
   return {
