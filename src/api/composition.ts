@@ -76,7 +76,13 @@ export async function updateCompositionCoreMaterial(compositionId: number, paylo
   return data;
 }
 
-export async function getCompositionPreview(compositionId: number): Promise<unknown> {
-  const { data } = await apiClient.get(`/composition/${compositionId}/preview/`);
+// Same binary contract as GET /geometry/:id/result/ — a zip-based 3MF
+// package in practice, unitless (vertices are fractions of the linked
+// geometry's nominal_radius). See OccViewer.tsx's header comment.
+export async function getCompositionPreview(compositionId: number): Promise<ArrayBuffer> {
+  const { data } = await apiClient.get<ArrayBuffer>(`/composition/${compositionId}/preview/`, {
+    responseType: 'arraybuffer',
+    timeout: 120_000,
+  });
   return data;
 }

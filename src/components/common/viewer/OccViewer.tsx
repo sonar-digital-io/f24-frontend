@@ -61,6 +61,10 @@ export interface OccViewerProps {
   stlScale?: number;
   /** Fires whenever the load status changes — lets callers surface loading/error state of their own. */
   onStatusChange?: (status: 'loading' | 'ready' | 'error') => void;
+  /** Show/hide 3MF objects whose name matches /blade/i. Composition preview only — ignored (all visible) when no such object exists. Defaults to true. */
+  showBlade?: boolean;
+  /** Show/hide every other named 3MF object (layups). Composition preview only. Defaults to true. */
+  showLayups?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -296,11 +300,27 @@ export function OccViewer({
   stlData,
   stlScale = 1,
   onStatusChange,
+  showBlade = true,
+  showLayups = true,
 }: OccViewerProps) {
   const containerRef  = useRef<HTMLDivElement>(null);
   const meshesRef     = useRef<THREE.Mesh[]>([]);
   const wireLineRef   = useRef<THREE.LineSegments[]>([]);
   const wireframeRef  = useRef(wireframe);
+  const bladeObjectsRef  = useRef<THREE.Object3D[]>([]);
+  const layupObjectsRef  = useRef<THREE.Object3D[]>([]);
+  const showBladeRef  = useRef(showBlade);
+  const showLayupsRef = useRef(showLayups);
+
+  useEffect(() => {
+    showBladeRef.current = showBlade;
+    bladeObjectsRef.current.forEach((o) => { o.visible = showBlade; });
+  }, [showBlade]);
+
+  useEffect(() => {
+    showLayupsRef.current = showLayups;
+    layupObjectsRef.current.forEach((o) => { o.visible = showLayups; });
+  }, [showLayups]);
   const [status, setStatusState] = useState<'loading' | 'ready' | 'error'>('loading');
   const onStatusChangeRef = useRef(onStatusChange);
   onStatusChangeRef.current = onStatusChange;
@@ -430,6 +450,8 @@ export function OccViewer({
     // used for the static demo geometry).
     let disposed = false;
     setStatus('loading');
+    bladeObjectsRef.current = [];
+    layupObjectsRef.current = [];
 
     // `roots`: top-level objects to auto-fit the camera against. For STL/IGES
     // this is just the meshes themselves (direct children of the scene); for
@@ -554,6 +576,12 @@ export function OccViewer({
         obj.castShadow = true;
         obj.receiveShadow = true;
         newMeshes.push(obj);
+
+        // Composition preview 3MF packages name each object (e.g. "Blade",
+        // per-layup names) — group by that so callers can toggle visibility.
+        const isBlade = /blade/i.test(obj.name);
+        (isBlade ? bladeObjectsRef : layupObjectsRef).current.push(obj);
+        obj.visible = isBlade ? showBladeRef.current : showLayupsRef.current;
 
         // Parented to the mesh itself so it inherits the mesh's own local
         // transform automatically (3MF build items can each carry their own).

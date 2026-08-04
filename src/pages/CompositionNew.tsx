@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Check, Redo2, Undo2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
@@ -11,6 +12,7 @@ import {
 import { TransversalMappingSection } from '@/components/composition/TransversalMappingSection';
 import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
 import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
+import { CompositionPreviewTab } from '@/components/composition/CompositionPreviewTab';
 import { CompositionLayupTab, type CompositionLayup } from '@/components/composition/CompositionLayupTab';
 import { getMaterialColor, type Ply } from '@/components/layup/LayupBuilder';
 import { LayupMappingTable, type LayupMapping } from '@/components/composition/LayupMappingTable';
@@ -25,6 +27,8 @@ import {
 } from '@/hooks/api/useComposition';
 import { useMaterialList } from '@/hooks/api/useMaterials';
 import { updateCompositionSettings } from '@/api/composition';
+import { getGeometryProfile } from '@/api/geometry';
+import { geometryKeys } from '@/hooks/api/useGeometry';
 
 export function CompositionNew() {
   const navigate = useNavigate();
@@ -35,6 +39,7 @@ export function CompositionNew() {
   const duplicateFromRaw = !isEditing ? searchParams.get('duplicateFrom') : null;
   const duplicateSourceId = duplicateFromRaw ? Number(duplicateFromRaw) : NaN;
 
+  const queryClient = useQueryClient();
   const detailQuery = useCompositionDetail(compositionId);
   const duplicateQuery = useCompositionDetail(duplicateSourceId);
   const createMutation = useCreateComposition();
@@ -46,7 +51,7 @@ export function CompositionNew() {
   const materialsQuery = useMaterialList();
 
   const [activeTab, setActiveTab] = useState<
-    'general' | 'geometry' | 'layup' | 'layup-mapping' | 'transversal-mapping'
+    'general' | 'geometry' | 'layup' | 'layup-mapping' | 'transversal-mapping' | 'preview'
   >('general');
 
   // General — hydrated from the backend for edit/duplicate. Geometry pick, layup
@@ -60,9 +65,9 @@ export function CompositionNew() {
   const [solidCore, setSolidCore] = useState(false);
   const [targetWeight, setTargetWeight] = useState('');
   const [hydrated, setHydrated] = useState(false);
-  const [baseline, setBaseline] = useState<{ name: string; description: string; date: string } | null>(
-    null
-  );
+  const [baseline, setBaseline] = useState<
+    { name: string; description: string; date: string; targetWeight: string } | null
+  >(null);
   const [duplicateHydrated, setDuplicateHydrated] = useState(false);
 
   useEffect(() => {
@@ -72,12 +77,13 @@ export function CompositionNew() {
     const hydratedDate =
       typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO();
     const hydratedTargetWeight = c.settings?.find((s) => s.reference === 'target_weight')?.value;
+    const hydratedTargetWeightStr = hydratedTargetWeight !== undefined ? String(hydratedTargetWeight) : '';
     setName(c.name);
     setDescription(hydratedDescription);
     setDate(hydratedDate);
-    if (hydratedTargetWeight !== undefined) setTargetWeight(String(hydratedTargetWeight));
+    if (hydratedTargetWeightStr) setTargetWeight(hydratedTargetWeightStr);
     if (c.geometry != null) setSelectedGeometryId(String(c.geometry));
-    setBaseline({ name: c.name, description: hydratedDescription, date: hydratedDate });
+    setBaseline({ name: c.name, description: hydratedDescription, date: hydratedDate, targetWeight: hydratedTargetWeightStr });
     setHydrated(true);
   }, [isEditing, hydrated, detailQuery.isFetching, detailQuery.data]);
 
@@ -251,6 +257,11 @@ export function CompositionNew() {
       ) {
         await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
       }
+      if (!baseline || targetWeight !== baseline.targetWeight) {
+        await updateCompositionSettings(compositionId, {
+          settings: [{ reference: 'target_weight', value: targetWeight }],
+        });
+      }
       return;
     }
     const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
@@ -322,9 +333,21 @@ export function CompositionNew() {
       upper_side: toEntries(upperMappings),
       lower_side: toEntries(lowerMappings),
     });
-    await fetchIntersectionsMutation.mutateAsync(compositionId);
+    const intersections = await fetchIntersectionsMutation.mutateAsync(compositionId);
     setActiveTab('transversal-mapping');
     await fetchMappingTransversalMutation.mutateAsync(compositionId);
+
+    const geometryId = typeof detailQuery.data?.geometry === 'number' ? detailQuery.data.geometry : NaN;
+    if (Number.isFinite(geometryId)) {
+      await Promise.all(
+        intersections.map(({ profile_id }) =>
+          queryClient.prefetchQuery({
+            queryKey: geometryKeys.profile(geometryId, profile_id),
+            queryFn: () => getGeometryProfile(geometryId, profile_id),
+          })
+        )
+      );
+    }
   }
 
   return (
@@ -343,6 +366,7 @@ export function CompositionNew() {
                 { value: 'layup', label: 'Layup' },
                 { value: 'layup-mapping', label: 'Layup mapping' },
                 { value: 'transversal-mapping', label: 'Transversal mapping' },
+                { value: 'preview', label: 'Preview' },
               ].map((t) => (
                 <TabsTrigger
                   key={t.value}
@@ -510,6 +534,13 @@ export function CompositionNew() {
             useDefaultData={isEditing}
           />
         </div>
+
+        {activeTab === 'preview' && (
+          <CompositionPreviewTab
+            compositionId={compositionId}
+            geometryId={typeof detailQuery.data?.geometry === 'number' ? detailQuery.data.geometry : NaN}
+          />
+        )}
       </div>
       </main>
 

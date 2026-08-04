@@ -123,10 +123,10 @@ export function useUpdateCompositionMappingLongitudinal(compositionId: number) {
 }
 
 export function useUpdateCompositionMappingTransversal(compositionId: number) {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: unknown) => compositionApi.updateCompositionMappingTransversal(compositionId, payload),
-    onSuccess: () => invalidateCompositionDerivedQueries(queryClient, compositionId),
+    // No follow-up invalidation — saving transversal mapping shouldn't
+    // trigger detail, intersections, or mapping-transversal refetches.
   });
 }
 
@@ -168,10 +168,11 @@ export function useUpdateCompositionCoreMaterial(compositionId: number) {
   });
 }
 
-export function useCompositionPreview(compositionId: number) {
+export function useCompositionPreview(compositionId: number, enabled: boolean) {
   return useQuery({
     queryKey: compositionKeys.preview(compositionId),
     queryFn: () => compositionApi.getCompositionPreview(compositionId),
-    enabled: Number.isFinite(compositionId),
+    enabled: enabled && Number.isFinite(compositionId),
+    staleTime: 0,
   });
 }
