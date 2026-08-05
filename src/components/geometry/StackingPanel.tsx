@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { FoldHorizontal } from 'lucide-react';
 import { BezierEditor } from '@/components/common/viewer/BezierEditor';
 import { BezierPointsTable } from '@/components/common/viewer/BezierPointsTable';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import type { ControlPoint } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldableSectionList } from '@/components/geometry/FoldableSectionList';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
+import { clamp } from '@/lib/bezierMath';
 import type { GeometryEdge, GeometryEdgeInput } from '@/api/types/geometry';
 
 type SectionKey = 'sweep' | 'dihedral' | 'twist' | 'chord';
@@ -90,13 +93,23 @@ interface StackingPanelProps {
   onSave?: (edges: GeometryEdgeInput[]) => void;
   saving?: boolean;
   saveError?: boolean;
+  /** Global properties' nominal radius (m) — sweep/dihedral/chord's ymin/ymax
+   *  are sent to the backend as a fraction of this; twist (degrees) is not. */
+  nominalRadius?: number;
 }
 
 function edgeMap(initialEdges?: GeometryEdge[]): Map<string, GeometryEdge> {
   return new Map((initialEdges ?? []).map((e) => [e.edge_type, e]));
 }
 
-export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPercent, onSave, saving, saveError }: StackingPanelProps) {
+// Sweep/dihedral/chord are length units (m) — the backend stores their
+// ymin/ymax as a fraction of nominal_radius. Twist is degrees, not a length,
+// so it's sent/received as-is.
+function radiusDivisor(key: SectionKey, nominalRadius?: number): number {
+  return key !== 'twist' && nominalRadius ? nominalRadius : 1;
+}
+
+export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPercent, onSave, saving, saveError, nominalRadius }: StackingPanelProps) {
   const rootXPercent = parseFloat((rootRadiusPercent ?? '').replace(',', '.'));
   const rootX = Number.isFinite(rootXPercent) ? rootXPercent / 100 : DEFAULT_ROOT_X;
   const [subTab, setSubTab] = useState<SectionKey>('sweep');
@@ -108,14 +121,22 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
   });
 
   // Y-axis bounds come from the backend edge when available, falling back to
-  // the mock defaults — captured once at mount, same as the initial points.
-  const [yBounds] = useState<Record<SectionKey, { min: number; max: number }>>(() => {
+  // the mock defaults — initial value only, then user-editable below. Backend
+  // values are a fraction of nominal_radius (except twist) — scale up to the
+  // curve's real units for display.
+  const [yBounds, setYBounds] = useState<Record<SectionKey, { min: number; max: number }>>(() => {
     const map = edgeMap(initialEdges);
+    function bound(key: SectionKey) {
+      const edge = map.get(key);
+      if (!edge) return { min: SECTION_Y_MIN[key], max: SECTION_Y_MAX[key] };
+      const divisor = radiusDivisor(key, nominalRadius);
+      return { min: edge.ymin * divisor, max: edge.ymax * divisor };
+    }
     return {
-      sweep: { min: map.get('sweep')?.ymin ?? SECTION_Y_MIN.sweep, max: map.get('sweep')?.ymax ?? SECTION_Y_MAX.sweep },
-      dihedral: { min: map.get('dihedral')?.ymin ?? SECTION_Y_MIN.dihedral, max: map.get('dihedral')?.ymax ?? SECTION_Y_MAX.dihedral },
-      twist: { min: map.get('twist')?.ymin ?? SECTION_Y_MIN.twist, max: map.get('twist')?.ymax ?? SECTION_Y_MAX.twist },
-      chord: { min: map.get('chord')?.ymin ?? SECTION_Y_MIN.chord, max: map.get('chord')?.ymax ?? SECTION_Y_MAX.chord },
+      sweep: bound('sweep'),
+      dihedral: bound('dihedral'),
+      twist: bound('twist'),
+      chord: bound('chord'),
     };
   });
 
@@ -145,14 +166,62 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     setOpenSections((s) => ({ ...s, [key]: !s[key] }));
   }
 
+  // Text buffer for the Y min/max inputs, mirroring useEditableSectionPoints'
+  // editingValues pattern so in-progress text (e.g. a lone "-") isn't clobbered.
+  const [boundInputs, setBoundInputs] = useState<Record<string, string>>({});
+
+  function boundInputKey(key: SectionKey, field: 'min' | 'max') {
+    return `${key}-${field}`;
+  }
+
+  function getBoundInputValue(key: SectionKey, field: 'min' | 'max') {
+    const inputKey = boundInputKey(key, field);
+    if (boundInputs[inputKey] !== undefined) return boundInputs[inputKey];
+    return String(yBounds[key][field]);
+  }
+
+  function handleBoundChange(key: SectionKey, field: 'min' | 'max', raw: string) {
+    const normalized = raw.replace(',', '.');
+    setBoundInputs((v) => ({ ...v, [boundInputKey(key, field)]: normalized }));
+    const parsed = parseFloat(normalized);
+    if (!Number.isFinite(parsed)) return;
+    setYBounds((current) => {
+      const next = { ...current[key], [field]: parsed };
+      if (next.max <= next.min) return current;
+      return { ...current, [key]: next };
+    });
+  }
+
+  // Clamp existing points into the new bounds only once the value is
+  // committed (blur) — clamping on every keystroke flattens the curve
+  // against whatever partial number has been typed so far (e.g. "0" while
+  // typing "0.6"), permanently losing the original points.
+  function handleBoundBlur(key: SectionKey, field: 'min' | 'max') {
+    setBoundInputs((v) => {
+      const inputKey = boundInputKey(key, field);
+      if (v[inputKey] === undefined) return v;
+      const next = { ...v };
+      delete next[inputKey];
+      return next;
+    });
+    const { min, max } = yBounds[key];
+    setPointsForSection(
+      key,
+      sectionPoints[key].map((p) => ({ ...p, y: clamp(p.y, min, max) }))
+    );
+  }
+
   function buildEdges(): GeometryEdgeInput[] {
-    return SECTION_KEYS.map((key) => ({
-      edge_type: key,
-      curve_type: 'bezier',
-      ymin: yBounds[key].min,
-      ymax: yBounds[key].max,
-      curve: sectionPoints[key],
-    }));
+    return SECTION_KEYS.map((key) => {
+      const divisor = radiusDivisor(key, nominalRadius);
+      return {
+        edge_type: key,
+        curve_type: 'bezier',
+        ymin: yBounds[key].min / divisor,
+        ymax: yBounds[key].max / divisor,
+        curve: sectionPoints[key],
+      };
+    });
   }
 
   // Points can be deleted down to 0 in the chart — block saving until every
@@ -169,14 +238,46 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
             : 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]'
         }
       >
-        <BezierEditor
-          points={points}
-          onChange={(next) => setPointsForSection(key, next)}
-          yMin={yBounds[key].min}
-          yMax={yBounds[key].max}
-          yStep={SECTION_Y_STEP[key]}
-          rootX={rootX}
-        />
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor={`${key}-ymin`} className="text-[12px] text-[#6b7280]">
+                Y min
+              </Label>
+              <Input
+                id={`${key}-ymin`}
+                type="number"
+                step="0.1"
+                value={getBoundInputValue(key, 'min')}
+                onChange={(e) => handleBoundChange(key, 'min', e.target.value)}
+                onBlur={() => handleBoundBlur(key, 'min')}
+                className="h-8 w-24 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor={`${key}-ymax`} className="text-[12px] text-[#6b7280]">
+                Y max
+              </Label>
+              <Input
+                id={`${key}-ymax`}
+                type="number"
+                step="0.1"
+                value={getBoundInputValue(key, 'max')}
+                onChange={(e) => handleBoundChange(key, 'max', e.target.value)}
+                onBlur={() => handleBoundBlur(key, 'max')}
+                className="h-8 w-24 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+              />
+            </div>
+          </div>
+          <BezierEditor
+            points={points}
+            onChange={(next) => setPointsForSection(key, next)}
+            yMin={yBounds[key].min}
+            yMax={yBounds[key].max}
+            yStep={SECTION_Y_STEP[key]}
+            rootX={rootX}
+          />
+        </div>
         <BezierPointsTable
           points={points}
           valueLabel={SECTION_TABLE_HEADING[key]}

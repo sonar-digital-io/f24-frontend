@@ -1,10 +1,6 @@
 /**
  * OccViewer — full-bleed Three.js canvas with three independent load pipelines:
  *
- *  - IGES (default): a real IGES file loaded through OpenCascade.js B-Rep →
- *    mesh tessellation. Served from public/fan-object.igs, fetched at
- *    runtime, written into the OCC Emscripten virtual filesystem, parsed with
- *    IGESControl_Reader, and tessellated into a Three.js BufferGeometry.
  *  - STL (when `stlData` is passed and doesn't sniff as a zip): parsed
  *    directly (see parseAsciiStl/parseBinaryStl below), not THREE.STLLoader:
  *    its binary/ASCII sniffing heuristic (peeking a face count at byte 80
@@ -14,11 +10,16 @@
  *    -header signature): despite the backend's documented "raw STL" contract,
  *    the real /result/ response observed in practice is a zip-based OPC
  *    package (3MF), so it's parsed with THREE.ThreeMFLoader instead.
+ *  - IGES (opt-in via `igesUrl`, used only when `stlData` is unset): a real
+ *    IGES file loaded through OpenCascade.js B-Rep → mesh tessellation,
+ *    written into the OCC Emscripten virtual filesystem, parsed with
+ *    IGESControl_Reader, and tessellated into a Three.js BufferGeometry. With
+ *    no `stlData` and no `igesUrl`, the viewer just shows the loading ring —
+ *    it never falls back to demo/mock geometry.
  *
  * No OCC involved for either STL or 3MF. Vertices/geometry are unitless
  * (fractions of the geometry's nominal_radius), so `stlScale` must be set to
- * rescale them. `stlData` takes over rendering from the IGES pipeline
- * whenever it's set.
+ * rescale them. `stlData` takes priority over `igesUrl` whenever it's set.
  *
  * opencascade.js v1.1.1 API notes (v1.1.1 = OCC 7.5 bindings):
  *   Constructor overloads always use _N suffix (even if only one):
@@ -52,7 +53,9 @@ import { getOcc } from '@/lib/occ-init';
 export interface OccViewerProps {
   wireframe?: boolean;
   className?: string;
-  /** URL of the IGES file to load (must be served from the same origin). Ignored when `stlData` is set. */
+  /** URL of an IGES file to load when there's no `stlData` yet — opt-in only:
+   *  with no `igesUrl`, an unset `stlData` just shows the loading ring instead
+   *  (no demo/mock geometry). Ignored once `stlData` is set. */
   igesUrl?: string;
   /** Raw STL contents (unitless — see `stlScale`) — takes over rendering from the IGES pipeline when set. */
   stlData?: ArrayBuffer | string;
@@ -296,7 +299,7 @@ function tessellate(oc: any, shape: any, color: number, opacity: number): THREE.
 export function OccViewer({
   wireframe = false,
   className = 'absolute inset-0 w-full h-full',
-  igesUrl   = '/fan-object.igs',
+  igesUrl,
   stlData,
   stlScale = 1,
   onStatusChange,
@@ -501,11 +504,11 @@ export function OccViewer({
       return { newMeshes: [mesh], newLines: [lines], roots: [mesh] };
     }
 
-    async function loadIges(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+    async function loadIges(url: string): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
       const oc = await getOcc();
 
       // Load IGES file
-      const occShapes = await loadIgesShapes(oc as any, igesUrl);
+      const occShapes = await loadIgesShapes(oc as any, url);
 
       // Tessellate shapes
       const newMeshes: THREE.Mesh[]         = [];
@@ -596,66 +599,73 @@ export function OccViewer({
       return { newMeshes, newLines, roots: [group] };
     }
 
-    function pickLoader() {
-      if (stlData === undefined) return loadIges();
-      if (typeof stlData !== 'string' && looksLikeZip(stlData)) return load3mf();
-      return loadStl();
-    }
+    // No backend result yet — keep the loading ring spinning instead of
+    // falling back to demo geometry, unless the caller explicitly opted into
+    // an IGES demo file via `igesUrl`. The effect re-runs (and tries again)
+    // once `stlData` actually arrives.
+    const loadPromise =
+      stlData !== undefined
+        ? (typeof stlData !== 'string' && looksLikeZip(stlData) ? load3mf() : loadStl())
+        : igesUrl
+          ? loadIges(igesUrl)
+          : null;
 
-    pickLoader()
-      .then(({ newMeshes, newLines, roots }) => {
-        if (disposed) return;
+    if (loadPromise) {
+      loadPromise
+        .then(({ newMeshes, newLines, roots }) => {
+          if (disposed) return;
 
-        // ── Auto-fit camera + grid to loaded geometry ───────────────────────
-        if (roots.length > 0) {
-          const box = new THREE.Box3();
-          roots.forEach((r) => box.expandByObject(r));
+          // ── Auto-fit camera + grid to loaded geometry ───────────────────────
+          if (roots.length > 0) {
+            const box = new THREE.Box3();
+            roots.forEach((r) => box.expandByObject(r));
 
-          if (!box.isEmpty()) {
-            const center  = box.getCenter(new THREE.Vector3());
-            const size    = box.getSize(new THREE.Vector3());
-            const maxDim  = Math.max(size.x, size.y, size.z);
-            const fitDist = maxDim * 2.0;
+            if (!box.isEmpty()) {
+              const center  = box.getCenter(new THREE.Vector3());
+              const size    = box.getSize(new THREE.Vector3());
+              const maxDim  = Math.max(size.x, size.y, size.z);
+              const fitDist = maxDim * 2.0;
 
-            camera.position.set(
-              center.x + fitDist * 0.55,
-              center.y + fitDist * 0.38,
-              center.z + fitDist,
-            );
-            camera.near = maxDim * 0.001;
-            camera.far  = maxDim * 100;
-            camera.updateProjectionMatrix();
+              camera.position.set(
+                center.x + fitDist * 0.55,
+                center.y + fitDist * 0.38,
+                center.z + fitDist,
+              );
+              camera.near = maxDim * 0.001;
+              camera.far  = maxDim * 100;
+              camera.updateProjectionMatrix();
 
-            controls.target.copy(center);
-            controls.minDistance = maxDim * 0.05;
-            controls.maxDistance = maxDim * 20;
-            controls.update();
+              controls.target.copy(center);
+              controls.minDistance = maxDim * 0.05;
+              controls.maxDistance = maxDim * 20;
+              controls.update();
 
-            // Snap grid + shadow ground to the bottom of the geometry
-            const groundY = box.min.y - maxDim * 0.015;
-            grid.position.y   = groundY;
-            ground.position.y = groundY;
-            // Scale grid to match geometry footprint
-            const footprint = Math.max(size.x, size.z) * 3;
-            grid.scale.setScalar(footprint / 200);
+              // Snap grid + shadow ground to the bottom of the geometry
+              const groundY = box.min.y - maxDim * 0.015;
+              grid.position.y   = groundY;
+              ground.position.y = groundY;
+              // Scale grid to match geometry footprint
+              const footprint = Math.max(size.x, size.z) * 3;
+              grid.scale.setScalar(footprint / 200);
+            }
           }
-        }
 
-        meshesRef.current   = newMeshes;
-        wireLineRef.current = newLines;
+          meshesRef.current   = newMeshes;
+          wireLineRef.current = newLines;
 
-        scene.remove(ring);
-        ringGeo.dispose();
-        ringMat.dispose();
+          scene.remove(ring);
+          ringGeo.dispose();
+          ringMat.dispose();
 
-        if (!disposed) setStatus('ready');
-      })
-      .catch((err) => {
-        if (!disposed) {
-          console.error('[OccViewer] mesh load failed:', err);
-          setStatus('error');
-        }
-      });
+          if (!disposed) setStatus('ready');
+        })
+        .catch((err) => {
+          if (!disposed) {
+            console.error('[OccViewer] mesh load failed:', err);
+            setStatus('error');
+          }
+        });
+    }
 
     // ── Cleanup ─────────────────────────────────────────────────────────────
     return () => {
