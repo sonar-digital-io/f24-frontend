@@ -33,12 +33,10 @@ export type CalculationSortKey = 'timestamp' | 'name';
 // ─── CalculationNew (also imported by the CalculationXTab components) ────────
 
 export type Tab = 'general' | 'composition' | 'configuration' | 'load-group' | 'fatigue-profile';
-export type CompositionSubTab = 'geometries' | 'compositions';
-export type ConfigSection = 'aero' | 'debug' | 'modal' | 'structural' | 'postprocessing';
-export type CompListSortKey = 'name' | 'lastUpdated' | 'nominalRadius';
-export interface CompListSort { key: CompListSortKey; dir: 'asc' | 'desc' }
-export type LGSortKey = 'name' | 'lastUpdated' | 'createdBy';
-export interface LGSort { key: LGSortKey; dir: 'asc' | 'desc' }
+/** Sortable columns on the Composition tab's picker table. */
+export type CalcCompositionSortKey = 'name' | 'last_modified';
+/** Sortable columns on the Load group tab's picker table. */
+export type CalcLoadGroupSortKey = 'name' | 'last_modified';
 
 // ─── /composition ─────────────────────────────────────────────────────────────
 

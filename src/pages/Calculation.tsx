@@ -10,28 +10,39 @@ import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
 import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
 import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
-import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
+import { matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, CalculationSortKey } from '@/types';
 import { Input } from '@/components/ui/input';
-import { CALCULATIONS, timestampValue } from '@/data/calculations';
+import { formatDateTime } from '@/lib/utils';
+import { type Calculation } from '@/data/calculations';
+import { useProjectList } from '@/hooks/api/useProjects';
+import type { Project } from '@/api/types/projects';
 
 const PAGE_SIZE = 10;
+
+function toUiCalculation(p: Project): Calculation {
+  return {
+    id: p.uuid,
+    name: p.name,
+    description: p.description ?? '',
+    timestamp: formatDateTime(p.created_at),
+    status: p.state === 'RUNNING' ? 'Running' : p.state === 'STOPPED' ? 'Stopped' : 'Draft',
+  };
+}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function Calculation() {
   const navigate = useNavigate();
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortState<CalculationSortKey>>({ key: 'timestamp', direction: 'desc' });
   const [page, setPage] = useState(1);
 
-  const allStatuses = useMemo(() => [...new Set(CALCULATIONS.map((c) => c.status))].sort(), []);
-  const statusFilter = useColumnFilter(allStatuses, () => setPage(1));
+  const { data: backendProjects, isLoading, isError } = useProjectList();
+  const CALCULATIONS = useMemo(() => (backendProjects ?? []).map(toUiCalculation), [backendProjects]);
 
-  function toggleExpand(id: string) {
-    setExpandedIds((prev) => toggleSetMember(prev, id));
-  }
+  const allStatuses = useMemo(() => [...new Set(CALCULATIONS.map((c) => c.status))].sort(), [CALCULATIONS]);
+  const statusFilter = useColumnFilter(allStatuses, () => setPage(1));
 
   const filtered = useMemo(
     () =>
@@ -40,16 +51,10 @@ export function Calculation() {
           matchesQuery(query, [c.name, c.description]) &&
           (statusFilter.selected.size === 0 || statusFilter.selected.has(c.status))
       ),
-    [query, statusFilter.selected]
+    [CALCULATIONS, query, statusFilter.selected]
   );
 
-  // Timestamps are '2026-04-13 1:43 PM' strings — 12-hour times don't sort
-  // lexically, so compare them as parsed values.
-  const sorted = useMemo(
-    () =>
-      sortItems(filtered, sort, (c, key) => (key === 'timestamp' ? timestampValue(c.timestamp) : c[key])),
-    [filtered, sort]
-  );
+  const sorted = useMemo(() => sortItems(filtered, sort, (c, key) => c[key]), [filtered, sort]);
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
 
@@ -59,8 +64,6 @@ export function Calculation() {
 
   const COLUMNS: ListTableHeadColumn<CalculationSortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[260px]' },
-    { label: 'Description' },
-    { label: 'Start time', sortKey: 'timestamp', className: 'w-[200px]' },
     {
       label: 'Status',
       className: 'w-[180px]',
@@ -73,6 +76,8 @@ export function Calculation() {
         />
       ),
     },
+    { label: 'Created at', sortKey: 'timestamp', className: 'w-[200px]' },
+    { label: 'Description' },
   ];
 
   return (
@@ -121,25 +126,32 @@ export function Calculation() {
                   columns={COLUMNS}
                   sort={sort}
                   onSort={handleSort}
-                  leadingWidthClassName="w-[52px]"
                   actionsWidthClassName="w-[148px]"
                 />
                 <tbody>
-                  {pageRows.map((item) => (
-                    <CalculationRow
-                      key={item.id}
-                      item={item}
-                      expanded={expandedIds.has(item.id)}
-                      onToggle={() => toggleExpand(item.id)}
-                    />
-                  ))}
-                  {pageRows.length === 0 && (
+                  {isLoading && (
                     <tr>
-                      <td
-                        colSpan={6}
-                        className="px-3 py-8 text-center text-[14px] text-[#6b7280]"
-                      >
-                        No calculations match your search.
+                      <td colSpan={5} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                        Loading calculations…
+                      </td>
+                    </tr>
+                  )}
+                  {isError && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-8 text-center text-[14px] text-[#dc2626]">
+                        Failed to load calculations from the server.
+                      </td>
+                    </tr>
+                  )}
+                  {!isLoading &&
+                    !isError &&
+                    pageRows.map((item) => <CalculationRow key={item.id} item={item} />)}
+                  {!isLoading && !isError && pageRows.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
+                        {CALCULATIONS.length === 0
+                          ? 'No calculations yet. Click "New calculation" to get started.'
+                          : 'No calculations match your search.'}
                       </td>
                     </tr>
                   )}

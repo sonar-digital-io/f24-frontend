@@ -10,6 +10,10 @@ interface CalculationGeneralTabProps {
   onAnalysisMethodChange: (value: string) => void;
   description: string;
   onDescriptionChange: (value: string) => void;
+  date: string;
+  onDateChange: (value: string) => void;
+  /** Fires on blur of name/description/date — persists the field once a project exists. */
+  onFieldBlur: () => void;
 }
 
 export function CalculationGeneralTab({
@@ -19,6 +23,9 @@ export function CalculationGeneralTab({
   onAnalysisMethodChange,
   description,
   onDescriptionChange,
+  date,
+  onDateChange,
+  onFieldBlur,
 }: CalculationGeneralTabProps) {
   return (
     <div className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
@@ -33,6 +40,7 @@ export function CalculationGeneralTab({
           id="calculation-name"
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
+          onBlur={onFieldBlur}
           placeholder="Name the calculation"
           className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
         />
@@ -78,9 +86,28 @@ export function CalculationGeneralTab({
           id="calculation-description"
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
+          onBlur={onFieldBlur}
           placeholder="Describe the calculation"
           rows={4}
           className="rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label
+          htmlFor="calculation-date"
+          className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+        >
+          Date <span className="text-[#dc2626]">*</span>
+        </Label>
+        <Input
+          id="calculation-date"
+          type="date"
+          value={date}
+          onChange={(e) => onDateChange(e.target.value)}
+          onBlur={onFieldBlur}
+          required
+          className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
         />
       </div>
     </div>

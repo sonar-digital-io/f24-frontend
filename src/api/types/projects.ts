@@ -3,6 +3,7 @@ import type { KeyValuePair } from './common';
 export interface ProjectPayload {
   name: string;
   description?: string;
+  created_at: string;
 }
 
 export interface ProjectCreateResponse {

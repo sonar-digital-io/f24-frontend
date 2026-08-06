@@ -13,12 +13,8 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { BladeThumbnail } from '@/components/common/card/BladeThumbnail';
 import { Tip } from '@/components/common/list/Tip';
-import { DetailRow } from '@/components/common/list/DetailRow';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
-import { ExpandToggleCell } from '@/components/common/list/ExpandToggleCell';
-import { rowInteractionProps } from '@/lib/listTable';
 import { type Calculation, type CalculationStatus } from '@/data/calculations';
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -62,20 +58,6 @@ function StatusBadge({ status, timestamp }: { status: CalculationStatus; timesta
     >
       {status}
     </span>
-  );
-}
-
-// ─── Detail grid ──────────────────────────────────────────────────────────────
-
-function CalculationDetailGrid({ details }: { details: Calculation['details'] }) {
-  return (
-    <div className="flex flex-col">
-      <DetailRow label="Created at" value={details.createdAt} />
-      <DetailRow label="Created by" value={details.createdBy} />
-      <DetailRow label="Composition" value={details.composition} />
-      <DetailRow label="Load group" value={details.loadGroup} />
-      <DetailRow label="Analysis method" value={details.analysisMethod} />
-    </div>
   );
 }
 
@@ -182,67 +164,28 @@ function RowActions({ item }: { item: Calculation }) {
 
 export interface CalculationRowProps {
   item: Calculation;
-  expanded: boolean;
-  onToggle: () => void;
 }
 
-export function CalculationRow({ item, expanded, onToggle }: CalculationRowProps) {
+export function CalculationRow({ item }: CalculationRowProps) {
+  const navigate = useNavigate();
   return (
-    <>
-      <tr
-        {...rowInteractionProps(onToggle)}
-        className={`group cursor-pointer border-b border-[#e5e7eb] transition-colors ${
-          expanded ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'
-        }`}
-      >
-        <ExpandToggleCell expanded={expanded} onToggle={onToggle} controls={`calculation-detail-${item.id}`} />
-        <td className="w-[260px] px-3 py-4 align-top text-[14px] font-medium leading-5 text-[#0a0a0a]">
-          {item.name}
-        </td>
-        <td className="px-3 py-4 align-top text-[14px] leading-5 text-[#6b7280]">{item.description}</td>
-        <td className="w-[200px] px-3 py-4 align-top text-[14px] leading-5 text-[#6b7280]">
-          {item.timestamp || '–'}
-        </td>
-        <td className="w-[180px] px-3 py-4 align-top">
-          <StatusBadge status={item.status} timestamp={item.timestamp} />
-        </td>
-        <td className="w-[148px] px-3 py-4 align-top" onClick={(e) => e.stopPropagation()}>
-          <RowActions item={item} />
-        </td>
-      </tr>
-      {expanded && (
-        <tr
-          id={`calculation-detail-${item.id}`}
-          className="border-b border-[#e5e7eb] bg-white"
-        >
-          <td className="w-[52px]" />
-          <td colSpan={5} className="px-3 pb-5 pt-1">
-            <div className="flex">
-              <CalculationDetailGrid details={item.details} />
-              <div className="ml-10 mt-4 w-[160px] shrink-0 overflow-hidden rounded-lg border border-[#e5e7eb] bg-[#f8fafc]">
-                <BladeThumbnail />
-              </div>
-              <div className="flex-1" />
-              <div className="mt-4 flex shrink-0 gap-4 self-start">
-                <button
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  className="h-9 rounded-md border border-[#e5e7eb] bg-white px-4 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                >
-                  Details
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  className="h-9 rounded-md border border-[#e5e7eb] bg-white px-4 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                >
-                  Logs
-                </button>
-              </div>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+    <tr
+      onClick={() => navigate(`/calculation/${item.id}`)}
+      className="group cursor-pointer border-b border-[#e5e7eb] bg-white transition-colors hover:bg-[#f9fafb]"
+    >
+      <td className="w-[260px] px-3 py-4 align-top text-[14px] font-medium leading-5 text-[#0a0a0a]">
+        {item.name}
+      </td>
+      <td className="w-[180px] px-3 py-4 align-top">
+        <StatusBadge status={item.status} timestamp={item.timestamp} />
+      </td>
+      <td className="w-[200px] px-3 py-4 align-top text-[14px] leading-5 text-[#6b7280]">
+        {item.timestamp || '–'}
+      </td>
+      <td className="px-3 py-4 align-top text-[14px] leading-5 text-[#6b7280]">{item.description}</td>
+      <td className="w-[148px] px-3 py-4 align-top" onClick={(e) => e.stopPropagation()}>
+        <RowActions item={item} />
+      </td>
+    </tr>
   );
 }

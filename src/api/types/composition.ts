@@ -10,7 +10,9 @@ export interface Composition {
   id: number;
   name: string;
   description?: string;
+  created_at?: string;
   last_modified?: string;
+  user?: string;
   settings?: KeyValuePair[];
   geometry?: number | null;
   /** Inline on the composition detail response — no separate GET endpoint for this. */

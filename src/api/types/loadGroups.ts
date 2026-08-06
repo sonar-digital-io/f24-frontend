@@ -9,6 +9,8 @@ export interface LoadGroup {
   name: string;
   description?: string;
   created_at: string;
+  last_modified?: string;
+  user?: string;
   rpm_thrust_limit?: LoadLimitRange;
   rpm_torque_limit?: LoadLimitRange;
   rpm_power_limit?: LoadLimitRange;
@@ -66,6 +68,8 @@ export interface LoadCasesPayload {
 export interface FatigueCase {
   /** Client-side identity key. */
   __KEY__: string;
+  /** Backend id — present once hydrated from GET, absent for a brand-new unsaved row. */
+  id?: number;
   /** References a load case's backend id — null until one's been picked. */
   load_case: number | null;
   min_scale: number;
@@ -80,6 +84,8 @@ export interface FatigueCase {
 export interface FatigueProfile {
   /** Client-side identity key. */
   __KEY__: string;
+  /** Backend id — present once hydrated from GET, absent for a brand-new unsaved row. */
+  id?: number;
   name: string;
   fatigue_cases: FatigueCase[];
 }
