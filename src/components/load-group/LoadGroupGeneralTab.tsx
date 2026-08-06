@@ -9,6 +9,8 @@ interface LoadGroupGeneralTabProps {
   onNameChange: (value: string) => void;
   description: string;
   onDescriptionChange: (value: string) => void;
+  date: string;
+  onDateChange: (value: string) => void;
 }
 
 export function LoadGroupGeneralTab({
@@ -17,6 +19,8 @@ export function LoadGroupGeneralTab({
   onNameChange,
   description,
   onDescriptionChange,
+  date,
+  onDateChange,
 }: LoadGroupGeneralTabProps) {
   return (
     <div className={isNew ? 'relative min-h-[500px]' : ''}>
@@ -51,6 +55,22 @@ export function LoadGroupGeneralTab({
             placeholder="Describe the load group"
             rows={4}
             className="rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label
+            htmlFor="load-group-date"
+            className="text-[14px] font-medium leading-none text-[#0a0a0a]"
+          >
+            Date<span className="text-[#dc2626]">*</span>
+          </Label>
+          <Input
+            id="load-group-date"
+            type="date"
+            value={date}
+            onChange={(e) => onDateChange(e.target.value)}
+            required
+            className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
           />
         </div>
       </div>

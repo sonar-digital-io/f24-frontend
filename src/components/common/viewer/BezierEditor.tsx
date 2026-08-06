@@ -29,8 +29,8 @@ import {
  * Interactions:
  * - Click on background  → insert a new anchor at that position
  * - Drag anchor          → move it (bounded by its neighbors / xMin·xMax)
- * - Double-click anchor  → remove it, including endpoints — a curve can be
- *   emptied down to 0 points; callers must block saving below 2 points
+ * - Double-click anchor  → remove it, including endpoints — blocked once
+ *   `minPoints` remain (default 2)
  * - +/- buttons          → zoom in / out
  * - Drag background      → pan (only when zoomed in)
  * - Double-click bg      → reset zoom & pan
@@ -50,6 +50,12 @@ export interface BezierEditorProps {
   xMax?: number;
   xStep?: number;
   rootX?: number;
+  /** Show the root-position reference line, and cap point 0 at it — off for
+   *  charts with no concept of a start position (e.g. load limits). */
+  showRootIndicator?: boolean;
+  /** Fewest points the curve may shrink to via double-click delete — callers
+   *  vary (e.g. 2 for load limits, more where a curve needs extra shape). */
+  minPoints?: number;
   yUnit?: string;
   className?: string;
 }
@@ -64,6 +70,8 @@ export function BezierEditor({
   xMax = 1,
   xStep = 0.1,
   rootX = 0.05,
+  showRootIndicator = true,
+  minPoints = 2,
   yUnit = '',
   className,
 }: BezierEditorProps) {
@@ -110,11 +118,11 @@ export function BezierEditor({
     const xEps = (xMax - xMin) * 0.001;
     if (idx === 0) {
       // The first point represents the start position — draggable in x too,
-      // bounded by the chart's xMin, the next point, and rootX (it can sit
-      // before the start position, but never past it).
+      // bounded by the chart's xMin, the next point, and (when shown) rootX —
+      // it can sit before the start position, but never past it.
       const neighborUpper = points.length > 1 ? points[1].x - xEps : xMax;
-      const upper = Math.min(neighborUpper, rootX);
-      setBlockedAtRoot(x > rootX);
+      const upper = showRootIndicator ? Math.min(neighborUpper, rootX) : neighborUpper;
+      if (showRootIndicator) setBlockedAtRoot(x > rootX);
       x = clamp(x, xMin, upper);
     } else if (idx === points.length - 1) {
       const lower = points.length > 1 ? points[idx - 1].x + xEps : xMin;
@@ -135,11 +143,11 @@ export function BezierEditor({
     setBlockedAtRoot(false);
   }
 
-  // Double-click any anchor (including endpoints) to remove it. Down to 0
-  // points is allowed here — callers are responsible for blocking save
-  // when a curve has fewer than 2 points.
+  // Double-click any anchor (including endpoints) to remove it — blocked
+  // once `minPoints` remain, per-caller since not every curve's floor is 2.
   function handlePointDoubleClick(idx: number, e: React.MouseEvent) {
     e.stopPropagation();
+    if (points.length <= minPoints) return;
     onChange(points.filter((_, i) => i !== idx));
   }
 
@@ -247,16 +255,18 @@ export function BezierEditor({
         />
 
         {/* Root indicator */}
-        <line
-          x1={rootPx}
-          y1={PAD_TOP}
-          x2={rootPx}
-          y2={VB_HEIGHT - PAD_BOTTOM}
-          stroke="#f59e0b"
-          strokeWidth="1.5"
-          opacity="0.8"
-          vectorEffect="non-scaling-stroke"
-        />
+        {showRootIndicator && (
+          <line
+            x1={rootPx}
+            y1={PAD_TOP}
+            x2={rootPx}
+            y2={VB_HEIGHT - PAD_BOTTOM}
+            stroke="#f59e0b"
+            strokeWidth="1.5"
+            opacity="0.8"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
 
         {/* Ghost curve — pre-drag snapshot, shown only while a point is being dragged */}
         {draggingIndex !== null && preEditPointsRef.current && (
@@ -294,7 +304,11 @@ export function BezierEditor({
               onPointerUp={(e) => handlePointerUp(idx, e)}
               onPointerCancel={(e) => handlePointerUp(idx, e)}
               onDoubleClick={(e) => handlePointDoubleClick(idx, e)}
-              tooltip="Drag to move · Double-click to remove"
+              tooltip={
+                points.length > minPoints
+                  ? 'Drag to move · Double-click to remove'
+                  : 'Drag to move'
+              }
             />
           );
         })}

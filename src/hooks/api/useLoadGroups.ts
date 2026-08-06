@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as loadGroupsApi from '@/api/loadGroups';
-import type { LoadGroupPayload, LoadGroupLimitsPayload, LoadCasesPayload } from '@/api/types/loadGroups';
+import type {
+  LoadGroupPayload,
+  LoadGroupLimitsPayload,
+  LoadCasesPayload,
+  FatigueProfilesPayload,
+} from '@/api/types/loadGroups';
 
 export const loadGroupKeys = {
   list: () => ['load-groups', 'list'] as const,
@@ -52,10 +57,8 @@ export function useDeleteLoadGroup() {
 }
 
 export function useUpdateLoadGroupLimits(loadGroupId: number) {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: LoadGroupLimitsPayload) => loadGroupsApi.updateLoadGroupLimits(loadGroupId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: loadGroupKeys.detail(loadGroupId) }),
   });
 }
 
@@ -86,7 +89,7 @@ export function useFatigueProfiles(loadGroupId: number) {
 export function useUpdateFatigueProfiles(loadGroupId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: unknown) => loadGroupsApi.updateFatigueProfiles(loadGroupId, payload),
+    mutationFn: (payload: FatigueProfilesPayload) => loadGroupsApi.updateFatigueProfiles(loadGroupId, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: loadGroupKeys.fatigueProfiles(loadGroupId) }),
   });
 }

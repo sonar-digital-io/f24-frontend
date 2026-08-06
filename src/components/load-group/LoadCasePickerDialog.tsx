@@ -5,17 +5,22 @@ import { DialogHeader } from '@/components/common/dialog/DialogHeader';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
+interface PickableLoadCase {
+  id: number;
+  name: string;
+}
+
 interface LoadCasePickerDialogProps {
   open: boolean;
-  loadCaseNames: string[];
-  current: string;
-  onSelect: (name: string) => void;
+  loadCases: PickableLoadCase[];
+  current: number | null;
+  onSelect: (id: number) => void;
   onClose: () => void;
 }
 
 export function LoadCasePickerDialog({
   open,
-  loadCaseNames,
+  loadCases,
   current,
   onSelect,
   onClose,
@@ -31,9 +36,9 @@ export function LoadCasePickerDialog({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return loadCaseNames;
-    return loadCaseNames.filter((n) => n.toLowerCase().includes(q));
-  }, [query, loadCaseNames]);
+    if (!q) return loadCases;
+    return loadCases.filter((lc) => lc.name.toLowerCase().includes(q));
+  }, [query, loadCases]);
 
   if (!open) return null;
 
@@ -73,18 +78,18 @@ export function LoadCasePickerDialog({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((name) => (
+              {filtered.map((lc) => (
                 <tr
-                  key={name}
+                  key={lc.id}
                   className={`border-b border-[#e5e7eb] last:border-b-0 ${
-                    name === current ? 'bg-[#eef9ff]' : 'hover:bg-[#f9fafb]'
+                    lc.id === current ? 'bg-[#eef9ff]' : 'hover:bg-[#f9fafb]'
                   }`}
                 >
-                  <td className="px-3 py-3 text-[14px] font-medium text-[#0a0a0a]">{name}</td>
+                  <td className="px-3 py-3 text-[14px] font-medium text-[#0a0a0a]">{lc.name}</td>
                   <td className="px-3 py-2 text-right">
                     <button
                       type="button"
-                      onClick={() => { onSelect(name); onClose(); }}
+                      onClick={() => { onSelect(lc.id); onClose(); }}
                       className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[13px] font-medium text-[#fafafa] hover:bg-[#005580]"
                     >
                       Select

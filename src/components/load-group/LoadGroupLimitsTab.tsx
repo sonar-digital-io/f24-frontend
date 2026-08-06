@@ -1,36 +1,39 @@
 import { Info, Plus, Trash2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BezierEditor } from '@/components/common/viewer/BezierEditor';
-import type { ControlPoint } from '@/types';
 import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
-import {
-  LIMITS_UNITS,
-  LIMITS_Y_MAX,
-  LIMITS_Y_STEP,
-  type LimitsSubTab,
-} from '@/data/loadGroupForm';
+import { niceStep } from '@/lib/bezierMath';
+import type { LoadLimitRange } from '@/api/types/loadGroups';
+import { LIMITS_UNITS, type LimitsSubTab } from '@/data/loadGroupForm';
 
 interface LoadGroupLimitsTabProps {
   limitsSubTab: LimitsSubTab;
   onLimitsSubTabChange: (sub: LimitsSubTab) => void;
-  limitPoints: Record<LimitsSubTab, ControlPoint[]>;
-  onLimitPointsChange: (sub: LimitsSubTab, points: ControlPoint[]) => void;
-  onUpdateLimitPoint: (sub: LimitsSubTab, idx: number, field: 'x' | 'y', val: number) => void;
-  onAddLimitPoint: (sub: LimitsSubTab) => void;
-  onDeleteLimitPoint: (sub: LimitsSubTab, idx: number) => void;
+  limits: Record<LimitsSubTab, LoadLimitRange>;
+  onUpdateBounds: (sub: LimitsSubTab, field: 'x_min' | 'x_max' | 'y_min' | 'y_max', val: number) => void;
+  onUpdateCurvePoint: (sub: LimitsSubTab, idx: number, field: 'rpm' | 'value', val: number) => void;
+  onCurveChange: (sub: LimitsSubTab, curve: LoadLimitRange['curve']) => void;
+  onAddCurvePoint: (sub: LimitsSubTab) => void;
+  onDeleteCurvePoint: (sub: LimitsSubTab, idx: number) => void;
   tabTriggerClassName: string;
 }
 
 export function LoadGroupLimitsTab({
   limitsSubTab,
   onLimitsSubTabChange,
-  limitPoints,
-  onLimitPointsChange,
-  onUpdateLimitPoint,
-  onAddLimitPoint,
-  onDeleteLimitPoint,
+  limits,
+  onUpdateBounds,
+  onUpdateCurvePoint,
+  onCurveChange,
+  onAddCurvePoint,
+  onDeleteCurvePoint,
   tabTriggerClassName,
 }: LoadGroupLimitsTabProps) {
+  const bounds = limits[limitsSubTab];
+  const points = bounds.curve.map((c) => ({ x: c.rpm, y: c.value }));
+
   return (
     <div className="flex w-fit flex-col rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
       {/* Info banner + Sub-tabs header */}
@@ -55,21 +58,39 @@ export function LoadGroupLimitsTab({
         </Tabs>
       </div>
 
-      {/* BezierEditor + Table side by side */}
-      <div className="px-6 pb-6">
+      {/* Bounds + BezierEditor + Table */}
+      <div className="flex flex-col gap-4 px-6 pb-6">
+        <div className="flex items-end gap-4">
+          {(['y_min', 'y_max', 'x_min', 'x_max'] as const).map((field) => (
+            <div key={field} className="flex flex-col gap-2">
+              <Label className="text-[12px] font-medium uppercase leading-none text-[#6b7280]">
+                {field.replace('_', ' ')}
+              </Label>
+              <Input
+                type="number"
+                value={bounds[field]}
+                onChange={(e) => onUpdateBounds(limitsSubTab, field, parseFloat(e.target.value) || 0)}
+                className="h-8 w-[110px] rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+              />
+            </div>
+          ))}
+        </div>
+
         <div className="grid grid-cols-[minmax(480px,1fr)_260px] gap-6">
           {/* Interactive Bezier chart */}
           <div className="flex flex-col gap-3">
             <BezierEditor
-              points={limitPoints[limitsSubTab]}
-              onChange={(next) => onLimitPointsChange(limitsSubTab, next)}
-              xMin={0}
-              xMax={20}
-              xStep={5}
-              yMin={0}
-              yMax={LIMITS_Y_MAX[limitsSubTab]}
-              yStep={LIMITS_Y_STEP[limitsSubTab]}
+              points={points}
+              onChange={(next) => onCurveChange(limitsSubTab, next.map((p) => ({ rpm: p.x, value: p.y })))}
+              xMin={bounds.x_min}
+              xMax={bounds.x_max}
+              xStep={niceStep(bounds.x_max - bounds.x_min)}
+              yMin={bounds.y_min}
+              yMax={bounds.y_max}
+              yStep={niceStep(bounds.y_max - bounds.y_min)}
               yUnit={LIMITS_UNITS[limitsSubTab]}
+              showRootIndicator={false}
+              minPoints={2}
             />
           </div>
 
@@ -88,9 +109,8 @@ export function LoadGroupLimitsTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {limitPoints[limitsSubTab].map((pt, idx) => {
-                    const isEndpoint =
-                      idx === 0 || idx === limitPoints[limitsSubTab].length - 1;
+                  {bounds.curve.map((pt, idx) => {
+                    const isEndpoint = idx === 0 || idx === bounds.curve.length - 1;
                     return (
                       <tr
                         key={idx}
@@ -100,23 +120,22 @@ export function LoadGroupLimitsTab({
                         <td className="px-2 py-2">
                           <BufferedNumberInput
                             step="0.1"
-                            min={0}
-                            max={20}
-                            value={pt.x}
+                            min={bounds.x_min}
+                            max={bounds.x_max}
+                            value={pt.rpm}
                             format={(v) => v.toFixed(2)}
-                            disabled={isEndpoint}
-                            onCommit={(v) => onUpdateLimitPoint(limitsSubTab, idx, 'x', v)}
-                            className="h-8 w-full rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:bg-[#f8fafc] disabled:text-[#6b7280]"
+                            onCommit={(v) => onUpdateCurvePoint(limitsSubTab, idx, 'rpm', v)}
+                            className="h-8 w-full rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
                           />
                         </td>
                         <td className="px-2 py-2">
                           <BufferedNumberInput
                             step="1"
-                            min={0}
-                            max={LIMITS_Y_MAX[limitsSubTab]}
-                            value={pt.y}
+                            min={bounds.y_min}
+                            max={bounds.y_max}
+                            value={pt.value}
                             format={(v) => v.toFixed(0)}
-                            onCommit={(v) => onUpdateLimitPoint(limitsSubTab, idx, 'y', v)}
+                            onCommit={(v) => onUpdateCurvePoint(limitsSubTab, idx, 'value', v)}
                             className="h-8 w-full rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
                           />
                         </td>
@@ -124,7 +143,7 @@ export function LoadGroupLimitsTab({
                           {!isEndpoint && (
                             <button
                               type="button"
-                              onClick={() => onDeleteLimitPoint(limitsSubTab, idx)}
+                              onClick={() => onDeleteCurvePoint(limitsSubTab, idx)}
                               aria-label="Delete point"
                               className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] opacity-0 hover:bg-[#fee2e2] hover:text-[#dc2626] group-hover:opacity-100"
                             >
@@ -139,7 +158,7 @@ export function LoadGroupLimitsTab({
               </table>
               <button
                 type="button"
-                onClick={() => onAddLimitPoint(limitsSubTab)}
+                onClick={() => onAddCurvePoint(limitsSubTab)}
                 className="flex w-full items-center justify-center gap-1.5 border-t border-[#e5e7eb] py-2 text-[13px] font-medium text-[#006496] hover:bg-[#f0f9ff]"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />

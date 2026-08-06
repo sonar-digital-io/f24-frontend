@@ -7,6 +7,10 @@ interface BufferedNumberInputProps
   onCommit: (value: number) => void;
   /** Format of the resting (unfocused) display value. Defaults to String(value). */
   format?: (value: number) => string;
+  /** Range/relation constraint (e.g. vs. a sibling min/max field) applied only
+   *  on blur — keeps mid-typing values (e.g. deleting "20" down to "") from
+   *  being clamped back before the user finishes editing. */
+  clampOnBlur?: (value: number) => number;
 }
 
 /**
@@ -19,6 +23,7 @@ export function BufferedNumberInput({
   value,
   onCommit,
   format,
+  clampOnBlur,
   ...rest
 }: BufferedNumberInputProps) {
   const [draft, setDraft] = useState<string | null>(null);
@@ -33,7 +38,13 @@ export function BufferedNumberInput({
         const parsed = parseFloat(e.target.value);
         if (Number.isFinite(parsed)) onCommit(parsed);
       }}
-      onBlur={() => setDraft(null)}
+      onBlur={() => {
+        setDraft(null);
+        if (clampOnBlur) {
+          const parsed = parseFloat(draft ?? display);
+          onCommit(clampOnBlur(Number.isFinite(parsed) ? parsed : value));
+        }
+      }}
       {...rest}
     />
   );

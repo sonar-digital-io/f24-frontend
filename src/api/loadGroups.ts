@@ -4,6 +4,7 @@ import type {
   LoadGroup,
   LoadGroupLimitsPayload,
   LoadCasesPayload,
+  FatigueProfilesPayload,
 } from './types/loadGroups';
 
 export async function createLoadGroup(payload: LoadGroupPayload): Promise<LoadGroup> {
@@ -45,12 +46,20 @@ export async function updateLoadCases(loadGroupId: number, payload: LoadCasesPay
   return data;
 }
 
-export async function getFatigueProfiles(loadGroupId: number): Promise<unknown> {
-  const { data } = await apiClient.get(`/load/${loadGroupId}/fatigue-profiles/`);
-  return data;
+export async function getFatigueProfiles(loadGroupId: number): Promise<FatigueProfilesPayload> {
+  // Nested under `fatigue_profiles` — same as the array embedded in GET /load/:id/.
+  const { data } = await apiClient.get<FatigueProfilesPayload | { fatigue_profiles: FatigueProfilesPayload }>(
+    `/load/${loadGroupId}/fatigue-profiles/`
+  );
+  return Array.isArray(data) ? data : data.fatigue_profiles;
 }
 
-export async function updateFatigueProfiles(loadGroupId: number, payload: unknown): Promise<unknown> {
-  const { data } = await apiClient.put(`/load/${loadGroupId}/fatigue-profiles/`, payload);
-  return data;
+export async function updateFatigueProfiles(loadGroupId: number, payload: FatigueProfilesPayload): Promise<FatigueProfilesPayload> {
+  // The backend rejects a raw array body ("Expected a dictionary, but got
+  // list") — it wants the same { fatigue_profiles: [...] } wrapper as GET.
+  const { data } = await apiClient.put<{ fatigue_profiles: FatigueProfilesPayload }>(
+    `/load/${loadGroupId}/fatigue-profiles/`,
+    { fatigue_profiles: payload }
+  );
+  return data.fatigue_profiles;
 }
