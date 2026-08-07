@@ -50,7 +50,7 @@ export function ColumnFilterPanel({
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search"
-          className="flex-1 bg-transparent text-[14px] text-[#0a0a0a] outline-none placeholder:text-[#9ca3af]"
+          className="flex-1 rounded bg-transparent text-[14px] text-[#0a0a0a] outline-none placeholder:text-[#9ca3af] focus-visible:ring-2 focus-visible:ring-[#006496]/40"
         />
       </div>
       <button

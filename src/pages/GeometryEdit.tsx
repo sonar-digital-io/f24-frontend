@@ -27,6 +27,7 @@ import {
   useUpdateGeometryEdges,
   useGeometryEdges,
 } from '@/hooks/api/useGeometry';
+import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { API_TO_UI_PROFILE_TYPE, UI_TO_API_PROFILE_TYPE, type Profile } from '@/data/profiles';
 import type {
@@ -72,6 +73,26 @@ function toApiProfile(p: Profile): GeometryProfileInput {
       { reference: 'max_thickness', value: String(p.thickness) },
     ],
   };
+}
+
+const PANEL_WIDTH_NARROW = 'w-[516px] max-w-[calc(100vw-2rem)]';
+const PANEL_WIDTH_WIDE = 'w-[924px] max-w-[calc(100vw-2rem)]';
+
+/** The floating properties panel's width depends on the active tab (and, for
+ *  the two foldable tabs, whether their side panel is folded). */
+function getPanelWidthClass(activeTab: string, profileFolded: boolean, stackingFolded: boolean): string {
+  switch (activeTab) {
+    case 'create':
+      return 'w-[468px] max-w-[calc(100vw-2rem)]';
+    case 'profile-distribution':
+      return profileFolded ? PANEL_WIDTH_NARROW : PANEL_WIDTH_WIDE;
+    case 'profiles':
+      return 'w-[404px] max-w-[calc(100vw-2rem)]';
+    case 'stacking':
+      return stackingFolded ? PANEL_WIDTH_NARROW : PANEL_WIDTH_WIDE;
+    default:
+      return 'w-[280px]';
+  }
 }
 
 export function GeometryEdit() {
@@ -125,8 +146,6 @@ export function GeometryEdit() {
   const [newName, setNewName] = useState('');
   const [newDate, setNewDate] = useState(todayISO());
   const [newDescription, setNewDescription] = useState('');
-  const [duplicateHydrated, setDuplicateHydrated] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
   const [baseline, setBaseline] = useState<{ name: string; date: string; description: string } | null>(
     null
   );
@@ -144,9 +163,8 @@ export function GeometryEdit() {
 
   // Load the existing geometry's name/date/description — plus, when present, the nested
   // settings/profiles arrays — into the form when editing.
-  useEffect(() => {
-    if (isNew || hydrated || detailQuery.isFetching || !detailQuery.data) return;
-    const g = detailQuery.data;
+  const hydrated = useHydrateOnce(!isNew && !detailQuery.isFetching && !!detailQuery.data, () => {
+    const g = detailQuery.data!;
     const hydratedDate = toDateInputValue(g.created_at);
     const hydratedDescription = g.description ?? '';
     setNewName(g.name);
@@ -171,26 +189,17 @@ export function GeometryEdit() {
     if (g.profile_generator_parameters) {
       setSavedProfileParams(g.profile_generator_parameters);
     }
+  });
 
-    setHydrated(true);
-  }, [isNew, hydrated, detailQuery.isFetching, detailQuery.data]);
-
-  useEffect(() => {
-    if (
-      !isNew ||
-      duplicateHydrated ||
-      !Number.isFinite(duplicateSourceId) ||
-      duplicateQuery.isFetching ||
-      !duplicateQuery.data
-    ) {
-      return;
+  useHydrateOnce(
+    isNew && Number.isFinite(duplicateSourceId) && !duplicateQuery.isFetching && !!duplicateQuery.data,
+    () => {
+      const g = duplicateQuery.data!;
+      setNewName(`${g.name}_copy`);
+      setNewDate(toDateInputValue(g.created_at));
+      setNewDescription(g.description ?? '');
     }
-    const g = duplicateQuery.data;
-    setNewName(`${g.name}_copy`);
-    setNewDate(toDateInputValue(g.created_at));
-    setNewDescription(g.description ?? '');
-    setDuplicateHydrated(true);
-  }, [isNew, duplicateHydrated, duplicateSourceId, duplicateQuery.isFetching, duplicateQuery.data]);
+  );
 
   function updateField(key: keyof GlobalProperties, value: string) {
     setProps((p) => ({ ...p, [key]: value }));
@@ -390,21 +399,7 @@ export function GeometryEdit() {
         {/* Floating properties panel (top-left, gap below toolbar matches gap above tab pill = 8px).
             Width depends on the active tab. z-30 so it sits above the render toggle (z-20). */}
         <aside
-          className={`absolute left-4 top-[52px] z-30 ${
-            activeTab === 'create'
-              ? 'w-[468px] max-w-[calc(100vw-2rem)]'
-              : activeTab === 'profile-distribution'
-                ? profileFolded
-                  ? 'w-[516px] max-w-[calc(100vw-2rem)]'
-                  : 'w-[924px] max-w-[calc(100vw-2rem)]'
-                : activeTab === 'profiles'
-                  ? 'w-[404px] max-w-[calc(100vw-2rem)]'
-                  : activeTab === 'stacking'
-                    ? stackingFolded
-                      ? 'w-[516px] max-w-[calc(100vw-2rem)]'
-                      : 'w-[924px] max-w-[calc(100vw-2rem)]'
-                    : 'w-[280px]'
-          }`}
+          className={`absolute left-4 top-[52px] z-30 ${getPanelWidthClass(activeTab, profileFolded, stackingFolded)}`}
         >
           {activeTab === 'create' && !isNew && !hydrated && (detailQuery.isLoading || detailQuery.isFetching) && (
             <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">

@@ -82,6 +82,32 @@ export function LayupMappingChart({
     onChange(points.filter((_, i) => i !== idx));
   }
 
+  // Keyboard alternative to dragging (arrow keys nudge by a tenth of a grid
+  // step) and to double-click-to-delete (Delete/Backspace) — the anchor is
+  // otherwise mouse/touch-only.
+  function handleKeyDown(idx: number, e: React.KeyboardEvent<SVGCircleElement>) {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      if (points.length <= 3) return;
+      onChange(points.filter((_, i) => i !== idx));
+      return;
+    }
+    const point = points[idx];
+    let x = point.x;
+    let y = point.y;
+    switch (e.key) {
+      case 'ArrowLeft': x -= xStep * 0.1; break;
+      case 'ArrowRight': x += xStep * 0.1; break;
+      case 'ArrowUp': y += yStep * 0.1; break;
+      case 'ArrowDown': y -= yStep * 0.1; break;
+      default: return;
+    }
+    e.preventDefault();
+    x = clamp(x, xMin, xMax);
+    y = clamp(y, yMin, yMax);
+    onChange(points.map((p, i) => (i === idx ? { x, y } : p)));
+  }
+
   const yTicks = computeTicks(yMin, yMax, yStep);
   const xTicks = computeTicks(xMin, xMax, xStep);
   const yDecimals = decimalsForStep(yStep);
@@ -184,6 +210,7 @@ export function LayupMappingChart({
               onPointerUp={(e) => handlePointerUp(idx, e)}
               onPointerCancel={(e) => handlePointerUp(idx, e)}
               onDoubleClick={(e) => handlePointDoubleClick(idx, e)}
+              onKeyDown={(e) => handleKeyDown(idx, e)}
               tooltip={points.length > 3 ? 'Drag to move · Double-click to remove' : 'Drag to move'}
             />
           );

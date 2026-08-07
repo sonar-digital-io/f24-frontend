@@ -9,6 +9,8 @@ export interface DropdownSelectProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** Set so a `<Label htmlFor>` elsewhere can point at the trigger button. */
+  id?: string;
 }
 
 /** Custom dropdown select shared by the Geometry/Material edit panels. */
@@ -19,6 +21,7 @@ export function DropdownSelect({
   placeholder = 'Select',
   disabled = false,
   className,
+  id,
 }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
@@ -26,6 +29,7 @@ export function DropdownSelect({
   return (
     <div ref={rootRef} className={`relative ${className ?? ''}`}>
       <button
+        id={id}
         type="button"
         onClick={() => !disabled && setOpen((o) => !o)}
         aria-haspopup="listbox"

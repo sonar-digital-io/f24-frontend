@@ -1,4 +1,4 @@
-import type { MouseEvent, PointerEvent } from 'react';
+import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 
 interface ChartAnchorPointProps {
   cx: number;
@@ -9,6 +9,9 @@ interface ChartAnchorPointProps {
   onPointerUp: (e: PointerEvent<SVGCircleElement>) => void;
   onPointerCancel: (e: PointerEvent<SVGCircleElement>) => void;
   onDoubleClick?: (e: MouseEvent<SVGCircleElement>) => void;
+  /** Keyboard alternative to drag (arrow-key nudge) and double-click (Delete/Backspace) —
+   *  the point is otherwise mouse/touch-only, which the drag itself already is. */
+  onKeyDown?: (e: KeyboardEvent<SVGCircleElement>) => void;
   tooltip?: string;
 }
 
@@ -22,6 +25,7 @@ export function ChartAnchorPoint({
   onPointerUp,
   onPointerCancel,
   onDoubleClick,
+  onKeyDown,
   tooltip,
 }: ChartAnchorPointProps) {
   return (
@@ -33,11 +37,15 @@ export function ChartAnchorPoint({
         r="14"
         fill="transparent"
         style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+        tabIndex={0}
+        role="button"
+        aria-label={tooltip ?? 'Chart control point'}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
         onDoubleClick={onDoubleClick}
+        onKeyDown={onKeyDown}
       >
         {tooltip && <title>{tooltip}</title>}
       </circle>

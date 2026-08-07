@@ -140,6 +140,36 @@ function buildFiberSheets(hw: number, hd: number, height: number, orientationDeg
   return sheets;
 }
 
+/** Frees an object's own GPU resources (geometry/material/texture), used both
+ *  on unmount (`scene.traverse`) and on every ply rebuild ("clear previous
+ *  meshes"). `ArrowHelper`'s `line`/`cone` share one static geometry across
+ *  every `ArrowHelper` instance in the whole app (see three's own
+ *  ArrowHelper source) — disposing it here would corrupt any other arrow
+ *  helper alive elsewhere, so only its per-instance materials are freed, and
+ *  its children are skipped entirely (they're not independently owned). */
+function disposeObject3D(obj: THREE.Object3D) {
+  if (obj instanceof THREE.ArrowHelper) {
+    (Array.isArray(obj.line.material) ? obj.line.material : [obj.line.material]).forEach((m) => m.dispose());
+    (Array.isArray(obj.cone.material) ? obj.cone.material : [obj.cone.material]).forEach((m) => m.dispose());
+    return;
+  }
+  if (obj.parent instanceof THREE.ArrowHelper) return;
+  if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
+    obj.geometry.dispose();
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    mats.forEach((mat) => {
+      Object.values(mat).forEach((v) => {
+        if (v instanceof THREE.Texture) v.dispose();
+      });
+      mat.dispose();
+    });
+  }
+  if (obj instanceof THREE.Sprite) {
+    obj.material.map?.dispose();
+    obj.material.dispose();
+  }
+}
+
 function createLabelSprite(text: string): THREE.Sprite {
   const size = 128;
   const canvas = document.createElement('canvas');
@@ -229,22 +259,7 @@ export function PlyStackViz({ plies, materials, className }: PlyStackVizProps) {
       ro.disconnect();
       cancelAnimationFrame(animId);
       controls.dispose();
-      scene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
-          obj.geometry.dispose();
-          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-          mats.forEach((mat) => {
-            Object.values(mat).forEach((v) => {
-              if (v instanceof THREE.Texture) v.dispose();
-            });
-            mat.dispose();
-          });
-        }
-        if (obj instanceof THREE.Sprite) {
-          obj.material.map?.dispose();
-          obj.material.dispose();
-        }
-      });
+      scene.traverse(disposeObject3D);
       renderer.dispose();
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
       sceneRef.current = null;
@@ -264,20 +279,7 @@ export function PlyStackViz({ plies, materials, className }: PlyStackVizProps) {
     // Clear previous meshes
     [...group.children].forEach((child) => {
       group.remove(child);
-      if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
-        child.geometry.dispose();
-        const mats = Array.isArray(child.material) ? child.material : [child.material];
-        mats.forEach((mat) => {
-          Object.values(mat).forEach((v) => {
-            if (v instanceof THREE.Texture) v.dispose();
-          });
-          mat.dispose();
-        });
-      }
-      if (child instanceof THREE.Sprite) {
-        child.material.map?.dispose();
-        child.material.dispose();
-      }
+      disposeObject3D(child);
     });
 
     const heights = plies.map((ply) => Math.max(MIN_HEIGHT, ply.thickness * THICKNESS_SCALE));

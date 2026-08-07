@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
@@ -17,6 +17,7 @@ import {
   useUpdateLoadGroup,
   useUpdateLoadGroupLimits,
 } from '@/hooks/api/useLoadGroups';
+import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { loadCaseHasErrors } from '@/lib/loadCaseValidation';
 import { fatigueProfilesHaveErrors } from '@/lib/fatigueValidation';
@@ -60,13 +61,10 @@ export function LoadGroupNew() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(todayISO());
-  const [hydrated, setHydrated] = useState(false);
   const [baseline, setBaseline] = useState<{ name: string; description: string; date: string } | null>(null);
-  const [duplicateHydrated, setDuplicateHydrated] = useState(false);
 
-  useEffect(() => {
-    if (isNew || hydrated || detailQuery.isFetching || !detailQuery.data) return;
-    const g = detailQuery.data;
+  useHydrateOnce(!isNew && !detailQuery.isFetching && !!detailQuery.data, () => {
+    const g = detailQuery.data!;
     const hydratedDescription = g.description ?? '';
     const hydratedDate = typeof g.created_at === 'string' ? toDateInputValue(g.created_at) : todayISO();
     setName(g.name);
@@ -83,40 +81,29 @@ export function LoadGroupNew() {
       torque: withCurve(g.rpm_torque_limit, prev.torque),
       power: withCurve(g.rpm_power_limit, prev.power),
     }));
-    setHydrated(true);
-  }, [isNew, hydrated, detailQuery.isFetching, detailQuery.data]);
+  });
 
-  useEffect(() => {
-    if (
-      !isNew ||
-      duplicateHydrated ||
-      !Number.isFinite(duplicateSourceId) ||
-      duplicateQuery.isFetching ||
-      !duplicateQuery.data
-    ) {
-      return;
+  useHydrateOnce(
+    isNew && Number.isFinite(duplicateSourceId) && !duplicateQuery.isFetching && !!duplicateQuery.data,
+    () => {
+      const g = duplicateQuery.data!;
+      setName(`${g.name}_copy`);
+      setDescription(g.description ?? '');
+      setDate(typeof g.created_at === 'string' ? toDateInputValue(g.created_at) : todayISO());
     }
-    const g = duplicateQuery.data;
-    setName(`${g.name}_copy`);
-    setDescription(g.description ?? '');
-    setDate(typeof g.created_at === 'string' ? toDateInputValue(g.created_at) : todayISO());
-    setDuplicateHydrated(true);
-  }, [isNew, duplicateHydrated, duplicateSourceId, duplicateQuery.isFetching, duplicateQuery.data]);
+  );
 
   // Load cases — 0 by default until the user adds one; hydrated from the
   // backend for edit/duplicate, saved via a dedicated PUT /load/:id/load-cases/.
   const loadCasesQuery = useLoadCases(loadGroupId);
   const updateLoadCasesMutation = useUpdateLoadCases(loadGroupId);
   const [loadCases, setLoadCases] = useState<LoadCase[]>([]);
-  const [loadCasesHydrated, setLoadCasesHydrated] = useState(false);
 
-  useEffect(() => {
-    if (isNew || loadCasesHydrated || loadCasesQuery.isFetching || !loadCasesQuery.data) return;
+  useHydrateOnce(!isNew && !loadCasesQuery.isFetching && !!loadCasesQuery.data, () => {
     setLoadCases(
-      loadCasesQuery.data.load_cases.map((lc) => ({ ...lc, __KEY__: lc.__KEY__ || crypto.randomUUID() }))
+      loadCasesQuery.data!.load_cases.map((lc) => ({ ...lc, __KEY__: lc.__KEY__ || crypto.randomUUID() }))
     );
-    setLoadCasesHydrated(true);
-  }, [isNew, loadCasesHydrated, loadCasesQuery.isFetching, loadCasesQuery.data]);
+  });
 
   // A fatigue case's load_case references a load case's backend id — only
   // load cases that have already been saved (and so have one) are pickable.
@@ -137,7 +124,6 @@ export function LoadGroupNew() {
   const fatigueProfilesQuery = useFatigueProfiles(loadGroupId);
   const updateFatigueProfilesMutation = useUpdateFatigueProfiles(loadGroupId);
   const [fatigueProfiles, setFatigueProfiles] = useState<FatigueProfile[]>([]);
-  const [fatigueProfilesHydrated, setFatigueProfilesHydrated] = useState(false);
   // Accordion open/closed — pure UI state, not part of the saved payload.
   const [openFatigueProfiles, setOpenFatigueProfiles] = useState<Record<string, boolean>>({});
   const [fatigueSearch, setFatigueSearch] = useState('');
@@ -146,9 +132,8 @@ export function LoadGroupNew() {
     caseKey: string;
   } | null>(null);
 
-  useEffect(() => {
-    if (isNew || fatigueProfilesHydrated || fatigueProfilesQuery.isFetching || !fatigueProfilesQuery.data) return;
-    const hydratedProfiles = fatigueProfilesQuery.data.map((p) => ({
+  useHydrateOnce(!isNew && !fatigueProfilesQuery.isFetching && !!fatigueProfilesQuery.data, () => {
+    const hydratedProfiles = fatigueProfilesQuery.data!.map((p) => ({
       ...p,
       __KEY__: p.__KEY__ || crypto.randomUUID(),
       fatigue_cases: p.fatigue_cases.map((c) => ({
@@ -158,8 +143,7 @@ export function LoadGroupNew() {
       })),
     }));
     setFatigueProfiles(hydratedProfiles);
-    setFatigueProfilesHydrated(true);
-  }, [isNew, fatigueProfilesHydrated, fatigueProfilesQuery.isFetching, fatigueProfilesQuery.data]);
+  });
 
   const titleText = isNew ? name.trim() || 'New load group' : name.trim() || 'Loading…';
 
@@ -369,6 +353,30 @@ export function LoadGroupNew() {
 
   const fatigueProfilesInvalid = fatigueProfilesHaveErrors(fatigueProfiles);
 
+  // ── Toolbar save action, per tab ─────────────────────────────────────────
+  const tabAction: { onClick: () => void; disabled: boolean; label: string } | undefined = {
+    general: {
+      onClick: handleSaveGeneral,
+      disabled: !name.trim() || !date || savePending,
+      label: savePending ? 'Saving…' : isNew ? 'Create load group' : 'Update load group',
+    },
+    'load-cases': {
+      onClick: handleSaveLoadCases,
+      disabled: updateLoadCasesMutation.isPending || loadCasesHaveErrors,
+      label: updateLoadCasesMutation.isPending ? 'Saving…' : 'Save load cases',
+    },
+    limits: {
+      onClick: handleSaveLimits,
+      disabled: updateLimitsMutation.isPending,
+      label: updateLimitsMutation.isPending ? 'Saving…' : 'Save limits',
+    },
+    'fatigue-profiles': {
+      onClick: handleSaveFatigueProfiles,
+      disabled: updateFatigueProfilesMutation.isPending || fatigueProfilesInvalid,
+      label: updateFatigueProfilesMutation.isPending ? 'Saving…' : 'Save fatigue profiles',
+    },
+  }[activeTab];
+
   // ── Tab trigger class ─────────────────────────────────────────────────────
   const triggerCls =
     'h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]';
@@ -385,43 +393,16 @@ export function LoadGroupNew() {
         backLabel="Back to Load groups"
         onBack={handleExit}
         actions={
-          activeTab === 'general' ? (
+          tabAction && (
             <button
               type="button"
-              onClick={handleSaveGeneral}
-              disabled={!name.trim() || !date || savePending}
+              onClick={tabAction.onClick}
+              disabled={tabAction.disabled}
               className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {savePending ? 'Saving…' : isNew ? 'Create load group' : 'Update load group'}
+              {tabAction.label}
             </button>
-          ) : activeTab === 'load-cases' ? (
-            <button
-              type="button"
-              onClick={handleSaveLoadCases}
-              disabled={updateLoadCasesMutation.isPending || loadCasesHaveErrors}
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {updateLoadCasesMutation.isPending ? 'Saving…' : 'Save load cases'}
-            </button>
-          ) : activeTab === 'limits' ? (
-            <button
-              type="button"
-              onClick={handleSaveLimits}
-              disabled={updateLimitsMutation.isPending}
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {updateLimitsMutation.isPending ? 'Saving…' : 'Save limits'}
-            </button>
-          ) : activeTab === 'fatigue-profiles' ? (
-            <button
-              type="button"
-              onClick={handleSaveFatigueProfiles}
-              disabled={updateFatigueProfilesMutation.isPending || fatigueProfilesInvalid}
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {updateFatigueProfilesMutation.isPending ? 'Saving…' : 'Save fatigue profiles'}
-            </button>
-          ) : undefined
+          )
         }
       />
       {saveError && (

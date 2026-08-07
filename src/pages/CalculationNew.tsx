@@ -9,6 +9,7 @@ import { CalculationConfigurationTab } from '@/components/calculation/Calculatio
 import { CalculationLoadGroupTab, type LoadGroupListItem } from '@/components/calculation/CalculationLoadGroupTab';
 import { CalculationFatigueProfileTab } from '@/components/calculation/CalculationFatigueProfileTab';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
+import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import {
   useCreateProject,
   useProject,
@@ -113,16 +114,12 @@ export function CalculationNew() {
   const [analysisMethod, setAnalysisMethod] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(todayISO());
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    if (isNew || hydrated || detailQuery.isFetching || !detailQuery.data) return;
-    const p = detailQuery.data;
+  useHydrateOnce(!isNew && !detailQuery.isFetching && !!detailQuery.data, () => {
+    const p = detailQuery.data!;
     setName(p.name);
     setDescription(p.description ?? '');
     setDate(toDateInputValue(p.created_at));
-    setHydrated(true);
-  }, [isNew, hydrated, detailQuery.isFetching, detailQuery.data]);
+  });
 
   const isModalMethod = analysisMethod.startsWith('Modal');
   const isStaticStructural = analysisMethod.startsWith('Static structural');

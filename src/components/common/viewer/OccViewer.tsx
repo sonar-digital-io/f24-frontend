@@ -74,12 +74,16 @@ export interface OccViewerProps {
 // IGES loader — returns shape(s) ready for tessellation
 // ---------------------------------------------------------------------------
 
-// opencascade.js v1.1.1 ships no TypeScript types — the OCC handle stays `any`.
-/* eslint-disable @typescript-eslint/no-explicit-any */
+// opencascade.js v1.1.1 ships no TypeScript types — the OCC module handle
+// stays `any`, but a TopoDS_Shape handle only ever needs `.delete()` called
+// on it in this file, so it gets a minimal local type instead of `any`.
+type OccShapeHandle = { delete: () => void };
+
 async function loadIgesShapes(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   oc: any,
   url: string,
-): Promise<Array<{ shape: any; color: number; opacity: number }>> {
+): Promise<Array<{ shape: OccShapeHandle; color: number; opacity: number }>> {
   // 1. Fetch the IGES file
   const response = await fetch(url);
   if (!response.ok) {
@@ -208,7 +212,8 @@ function parseBinaryStl(buffer: ArrayBuffer): Float32Array {
 // Tessellation: B-Rep → Three.js BufferGeometry (v1.1.1 API)
 // ---------------------------------------------------------------------------
 
-function tessellate(oc: any, shape: any, color: number, opacity: number): THREE.Mesh | null {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function tessellate(oc: any, shape: OccShapeHandle, color: number, opacity: number): THREE.Mesh | null {
   const FACE     = oc.TopAbs_ShapeEnum.TopAbs_FACE;
   const TOPSHAPE = oc.TopAbs_ShapeEnum.TopAbs_SHAPE;
   const REVERSED = oc.TopAbs_Orientation.TopAbs_REVERSED;
@@ -508,7 +513,7 @@ export function OccViewer({
       const oc = await getOcc();
 
       // Load IGES file
-      const occShapes = await loadIgesShapes(oc as any, url);
+      const occShapes = await loadIgesShapes(oc, url);
 
       // Tessellate shapes
       const newMeshes: THREE.Mesh[]         = [];
@@ -517,7 +522,7 @@ export function OccViewer({
       for (const { shape, color, opacity } of occShapes) {
         try {
 
-          const mesh = tessellate(oc as any, shape, color, opacity);
+          const mesh = tessellate(oc, shape, color, opacity);
           if (!mesh) continue;
           (mesh.material as THREE.MeshPhysicalMaterial).userData.baseOpacity = opacity;
           if (wireframeRef.current) (mesh.material as THREE.MeshPhysicalMaterial).opacity = 0;

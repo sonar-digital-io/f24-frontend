@@ -38,7 +38,7 @@ function RadioGroup({ value, onChange }: RadioGroupProps) {
             role="radio"
             aria-checked={selected}
             onClick={() => onChange(opt.value)}
-            className="inline-flex items-center gap-2 text-left focus:outline-none"
+            className="inline-flex items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#006496]/40"
           >
             <span
               className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${

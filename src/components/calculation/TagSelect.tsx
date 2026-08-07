@@ -32,12 +32,34 @@ export function TagSelect({ options, defaultValue = [], value, onChange, placeho
     else setInternal(next);
   }
 
+  function handleOptionKeyDown(e: React.KeyboardEvent, option: string) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggle(option);
+    }
+  }
+
   return (
     <div ref={containerRef} className="relative">
-      {/* Trigger */}
+      {/* Trigger — a plain <button> can't be used here since the tag "remove" ×
+          buttons inside it would nest a <button> inside a <button> (invalid
+          HTML) — role="button" + tabIndex + onKeyDown gives the same keyboard
+          behavior instead. */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex min-h-9 cursor-pointer flex-wrap items-center gap-1.5 rounded-md border border-[#e2e8f0] bg-white px-2.5 py-1.5 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+        onKeyDown={(e) => {
+          // Ignore Enter/Space bubbling up from a nested "remove tag" button.
+          if (e.target !== e.currentTarget) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setOpen((v) => !v);
+          }
+        }}
+        className="flex min-h-9 cursor-pointer flex-wrap items-center gap-1.5 rounded-md border border-[#e2e8f0] bg-white px-2.5 py-1.5 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006496] focus-visible:ring-offset-1"
       >
         {selected.length === 0 && (
           <span className="text-[14px] text-[#9ca3af]">{placeholder ?? 'Select…'}</span>
@@ -67,14 +89,18 @@ export function TagSelect({ options, defaultValue = [], value, onChange, placeho
       {/* Dropdown */}
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-md border border-[#e5e7eb] bg-white shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]">
-          <ul className="max-h-[220px] overflow-y-auto py-1">
+          <ul role="listbox" aria-multiselectable="true" className="max-h-[220px] overflow-y-auto py-1">
             {options.map((option) => {
               const isSelected = selected.includes(option);
               return (
                 <li
                   key={option}
+                  role="option"
+                  aria-selected={isSelected}
+                  tabIndex={0}
                   onClick={() => toggle(option)}
-                  className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[14px] text-[#0a0a0a] hover:bg-[#f9fafb]"
+                  onKeyDown={(e) => handleOptionKeyDown(e, option)}
+                  className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[14px] text-[#0a0a0a] hover:bg-[#f9fafb] focus-visible:outline-none focus-visible:bg-[#f1f5f9]"
                 >
                   <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${

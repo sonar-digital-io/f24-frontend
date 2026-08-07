@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Check, Redo2, Undo2 } from 'lucide-react';
@@ -25,6 +25,7 @@ import {
   useFetchCompositionMappingTransversal,
 } from '@/hooks/api/useComposition';
 import { useMaterialList } from '@/hooks/api/useMaterials';
+import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { updateCompositionSettings } from '@/api/composition';
 import { getGeometryProfile } from '@/api/geometry';
 import { geometryKeys, useGeometryTopView } from '@/hooks/api/useGeometry';
@@ -85,15 +86,12 @@ export function CompositionNew() {
   const [date, setDate] = useState(todayISO());
   const [solidCore, setSolidCore] = useState(false);
   const [targetWeight, setTargetWeight] = useState('');
-  const [hydrated, setHydrated] = useState(false);
   const [baseline, setBaseline] = useState<
     { name: string; description: string; date: string; targetWeight: string } | null
   >(null);
-  const [duplicateHydrated, setDuplicateHydrated] = useState(false);
 
-  useEffect(() => {
-    if (!isEditing || hydrated || detailQuery.isFetching || !detailQuery.data) return;
-    const c = detailQuery.data;
+  useHydrateOnce(isEditing && !detailQuery.isFetching && !!detailQuery.data, () => {
+    const c = detailQuery.data!;
     const hydratedDescription = c.description ?? '';
     const hydratedDate =
       typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO();
@@ -105,30 +103,21 @@ export function CompositionNew() {
     if (hydratedTargetWeightStr) setTargetWeight(hydratedTargetWeightStr);
     if (c.geometry != null) setSelectedGeometryId(String(c.geometry));
     setBaseline({ name: c.name, description: hydratedDescription, date: hydratedDate, targetWeight: hydratedTargetWeightStr });
-    setHydrated(true);
-  }, [isEditing, hydrated, detailQuery.isFetching, detailQuery.data]);
+  });
 
-  useEffect(() => {
-    if (
-      isEditing ||
-      duplicateHydrated ||
-      !Number.isFinite(duplicateSourceId) ||
-      duplicateQuery.isFetching ||
-      !duplicateQuery.data
-    ) {
-      return;
+  useHydrateOnce(
+    !isEditing && Number.isFinite(duplicateSourceId) && !duplicateQuery.isFetching && !!duplicateQuery.data,
+    () => {
+      const c = duplicateQuery.data!;
+      setName(`${c.name}_copy`);
+      setDescription(c.description ?? '');
+      setDate(typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO());
     }
-    const c = duplicateQuery.data;
-    setName(`${c.name}_copy`);
-    setDescription(c.description ?? '');
-    setDate(typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO());
-    setDuplicateHydrated(true);
-  }, [isEditing, duplicateHydrated, duplicateSourceId, duplicateQuery.isFetching, duplicateQuery.data]);
+  );
 
   // Layup — locally-created layups for this composition, separate from the
   // per-side layup mapping below (which maps the shared LAYUPS catalog).
   const [layups, setLayups] = useState<CompositionLayup[]>([]);
-  const [layupsHydrated, setLayupsHydrated] = useState(false);
   function addLayup(name: string) {
     setLayups((arr) => [...arr, { id: nextLocalId('layup'), name, plies: [] }]);
   }
@@ -139,74 +128,63 @@ export function CompositionNew() {
   // Hydrate saved layups (and their layers) from the backend — separate from
   // the general hydration above since it also needs the materials list
   // loaded, to resolve each layer's material id back to a name.
-  useEffect(() => {
-    if (
-      !isEditing ||
-      layupsHydrated ||
-      detailQuery.isFetching ||
-      !detailQuery.data ||
-      materialsQuery.isLoading
-    ) {
-      return;
+  useHydrateOnce(
+    isEditing && !detailQuery.isFetching && !!detailQuery.data && !materialsQuery.isLoading,
+    () => {
+      const materials = materialsQuery.data ?? [];
+      const savedLayups = detailQuery.data!.layups ?? [];
+      setLayups(
+        savedLayups.map((l) => ({
+          id: String(l.id),
+          name: l.name,
+          plies: l.layers.map((layer) => {
+            const materialName = materials.find((m) => m.id === layer.material)?.name ?? 'Select';
+            return {
+              id: String(layer.id),
+              name: layer.name,
+              material: materialName,
+              thickness: layer.thickness,
+              orientation: layer.orientation,
+              color: getMaterialColor(materialName),
+            };
+          }),
+        }))
+      );
     }
-    const materials = materialsQuery.data ?? [];
-    const savedLayups = detailQuery.data.layups ?? [];
-    setLayups(
-      savedLayups.map((l) => ({
-        id: String(l.id),
-        name: l.name,
-        plies: l.layers.map((layer) => {
-          const materialName = materials.find((m) => m.id === layer.material)?.name ?? 'Select';
-          return {
-            id: String(layer.id),
-            name: layer.name,
-            material: materialName,
-            thickness: layer.thickness,
-            orientation: layer.orientation,
-            color: getMaterialColor(materialName),
-          };
-        }),
-      }))
-    );
-    setLayupsHydrated(true);
-  }, [isEditing, layupsHydrated, detailQuery.isFetching, detailQuery.data, materialsQuery.isLoading, materialsQuery.data]);
+  );
 
   // Layup mapping — no mapping rows by default; the user adds them explicitly.
   const [upperMappings, setUpperMappings] = useState<LayupMapping[]>([]);
   const [lowerMappings, setLowerMappings] = useState<LayupMapping[]>([]);
-  const [mappingsHydrated, setMappingsHydrated] = useState(false);
 
   // Hydrate saved layup mapping rows (upper/lower side) from the backend.
   // Waits on the top-view fetch too — the API stores longitudinal/transversal
   // position as a fraction of nominal_radius; the bezier editor works in that
   // same absolute scale (see the matching /nominalRadius conversion in
   // handleSaveLayupMapping below).
-  useEffect(() => {
-    if (
-      !isEditing ||
-      mappingsHydrated ||
-      detailQuery.isFetching ||
-      !detailQuery.data ||
-      (Number.isFinite(geometryId) && !topViewQuery.data)
-    ) {
-      return;
+  useHydrateOnce(
+    isEditing &&
+      !detailQuery.isFetching &&
+      !!detailQuery.data &&
+      !(Number.isFinite(geometryId) && !topViewQuery.data),
+    () => {
+      const c = detailQuery.data!;
+      const toLayupMapping = (entry: NonNullable<typeof c.longitudinal_mapping>['upper_side'][number]): LayupMapping => ({
+        id: String(entry.id),
+        name: entry.name,
+        layupId: String(entry.layup),
+        points: entry.mappings.map((m) => ({
+          x: m.longitudinal_position * nominalRadius,
+          y: m.transversal_position * nominalRadius,
+        })),
+      });
+      const longitudinalMapping = c.longitudinal_mapping;
+      if (longitudinalMapping) {
+        setUpperMappings(longitudinalMapping.upper_side.map(toLayupMapping));
+        setLowerMappings(longitudinalMapping.lower_side.map(toLayupMapping));
+      }
     }
-    const toLayupMapping = (entry: NonNullable<typeof detailQuery.data.longitudinal_mapping>['upper_side'][number]): LayupMapping => ({
-      id: String(entry.id),
-      name: entry.name,
-      layupId: String(entry.layup),
-      points: entry.mappings.map((m) => ({
-        x: m.longitudinal_position * nominalRadius,
-        y: m.transversal_position * nominalRadius,
-      })),
-    });
-    const longitudinalMapping = detailQuery.data.longitudinal_mapping;
-    if (longitudinalMapping) {
-      setUpperMappings(longitudinalMapping.upper_side.map(toLayupMapping));
-      setLowerMappings(longitudinalMapping.lower_side.map(toLayupMapping));
-    }
-    setMappingsHydrated(true);
-  }, [isEditing, mappingsHydrated, detailQuery.isFetching, detailQuery.data, geometryId, topViewQuery.data, nominalRadius]);
+  );
 
   const [layupPicker, setLayupPicker] = useState<{
     side: 'upper' | 'lower';

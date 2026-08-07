@@ -287,10 +287,10 @@ export function MaterialNew() {
             </div>
 
             <div className="flex w-full flex-col gap-2">
-              <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
+              <Label htmlFor="material-type" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
                 Type<span className="text-[#dc2626]">*</span>
               </Label>
-              <Select value={type} onChange={setType} options={MATERIAL_TYPES} />
+              <Select id="material-type" value={type} onChange={setType} options={MATERIAL_TYPES} />
             </div>
 
             <div className="flex w-full flex-col gap-2">

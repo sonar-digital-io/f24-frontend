@@ -109,27 +109,60 @@ export function BezierEditor({
     setDraggingIndex(idx);
   }
 
+  // The first/last point's x is bounded by its neighbor (and, for point 0
+  // when shown, the root-position marker); interior points are bounded by
+  // both neighbors. Shared by pointer-drag and the keyboard-nudge fallback.
+  function clampPointX(idx: number, x: number): number {
+    const xEps = (xMax - xMin) * 0.001;
+    if (idx === 0) {
+      const neighborUpper = points.length > 1 ? points[1].x - xEps : xMax;
+      const upper = showRootIndicator ? Math.min(neighborUpper, rootX) : neighborUpper;
+      return clamp(x, xMin, upper);
+    }
+    if (idx === points.length - 1) {
+      const lower = points.length > 1 ? points[idx - 1].x + xEps : xMin;
+      return clamp(x, lower, xMax);
+    }
+    return clamp(x, points[idx - 1].x + xEps, points[idx + 1].x - xEps);
+  }
+
   function handlePointerMove(idx: number, e: React.PointerEvent<SVGCircleElement>) {
     if (draggingIndex !== idx) return;
     const local = screenToViewBox(e.clientX, e.clientY);
     if (!local) return;
     let { x, y } = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
     y = clamp(y, yMin, yMax);
-    const xEps = (xMax - xMin) * 0.001;
-    if (idx === 0) {
-      // The first point represents the start position — draggable in x too,
-      // bounded by the chart's xMin, the next point, and (when shown) rootX —
-      // it can sit before the start position, but never past it.
-      const neighborUpper = points.length > 1 ? points[1].x - xEps : xMax;
-      const upper = showRootIndicator ? Math.min(neighborUpper, rootX) : neighborUpper;
-      if (showRootIndicator) setBlockedAtRoot(x > rootX);
-      x = clamp(x, xMin, upper);
-    } else if (idx === points.length - 1) {
-      const lower = points.length > 1 ? points[idx - 1].x + xEps : xMin;
-      x = clamp(x, lower, xMax);
-    } else {
-      x = clamp(x, points[idx - 1].x + xEps, points[idx + 1].x - xEps);
+    // The first point represents the start position — draggable in x too,
+    // bounded by the chart's xMin, the next point, and (when shown) rootX —
+    // it can sit before the start position, but never past it.
+    if (idx === 0 && showRootIndicator) setBlockedAtRoot(x > rootX);
+    x = clampPointX(idx, x);
+    onChange(points.map((p, i) => (i === idx ? { x, y } : p)));
+  }
+
+  // Keyboard alternative to dragging (arrow keys nudge by a tenth of a grid
+  // step) and to double-click-to-delete (Delete/Backspace) — the anchor is
+  // otherwise mouse/touch-only.
+  function handleKeyDown(idx: number, e: React.KeyboardEvent<SVGCircleElement>) {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      if (points.length <= minPoints) return;
+      onChange(points.filter((_, i) => i !== idx));
+      return;
     }
+    const point = points[idx];
+    let x = point.x;
+    let y = point.y;
+    switch (e.key) {
+      case 'ArrowLeft': x -= xStep * 0.1; break;
+      case 'ArrowRight': x += xStep * 0.1; break;
+      case 'ArrowUp': y += yStep * 0.1; break;
+      case 'ArrowDown': y -= yStep * 0.1; break;
+      default: return;
+    }
+    e.preventDefault();
+    y = clamp(y, yMin, yMax);
+    x = clampPointX(idx, x);
     onChange(points.map((p, i) => (i === idx ? { x, y } : p)));
   }
 
@@ -304,6 +337,7 @@ export function BezierEditor({
               onPointerUp={(e) => handlePointerUp(idx, e)}
               onPointerCancel={(e) => handlePointerUp(idx, e)}
               onDoubleClick={(e) => handlePointDoubleClick(idx, e)}
+              onKeyDown={(e) => handleKeyDown(idx, e)}
               tooltip={
                 points.length > minPoints
                   ? 'Drag to move · Double-click to remove'
