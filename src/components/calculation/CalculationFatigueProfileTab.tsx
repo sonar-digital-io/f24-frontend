@@ -1,6 +1,8 @@
 import { Fragment } from 'react';
-import { ChevronDown, ChevronUp, Search } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { SearchInput } from '@/components/common/list/SearchInput';
+import { SelectButton } from '@/components/common/list/SelectButton';
+import { TableStatusRow } from '@/components/common/list/TableStatusRow';
 import type { FatigueProfile, LoadCase } from '@/api/types/loadGroups';
 
 interface CalculationFatigueProfileTabProps {
@@ -64,15 +66,7 @@ export function CalculationFatigueProfileTab({
         </div>
         {/* Search row */}
         <div className="border-b border-[#e5e7eb] px-6 py-3">
-          <div className="relative max-w-[340px]">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6b7280]" />
-            <Input
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search fatigue profiles"
-              className="h-9 rounded-md border-[#e2e8f0] pl-8 text-[14px]"
-            />
-          </div>
+          <SearchInput value={search} onChange={onSearchChange} placeholder="Search fatigue profiles" />
         </div>
         {/* Table */}
         <div className="overflow-x-auto">
@@ -87,19 +81,11 @@ export function CalculationFatigueProfileTab({
               </tr>
             </thead>
             <tbody>
-              {isLoading && (
-                <tr>
-                  <td colSpan={3} className="py-10 text-center text-[14px] text-[#6b7280]">
-                    Loading fatigue profiles…
-                  </td>
-                </tr>
-              )}
+              {isLoading && <TableStatusRow colSpan={3}>Loading fatigue profiles…</TableStatusRow>}
               {isError && (
-                <tr>
-                  <td colSpan={3} className="py-10 text-center text-[14px] text-[#dc2626]">
-                    Failed to load fatigue profiles from the server.
-                  </td>
-                </tr>
+                <TableStatusRow colSpan={3} variant="error">
+                  Failed to load fatigue profiles from the server.
+                </TableStatusRow>
               )}
               {!isLoading &&
                 !isError &&
@@ -125,17 +111,7 @@ export function CalculationFatigueProfileTab({
                         </td>
                         <td className="px-3 py-4 align-top text-[14px] font-medium text-[#0a0a0a]">{profile.name}</td>
                         <td className="w-[100px] px-3 py-4 align-top">
-                          <button
-                            type="button"
-                            onClick={() => onSelectProfile(profileId)}
-                            className={`inline-flex h-8 items-center justify-center rounded-md px-3 text-[13px] font-medium transition-colors ${
-                              isSelected
-                                ? 'border border-[#006496] bg-[#eef9ff] text-[#006496]'
-                                : 'bg-[#006496] text-[#fafafa] hover:bg-[#005580]'
-                            }`}
-                          >
-                            {isSelected ? 'Selected' : 'Select'}
-                          </button>
+                          <SelectButton selected={isSelected} onClick={() => onSelectProfile(profileId)} />
                         </td>
                       </tr>
                       {isExpanded && (
@@ -218,11 +194,7 @@ export function CalculationFatigueProfileTab({
                   );
                 })}
               {!isLoading && !isError && profiles.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="py-10 text-center text-[14px] text-[#6b7280]">
-                    No fatigue profiles match your search.
-                  </td>
-                </tr>
+                <TableStatusRow colSpan={3}>No fatigue profiles match your search.</TableStatusRow>
               )}
             </tbody>
           </table>

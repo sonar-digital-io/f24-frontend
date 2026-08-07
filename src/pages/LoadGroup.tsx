@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, Download, Pencil, Search, Trash2 } from 'lucide-react';
+import { Copy, Download, Pencil, Trash2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { Pagination } from '@/components/common/list/Pagination';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
+import { ListPageHeader } from '@/components/common/list/ListPageHeader';
+import { ListSearchInput } from '@/components/common/list/ListSearchInput';
+import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
 import { matchesQuery, paginate, rowInteractionProps, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, LoadGroupSortKey } from '@/types';
-import { Input } from '@/components/ui/input';
 import { type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
 import { useDeleteLoadGroup, useLoadGroupList } from '@/hooks/api/useLoadGroups';
 import type { LoadGroup as BackendLoadGroup } from '@/api/types/loadGroups';
@@ -104,83 +106,58 @@ export function LoadGroup() {
       <main className="flex-1 px-4 py-6 sm:px-8 lg:px-16">
         <div className="mx-auto w-full max-w-[1400px]">
           <div className="rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-            {/* Header */}
-            <div className="flex h-9 items-center justify-between">
-              <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Load groups</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-4 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#f1f5f9]"
-                >
-                  Import
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/load-group/new')}
-                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
-                >
-                  New load group
-                </button>
-              </div>
-            </div>
+            <ListPageHeader
+              title="Load groups"
+              actions={
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-4 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#f1f5f9]"
+                  >
+                    Import
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/load-group/new')}
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
+                  >
+                    New load group
+                  </button>
+                </div>
+              }
+            />
 
             {/* Search */}
             <div className="mt-4 max-w-[384px]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
-                <Input
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search"
-                  className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
-                />
-              </div>
+              <ListSearchInput
+                value={query}
+                onChange={(v) => { setQuery(v); setPage(1); }}
+                widthClassName=""
+              />
             </div>
 
             {/* Table */}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full border-collapse">
                 <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
-                <tbody>
-                  {isLoading && (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
-                        Loading load groups…
-                      </td>
-                    </tr>
+                <ListTableBody
+                  colSpan={4}
+                  isLoading={isLoading}
+                  isError={isError}
+                  loadingLabel="Loading load groups…"
+                  errorLabel="Failed to load load groups from the server."
+                  rows={pageRows}
+                  renderRow={(item) => (
+                    <LoadGroupRow
+                      key={item.id}
+                      item={item}
+                      onEdit={() => navigate(`/load-group/${item.id}`)}
+                      onDuplicate={() => navigate(`/load-group/new?duplicateFrom=${item.id}`)}
+                      onDelete={() => setPendingDelete({ id: item.id, name: item.name })}
+                    />
                   )}
-                  {isError && (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-[14px] text-[#dc2626]">
-                        Failed to load load groups from the server.
-                      </td>
-                    </tr>
-                  )}
-                  {!isLoading &&
-                    !isError &&
-                    pageRows.map((item) => (
-                      <LoadGroupRow
-                        key={item.id}
-                        item={item}
-                        onEdit={() => navigate(`/load-group/${item.id}`)}
-                        onDuplicate={() => navigate(`/load-group/new?duplicateFrom=${item.id}`)}
-                        onDelete={() => setPendingDelete({ id: item.id, name: item.name })}
-                      />
-                    ))}
-                  {!isLoading && !isError && pageRows.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={4}
-                        className="px-3 py-8 text-center text-[14px] text-[#6b7280]"
-                      >
-                        No load groups match your search.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
+                  emptyLabel="No load groups match your search."
+                />
               </table>
             </div>
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { Filter, Search, X } from 'lucide-react';
+import { Filter, X } from 'lucide-react';
 import { type DateRange } from 'react-day-picker';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
@@ -10,13 +10,15 @@ import { MaterialDateFilterPopover } from '@/components/material/MaterialDateFil
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
 import { Pagination } from '@/components/common/list/Pagination';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
+import { ListPageHeader } from '@/components/common/list/ListPageHeader';
+import { ListSearchInput } from '@/components/common/list/ListSearchInput';
+import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
 import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
 import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
 import type { SortState, MaterialSortKey } from '@/types';
-import { Input } from '@/components/ui/input';
 import { lastUpdatedSortKey, type Material } from '@/data/materials';
 import { useDeleteMaterial, useMaterialList } from '@/hooks/api/useMaterials';
 import type { Material as BackendMaterial } from '@/api/types/materials';
@@ -209,28 +211,25 @@ export function Material() {
       <main className="flex-1 px-4 py-6 sm:px-8 lg:px-16">
         <div className="mx-auto w-full max-w-[1400px]">
           <div className="rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-            {/* Header */}
-            <div className="flex h-9 items-center justify-between">
-              <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Materials</h2>
-              <Link
-                to="/material/new"
-                className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
-              >
-                New material
-              </Link>
-            </div>
+            <ListPageHeader
+              title="Materials"
+              actions={
+                <Link
+                  to="/material/new"
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
+                >
+                  New material
+                </Link>
+              }
+            />
 
             {/* Search + date filter */}
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <div className="relative w-[280px]">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
-                <Input
-                  value={query}
-                  onChange={(e) => { setQuery(e.target.value); setPage(1); }}
-                  placeholder="Search for materials"
-                  className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
-                />
-              </div>
+              <ListSearchInput
+                value={query}
+                onChange={(v) => { setQuery(v); setPage(1); }}
+                placeholder="Search for materials"
+              />
 
               {(typeFilter.selected.size > 0 || dateRange?.from || dateRange?.to) && (
                 <span className="text-[13px] font-medium text-[#6b7280]">Filtered by</span>
@@ -267,42 +266,26 @@ export function Material() {
                   onSort={handleSort}
                   leadingWidthClassName="w-[52px]"
                 />
-                <tbody>
-                  {isLoading && (
-                    <tr>
-                      <td colSpan={7} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
-                        Loading materials…
-                      </td>
-                    </tr>
+                <ListTableBody
+                  colSpan={7}
+                  isLoading={isLoading}
+                  isError={isError}
+                  loadingLabel="Loading materials…"
+                  errorLabel="Failed to load materials from the server."
+                  rows={pageRows}
+                  renderRow={(material) => (
+                    <MaterialRow
+                      key={material.id}
+                      material={material}
+                      expanded={expandedIds.has(material.id)}
+                      onToggle={() => toggleExpand(material.id)}
+                      onOpen={() => navigate(`/material/${material.id}`)}
+                      onDuplicate={() => handleDuplicate(material)}
+                      onDelete={() => setPendingDelete({ id: material.id, name: material.name })}
+                    />
                   )}
-                  {isError && (
-                    <tr>
-                      <td colSpan={7} className="px-3 py-8 text-center text-[14px] text-[#dc2626]">
-                        Failed to load materials from the server.
-                      </td>
-                    </tr>
-                  )}
-                  {!isLoading &&
-                    !isError &&
-                    pageRows.map((material) => (
-                      <MaterialRow
-                        key={material.id}
-                        material={material}
-                        expanded={expandedIds.has(material.id)}
-                        onToggle={() => toggleExpand(material.id)}
-                        onOpen={() => navigate(`/material/${material.id}`)}
-                        onDuplicate={() => handleDuplicate(material)}
-                        onDelete={() => setPendingDelete({ id: material.id, name: material.name })}
-                      />
-                    ))}
-                  {!isLoading && !isError && pageRows.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
-                        No materials match your search.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
+                  emptyLabel="No materials match your search."
+                />
               </table>
             </div>
 

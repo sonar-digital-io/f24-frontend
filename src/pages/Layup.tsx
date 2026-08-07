@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Copy, Download, Pencil, Search, Trash2 } from 'lucide-react';
+import { Copy, Download, Pencil, Trash2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { Pagination } from '@/components/common/list/Pagination';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
+import { ListPageHeader } from '@/components/common/list/ListPageHeader';
+import { ListSearchInput } from '@/components/common/list/ListSearchInput';
+import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { matchesQuery, paginate, rowInteractionProps, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, LayupSortKey } from '@/types';
-import { Input } from '@/components/ui/input';
 import { LAYUPS } from '@/data/layups';
 
 const PAGE_SIZE = 10;
@@ -45,39 +47,36 @@ export function Layup() {
       <main className="flex-1 px-4 py-6 sm:px-8 lg:px-16">
         <div className="mx-auto w-full max-w-[1400px]">
           <div className="rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-            {/* Header */}
-            <div className="flex h-9 items-center justify-between">
-              <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Layups</h2>
-              <Link
-                to="/layup/new"
-                className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
-              >
-                New layup
-              </Link>
-            </div>
+            <ListPageHeader
+              title="Layups"
+              actions={
+                <Link
+                  to="/layup/new"
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
+                >
+                  New layup
+                </Link>
+              }
+            />
 
             {/* Search */}
             <div className="mt-4 max-w-[384px]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
-                <Input
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search for a layup"
-                  className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
-                />
-              </div>
+              <ListSearchInput
+                value={query}
+                onChange={(v) => { setQuery(v); setPage(1); }}
+                placeholder="Search for a layup"
+                widthClassName=""
+              />
             </div>
 
             {/* Table */}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full table-fixed border-collapse">
                 <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
-                <tbody>
-                  {pageRows.map((l) => (
+                <ListTableBody
+                  colSpan={4}
+                  rows={pageRows}
+                  renderRow={(l) => (
                     <tr
                       key={l.id}
                       {...rowInteractionProps(() => navigate(`/layup/${l.id}`))}
@@ -105,15 +104,9 @@ export function Layup() {
                         </div>
                       </td>
                     </tr>
-                  ))}
-                  {pageRows.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
-                        No layups match your search.
-                      </td>
-                    </tr>
                   )}
-                </tbody>
+                  emptyLabel="No layups match your search."
+                />
               </table>
             </div>
 

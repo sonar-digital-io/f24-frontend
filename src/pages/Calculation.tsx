@@ -1,18 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { CalculationRow } from '@/components/calculation/CalculationRow';
 import { Pagination } from '@/components/common/list/Pagination';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
+import { ListPageHeader } from '@/components/common/list/ListPageHeader';
+import { ListSearchInput } from '@/components/common/list/ListSearchInput';
+import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
 import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
 import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, CalculationSortKey } from '@/types';
-import { Input } from '@/components/ui/input';
 import { formatDateTime } from '@/lib/utils';
 import { type Calculation } from '@/data/calculations';
 import { useProjectList } from '@/hooks/api/useProjects';
@@ -87,29 +88,22 @@ export function Calculation() {
       <main className="flex-1 px-4 py-6 sm:px-8 lg:px-16">
         <div className="mx-auto w-full max-w-[1400px]">
           <div className="rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-            {/* Header */}
-            <div className="flex h-9 items-center justify-between">
-              <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Calculations</h2>
-              <button
-                type="button"
-                onClick={() => navigate('/calculation/new')}
-                className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
-              >
-                New calculation
-              </button>
-            </div>
+            <ListPageHeader
+              title="Calculations"
+              actions={
+                <button
+                  type="button"
+                  onClick={() => navigate('/calculation/new')}
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
+                >
+                  New calculation
+                </button>
+              }
+            />
 
             {/* Search + filter chips */}
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <div className="relative w-[280px]">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
-                <Input
-                  value={query}
-                  onChange={(e) => { setQuery(e.target.value); setPage(1); }}
-                  placeholder="Search"
-                  className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
-                />
-              </div>
+              <ListSearchInput value={query} onChange={(v) => { setQuery(v); setPage(1); }} />
 
               {statusFilter.selected.size > 0 && (
                 <>
@@ -128,34 +122,20 @@ export function Calculation() {
                   onSort={handleSort}
                   actionsWidthClassName="w-[148px]"
                 />
-                <tbody>
-                  {isLoading && (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
-                        Loading calculations…
-                      </td>
-                    </tr>
-                  )}
-                  {isError && (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-[14px] text-[#dc2626]">
-                        Failed to load calculations from the server.
-                      </td>
-                    </tr>
-                  )}
-                  {!isLoading &&
-                    !isError &&
-                    pageRows.map((item) => <CalculationRow key={item.id} item={item} />)}
-                  {!isLoading && !isError && pageRows.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-[14px] text-[#6b7280]">
-                        {CALCULATIONS.length === 0
-                          ? 'No calculations yet. Click "New calculation" to get started.'
-                          : 'No calculations match your search.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
+                <ListTableBody
+                  colSpan={5}
+                  isLoading={isLoading}
+                  isError={isError}
+                  loadingLabel="Loading calculations…"
+                  errorLabel="Failed to load calculations from the server."
+                  rows={pageRows}
+                  renderRow={(item) => <CalculationRow key={item.id} item={item} />}
+                  emptyLabel={
+                    CALCULATIONS.length === 0
+                      ? 'No calculations yet. Click "New calculation" to get started.'
+                      : 'No calculations match your search.'
+                  }
+                />
               </table>
             </div>
 
