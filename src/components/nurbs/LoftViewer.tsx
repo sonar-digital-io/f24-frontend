@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { sampleClosedBezier, buildLoftMesh } from '@/lib/loftGeometry';
+import { sampleClosedBezier, buildLoftMesh, interpolateProfileAtY } from '@/lib/loftGeometry';
 
 export interface PlaneProfile {
   id: string;
@@ -172,40 +172,10 @@ export function LoftViewer({
 
       if (intersects.length > 0) {
         const hitY = intersects[0].point.y;
-        const currentPlanes = planesRef.current;
-        const sorted = [...currentPlanes].filter(p => p.anchors.length >= 3).sort((a, b) => a.y - b.y);
+        const interpolated = interpolateProfileAtY(planesRef.current, hitY);
 
-        if (sorted.length >= 2) {
-          const minY = sorted[0].y;
-          const maxY = sorted[sorted.length - 1].y;
-
-          // Clamp Y to between min and max planes
-          const clampedY = Math.max(minY, Math.min(maxY, hitY));
-
-          // Find the two surrounding planes and interpolate
-          let below = sorted[0];
-          let above = sorted[sorted.length - 1];
-          for (let i = 0; i < sorted.length - 1; i++) {
-            if (clampedY >= sorted[i].y && clampedY <= sorted[i + 1].y) {
-              below = sorted[i];
-              above = sorted[i + 1];
-              break;
-            }
-          }
-
-          const t = above.y === below.y ? 0.5 : (clampedY - below.y) / (above.y - below.y);
-          const anchorCount = Math.min(below.anchors.length, above.anchors.length);
-
-          // Interpolate profile and sample Bézier
-          const interpAnchors: [number, number][] = [];
-          for (let i = 0; i < anchorCount; i++) {
-            interpAnchors.push([
-              below.anchors[i][0] + (above.anchors[i][0] - below.anchors[i][0]) * t,
-              below.anchors[i][1] + (above.anchors[i][1] - below.anchors[i][1]) * t,
-            ]);
-          }
-
-          const curveXZ = sampleClosedBezier(interpAnchors, 48);
+        if (interpolated) {
+          const { clampedY, curveXZ } = interpolated;
           const pts = curveXZ.map(([x, z]) => new THREE.Vector3(x, clampedY, z));
 
           // Preview ring (dashed line) — update the persistent buffers in place

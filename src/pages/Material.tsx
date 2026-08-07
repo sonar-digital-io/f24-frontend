@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { Filter, X } from 'lucide-react';
-import { type DateRange } from 'react-day-picker';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { MaterialRow } from '@/components/material/MaterialRow';
@@ -17,68 +16,37 @@ import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
 import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
 import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
+import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
 import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
+import { toUiMaterial, formatDateLabel, parseLastUpdated } from '@/lib/materialListMapping';
 import type { SortState, MaterialSortKey } from '@/types';
 import { lastUpdatedSortKey, type Material } from '@/data/materials';
 import { useDeleteMaterial, useMaterialList } from '@/hooks/api/useMaterials';
-import type { Material as BackendMaterial } from '@/api/types/materials';
 
 const PAGE_SIZE = 10;
-
-function toUiMaterial(m: BackendMaterial): Material {
-  return {
-    id: String(m.id),
-    name: m.name,
-    type: m.type,
-    description: m.description ?? '',
-    lastUpdated: m.last_modified,
-    source: 'own',
-    details: {
-      reinforcement: '—',
-      matrix: '—',
-      modulusTensile: '—',
-      density: '—',
-      tdsRef: '—',
-    },
-  };
-}
-
-function formatDateLabel(d: Date): string {
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const day = d.getDate();
-  const s = day === 1 || day === 21 || day === 31 ? 'st'
-    : day === 2 || day === 22 ? 'nd'
-    : day === 3 || day === 23 ? 'rd' : 'th';
-  return `${months[d.getMonth()]} ${day}${s}, ${d.getFullYear()}`;
-}
-
-
-function parseLastUpdated(s: string): Date | null {
-  const vMatch = s.match(/^v(\d{4})\/(\d{2})$/);
-  if (vMatch) return new Date(`${vMatch[1]}-${vMatch[2]}-01T00:00:00`);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00');
-  return null;
-}
 
 export function Material() {
   const navigate = useNavigate();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filterPos, setFilterPos] = useState<{ top: number; left: number } | null>(null);
-  const filterBtnRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [leftMonth, setLeftMonth] = useState(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth() - 1, 1);
-  });
-  const [rightMonth, setRightMonth] = useState(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  });
   const [sort, setSort] = useState<SortState<MaterialSortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
+  const {
+    dateRange,
+    filterOpen,
+    filterPos,
+    filterBtnRef,
+    popoverRef,
+    leftMonth,
+    rightMonth,
+    setLeftMonth,
+    setRightMonth,
+    goPrev,
+    goNext,
+    openFilter,
+    handleSelect: handleDateRangeSelect,
+    clear: clearDateRange,
+  } = useDateFilterPopover(() => setPage(1));
 
   const { data: backendMaterials, isLoading, isError } = useMaterialList();
   const materials = useMemo(() => (backendMaterials ?? []).map(toUiMaterial), [backendMaterials]);
@@ -98,36 +66,6 @@ export function Material() {
     } catch {
       // deleteMutation.isError surfaces the failure in the dialog — stay open so the user can retry.
     }
-  }
-
-  useEffect(() => {
-    if (!filterOpen) return;
-    function onDown(e: MouseEvent) {
-      const t = e.target as Node;
-      if (filterBtnRef.current?.contains(t) || popoverRef.current?.contains(t)) return;
-      setFilterOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [filterOpen]);
-
-  function goPrev() {
-    setLeftMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1));
-    setRightMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1));
-  }
-  function goNext() {
-    setLeftMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1));
-    setRightMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1));
-  }
-
-  function openFilter() {
-    if (!filterOpen && filterBtnRef.current) {
-      const r = filterBtnRef.current.getBoundingClientRect();
-      const estimatedWidth = 648;
-      const left = Math.max(8, r.right + window.scrollX - estimatedWidth);
-      setFilterPos({ top: r.bottom + window.scrollY + 6, left });
-    }
-    setFilterOpen((o) => !o);
   }
 
   const allTypes = useMemo(() => [...new Set(materials.map((m) => m.type))].sort(), [materials]);
@@ -248,7 +186,7 @@ export function Material() {
                   <button
                     type="button"
                     aria-label="Clear date filter"
-                    onClick={() => { setDateRange(undefined); setPage(1); }}
+                    onClick={clearDateRange}
                     className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[#9ca3af] hover:bg-[#e5e7eb] hover:text-[#0a0a0a]"
                   >
                     <X className="h-3 w-3" strokeWidth={2.5} />
@@ -323,11 +261,7 @@ export function Material() {
             dateRange={dateRange}
             onLeftMonthChange={setLeftMonth}
             onRightMonthChange={setRightMonth}
-            onSelect={(range) => {
-              setDateRange(range);
-              setPage(1);
-              if (range?.from && range?.to) setFilterOpen(false);
-            }}
+            onSelect={handleDateRangeSelect}
             onPrevMonth={goPrev}
             onNextMonth={goNext}
           />,

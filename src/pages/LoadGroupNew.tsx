@@ -7,26 +7,14 @@ import { LoadGroupLoadCasesTab } from '@/components/load-group/LoadGroupLoadCase
 import { LoadGroupLimitsTab } from '@/components/load-group/LoadGroupLimitsTab';
 import { LoadGroupFatigueProfilesTab } from '@/components/load-group/LoadGroupFatigueProfilesTab';
 import { LoadCasePickerDialog } from '@/components/load-group/LoadCasePickerDialog';
-import {
-  useCreateLoadGroup,
-  useFatigueProfiles,
-  useLoadCases,
-  useLoadGroupDetail,
-  useUpdateFatigueProfiles,
-  useUpdateLoadCases,
-  useUpdateLoadGroup,
-  useUpdateLoadGroupLimits,
-} from '@/hooks/api/useLoadGroups';
+import { useCreateLoadGroup, useLoadGroupDetail, useUpdateLoadGroup } from '@/hooks/api/useLoadGroups';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
+import { useLoadGroupLoadCasesState } from '@/hooks/useLoadGroupLoadCasesState';
+import { useLoadGroupLimitsState } from '@/hooks/useLoadGroupLimitsState';
+import { useLoadGroupFatigueProfilesState } from '@/hooks/useLoadGroupFatigueProfilesState';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
-import { loadCaseHasErrors } from '@/lib/loadCaseValidation';
-import { fatigueProfilesHaveErrors } from '@/lib/fatigueValidation';
-import type { FatigueCase, FatigueProfile, LoadCase, LoadLimitRange } from '@/api/types/loadGroups';
-import {
-  INITIAL_LOAD_LIMITS,
-  type LimitsSubTab,
-  type LoadGroupTab,
-} from '@/data/loadGroupForm';
+import type { LoadLimitRange } from '@/api/types/loadGroups';
+import type { LoadGroupTab } from '@/data/loadGroupForm';
 
 const LOAD_GROUP_TABS = [
   { value: 'general', label: 'General' },
@@ -93,57 +81,52 @@ export function LoadGroupNew() {
     }
   );
 
-  // Load cases — 0 by default until the user adds one; hydrated from the
-  // backend for edit/duplicate, saved via a dedicated PUT /load/:id/load-cases/.
-  const loadCasesQuery = useLoadCases(loadGroupId);
-  const updateLoadCasesMutation = useUpdateLoadCases(loadGroupId);
-  const [loadCases, setLoadCases] = useState<LoadCase[]>([]);
+  const {
+    loadCases,
+    pickableLoadCases,
+    loadCaseNamesById,
+    updateLoadCase,
+    addLoadCase,
+    deleteLoadCase,
+    duplicateLoadCase,
+    handleSaveLoadCases,
+    loadCasesHaveErrors,
+    updateLoadCasesMutation,
+  } = useLoadGroupLoadCasesState(loadGroupId, isNew);
 
-  useHydrateOnce(!isNew && !loadCasesQuery.isFetching && !!loadCasesQuery.data, () => {
-    setLoadCases(
-      loadCasesQuery.data!.load_cases.map((lc) => ({ ...lc, __KEY__: lc.__KEY__ || crypto.randomUUID() }))
-    );
-  });
+  const {
+    limits,
+    setLimits,
+    limitsSubTab,
+    setLimitsSubTab,
+    updateLimitBounds,
+    updateLimitCurvePoint,
+    handleLimitCurveChange,
+    addLimitCurvePoint,
+    deleteLimitCurvePoint,
+    handleSaveLimits,
+    updateLimitsMutation,
+  } = useLoadGroupLimitsState(loadGroupId);
 
-  // A fatigue case's load_case references a load case's backend id — only
-  // load cases that have already been saved (and so have one) are pickable.
-  const pickableLoadCases = loadCases
-    .filter((lc): lc is LoadCase & { id: number } => lc.id !== undefined)
-    .map((lc) => ({ id: lc.id, name: lc.name }));
-  const loadCaseNamesById = Object.fromEntries(pickableLoadCases.map((lc) => [lc.id, lc.name]));
-
-  // Limits — no GET for this yet, so it's local-only until saved via the
-  // dedicated PUT /load/:id/limits/.
-  const updateLimitsMutation = useUpdateLoadGroupLimits(loadGroupId);
-  const [limitsSubTab, setLimitsSubTab] = useState<LimitsSubTab>('thrust');
-  const [limits, setLimits] = useState<Record<LimitsSubTab, LoadLimitRange>>(INITIAL_LOAD_LIMITS);
-
-  // Fatigue profiles — 0 by default until the user adds one; hydrated from
-  // the backend for edit/duplicate, saved via a dedicated PUT
-  // /load/:id/fatigue-profiles/ (sent as a raw array).
-  const fatigueProfilesQuery = useFatigueProfiles(loadGroupId);
-  const updateFatigueProfilesMutation = useUpdateFatigueProfiles(loadGroupId);
-  const [fatigueProfiles, setFatigueProfiles] = useState<FatigueProfile[]>([]);
-  // Accordion open/closed — pure UI state, not part of the saved payload.
-  const [openFatigueProfiles, setOpenFatigueProfiles] = useState<Record<string, boolean>>({});
-  const [fatigueSearch, setFatigueSearch] = useState('');
-  const [pickingLoadCase, setPickingLoadCase] = useState<{
-    profileKey: string;
-    caseKey: string;
-  } | null>(null);
-
-  useHydrateOnce(!isNew && !fatigueProfilesQuery.isFetching && !!fatigueProfilesQuery.data, () => {
-    const hydratedProfiles = fatigueProfilesQuery.data!.map((p) => ({
-      ...p,
-      __KEY__: p.__KEY__ || crypto.randomUUID(),
-      fatigue_cases: p.fatigue_cases.map((c) => ({
-        ...c,
-        __KEY__: c.__KEY__ || crypto.randomUUID(),
-        cycles: c.cycles ?? null,
-      })),
-    }));
-    setFatigueProfiles(hydratedProfiles);
-  });
+  const {
+    fatigueProfiles,
+    openFatigueProfiles,
+    fatigueSearch,
+    setFatigueSearch,
+    pickingLoadCase,
+    setPickingLoadCase,
+    toggleFatigueProfile,
+    addFatigueProfile,
+    deleteFatigueProfile,
+    duplicateFatigueProfile,
+    updateFatigueProfileName,
+    addFatigueCase,
+    deleteFatigueCase,
+    updateFatigueCase,
+    handleSaveFatigueProfiles,
+    fatigueProfilesInvalid,
+    updateFatigueProfilesMutation,
+  } = useLoadGroupFatigueProfilesState(loadGroupId, isNew);
 
   const titleText = isNew ? name.trim() || 'New load group' : name.trim() || 'Loading…';
 
@@ -169,189 +152,6 @@ export function LoadGroupNew() {
   function handleExit() {
     navigate('/load-group');
   }
-
-  // ── Load cases helpers ───────────────────────────────────────────────────
-  function updateLoadCase<K extends keyof LoadCase>(key: string, field: K, val: LoadCase[K]) {
-    setLoadCases((prev) => prev.map((c) => (c.__KEY__ === key ? { ...c, [field]: val } : c)));
-  }
-
-  function addLoadCase() {
-    const lc: LoadCase = {
-      __KEY__: crypto.randomUUID(),
-      name: '',
-      // pitch and rpm can't both be 'range' — only one dimension can vary at a time.
-      pitch_flag: 'fix',
-      pitch_min: 0,
-      pitch_max: null,
-      rpm_flag: 'range',
-      rpm_min: 0,
-      rpm_max: 15,
-      altitude: 0,
-      disa: 0,
-      inflow_velocity: 10,
-      inflow_angle: 0,
-      target_type: 'power',
-      target_value: 0,
-    };
-    setLoadCases((prev) => [...prev, lc]);
-  }
-
-  function deleteLoadCase(key: string) {
-    setLoadCases((prev) => prev.filter((c) => c.__KEY__ !== key));
-  }
-
-  function duplicateLoadCase(key: string) {
-    setLoadCases((prev) => {
-      const idx = prev.findIndex((c) => c.__KEY__ === key);
-      if (idx === -1) return prev;
-      const src = prev[idx];
-      const clone: LoadCase = {
-        ...src,
-        __KEY__: crypto.randomUUID(),
-        name: src.name ? `${src.name} copy` : 'copy',
-      };
-      const next = [...prev];
-      next.splice(idx + 1, 0, clone);
-      return next;
-    });
-  }
-
-  async function handleSaveLoadCases() {
-    await updateLoadCasesMutation.mutateAsync({ load_cases: loadCases });
-  }
-
-  const loadCasesHaveErrors = loadCases.some(loadCaseHasErrors);
-
-  // ── Limits helpers ───────────────────────────────────────────────────────
-  function updateLimitBounds(sub: LimitsSubTab, field: 'x_min' | 'x_max' | 'y_min' | 'y_max', val: number) {
-    setLimits((prev) => ({ ...prev, [sub]: { ...prev[sub], [field]: val } }));
-  }
-
-  function updateLimitCurvePoint(sub: LimitsSubTab, idx: number, field: 'rpm' | 'value', val: number) {
-    setLimits((prev) => ({
-      ...prev,
-      [sub]: { ...prev[sub], curve: prev[sub].curve.map((c, i) => (i === idx ? { ...c, [field]: val } : c)) },
-    }));
-  }
-
-  function handleLimitCurveChange(sub: LimitsSubTab, curve: LoadLimitRange['curve']) {
-    setLimits((prev) => ({ ...prev, [sub]: { ...prev[sub], curve } }));
-  }
-
-  function addLimitCurvePoint(sub: LimitsSubTab) {
-    setLimits((prev) => {
-      const curve = prev[sub].curve;
-      const secondLast = curve[curve.length - 2];
-      const last = curve[curve.length - 1];
-      const newRpm = (secondLast.rpm + last.rpm) / 2;
-      const newValue = (secondLast.value + last.value) / 2;
-      const nextCurve = [...curve.slice(0, curve.length - 1), { rpm: newRpm, value: newValue }, last];
-      return { ...prev, [sub]: { ...prev[sub], curve: nextCurve } };
-    });
-  }
-
-  function deleteLimitCurvePoint(sub: LimitsSubTab, idx: number) {
-    setLimits((prev) => ({
-      ...prev,
-      [sub]: { ...prev[sub], curve: prev[sub].curve.filter((_, i) => i !== idx) },
-    }));
-  }
-
-  async function handleSaveLimits() {
-    await updateLimitsMutation.mutateAsync({
-      rpm_thrust_limit: limits.thrust,
-      rpm_torque_limit: limits.torque,
-      rpm_power_limit: limits.power,
-    });
-  }
-
-  // ── Fatigue profile helpers ──────────────────────────────────────────────
-  function toggleFatigueProfile(profileKey: string) {
-    setOpenFatigueProfiles((prev) => ({ ...prev, [profileKey]: !prev[profileKey] }));
-  }
-
-  function addFatigueProfile() {
-    const key = crypto.randomUUID();
-    setFatigueProfiles((prev) => [...prev, { __KEY__: key, name: 'New fatigue profile', fatigue_cases: [] }]);
-    setOpenFatigueProfiles((prev) => ({ ...prev, [key]: true }));
-  }
-
-  function deleteFatigueProfile(profileKey: string) {
-    setFatigueProfiles((prev) => prev.filter((p) => p.__KEY__ !== profileKey));
-  }
-
-  function duplicateFatigueProfile(profileKey: string) {
-    setFatigueProfiles((prev) => {
-      const profile = prev.find((p) => p.__KEY__ === profileKey);
-      if (!profile) return prev;
-      const clone: FatigueProfile = {
-        ...profile,
-        __KEY__: crypto.randomUUID(),
-        name: `${profile.name} (copy)`,
-        fatigue_cases: profile.fatigue_cases.map((c) => ({ ...c, __KEY__: crypto.randomUUID() })),
-      };
-      return [...prev, clone];
-    });
-  }
-
-  function updateFatigueProfileName(profileKey: string, newName: string) {
-    setFatigueProfiles((prev) =>
-      prev.map((p) => (p.__KEY__ === profileKey ? { ...p, name: newName } : p))
-    );
-  }
-
-  function addFatigueCase(profileKey: string) {
-    setFatigueProfiles((prev) =>
-      prev.map((p) => {
-        if (p.__KEY__ !== profileKey) return p;
-        const fc: FatigueCase = {
-          __KEY__: crypto.randomUUID(),
-          name: '',
-          load_case: null,
-          // Backend requires min_scale > 0.
-          min_scale: 1,
-          max_scale: 100,
-          time: null,
-          cycles: null,
-        };
-        return { ...p, fatigue_cases: [...p.fatigue_cases, fc] };
-      })
-    );
-  }
-
-  function deleteFatigueCase(profileKey: string, caseKey: string) {
-    setFatigueProfiles((prev) =>
-      prev.map((p) =>
-        p.__KEY__ === profileKey
-          ? { ...p, fatigue_cases: p.fatigue_cases.filter((c) => c.__KEY__ !== caseKey) }
-          : p
-      )
-    );
-  }
-
-  function updateFatigueCase<K extends keyof FatigueCase>(
-    profileKey: string,
-    caseKey: string,
-    field: K,
-    val: FatigueCase[K]
-  ) {
-    setFatigueProfiles((prev) =>
-      prev.map((p) =>
-        p.__KEY__ !== profileKey
-          ? p
-          : {
-              ...p,
-              fatigue_cases: p.fatigue_cases.map((c) => (c.__KEY__ === caseKey ? { ...c, [field]: val } : c)),
-            }
-      )
-    );
-  }
-
-  async function handleSaveFatigueProfiles() {
-    await updateFatigueProfilesMutation.mutateAsync(fatigueProfiles);
-  }
-
-  const fatigueProfilesInvalid = fatigueProfilesHaveErrors(fatigueProfiles);
 
   // ── Toolbar save action, per tab ─────────────────────────────────────────
   const tabAction: { onClick: () => void; disabled: boolean; label: string } | undefined = {

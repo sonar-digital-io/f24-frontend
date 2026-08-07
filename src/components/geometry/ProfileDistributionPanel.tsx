@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
-import { FoldHorizontal, Info } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { BezierEditor } from '@/components/common/viewer/BezierEditor';
-import { BezierPointsTable } from '@/components/common/viewer/BezierPointsTable';
+import { FoldHorizontal } from 'lucide-react';
 import type { ControlPoint } from '@/types';
-import { DropdownSelect } from '@/components/common/form/DropdownSelect';
-import { ProfileDistributionSwitch } from '@/components/geometry/ProfileDistributionSwitch';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldableSectionList } from '@/components/geometry/FoldableSectionList';
+import { ProfileGeneratorTopRow } from '@/components/geometry/ProfileGeneratorTopRow';
+import { ProfileGeneratorActions } from '@/components/geometry/ProfileGeneratorActions';
+import { ProfileDistributionSectionBody } from '@/components/geometry/ProfileDistributionSectionBody';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
 import type { ProfileGeneratorParameters } from '@/api/types/geometry';
 
@@ -228,7 +225,6 @@ export function ProfileDistributionPanel({
   // by the accordion item in folded mode, and is hidden in expanded mode
   // because sub-tabs already name the section.
   function renderSectionBody(key: SectionKey) {
-    const points = sectionPoints[key];
     const valueLabel =
       key === 'maximum-camber'
         ? 'Max Cam (%)'
@@ -236,52 +232,23 @@ export function ProfileDistributionPanel({
           ? 'Max Cam pos (%)'
           : 'Thickness (%)';
     return (
-      <div className="flex flex-col gap-4">
-        <div
-          className={
-            folded
-              ? 'flex flex-col gap-4'
-              : 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]'
-          }
-        >
-          {/* Distribution view */}
-          <div className="flex flex-col gap-3">
-            <ProfileDistributionSwitch
-              checked={showDistribution[key]}
-              onChange={(v) => setShowDistribution((s) => ({ ...s, [key]: v }))}
-              label="Distribution view"
-            />
-            {showDistribution[key] && (
-              <BezierEditor
-                points={points}
-                onChange={(next) => handleCurveChange(key, next)}
-                yMax={Y_MAX}
-                rootX={rootX}
-              />
-            )}
-          </div>
-
-          {/* Table */}
-          <div className="flex flex-col gap-3">
-            <ProfileDistributionSwitch
-              checked={showTable[key]}
-              onChange={(v) => setShowTable((s) => ({ ...s, [key]: v }))}
-              label="Table"
-            />
-            {showTable[key] && (
-              <BezierPointsTable
-                points={points}
-                valueLabel={valueLabel}
-                idPrefix={key}
-                getInputValue={(idx, field) => getInputValue(key, idx, field)}
-                onChange={(idx, field, raw) => handleInputChange(key, idx, field, raw)}
-                onBlur={(idx, field) => handleInputBlur(key, idx, field)}
-                onAddPoint={() => addPoint(key)}
-              />
-            )}
-          </div>
-        </div>
-      </div>
+      <ProfileDistributionSectionBody
+        folded={folded}
+        points={sectionPoints[key]}
+        onChange={(next) => handleCurveChange(key, next)}
+        yMax={Y_MAX}
+        rootX={rootX}
+        valueLabel={valueLabel}
+        idPrefix={key}
+        showDistribution={showDistribution[key]}
+        onShowDistributionChange={(v) => setShowDistribution((s) => ({ ...s, [key]: v }))}
+        showTable={showTable[key]}
+        onShowTableChange={(v) => setShowTable((s) => ({ ...s, [key]: v }))}
+        getInputValue={(idx, field) => getInputValue(key, idx, field)}
+        onInputChange={(idx, field, raw) => handleInputChange(key, idx, field, raw)}
+        onInputBlur={(idx, field) => handleInputBlur(key, idx, field)}
+        onAddPoint={() => addPoint(key)}
+      />
     );
   }
 
@@ -313,103 +280,31 @@ export function ProfileDistributionPanel({
           </button>
         </div>
 
-        <div className={topRowGrid}>
-          <div className="flex flex-col gap-2">
-            <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Type</Label>
-            <DropdownSelect value={type} onChange={setType} options={PROFILE_TYPES} disabled />
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="group/tip relative flex items-center gap-1.5">
-              <Label
-                htmlFor="profile-count"
-                className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-              >
-                Profile count
-              </Label>
-              <Info className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={2} />
-              <div className="pointer-events-none absolute left-0 top-full z-50 mt-2 w-[280px] rounded-md bg-[#171717] px-3 py-2 text-[13px] leading-5 text-white opacity-0 shadow-md transition-opacity group-hover/tip:opacity-100">
-                Sets the initial number of generated profiles. You can add, delete, or modify individual profiles in the &apos;Profiles&apos; step.
-              </div>
-            </div>
-            <Input
-              id="profile-count"
-              value={profileCount}
-              onChange={(e) => setProfileCount(e.target.value)}
-              className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label
-              htmlFor="profile-start-pos"
-              className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-            >
-              Start position
-            </Label>
-            <Input
-              id="profile-start-pos"
-              value={startPos}
-              onChange={(e) => handleStartPosChange(e.target.value)}
-              className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label
-              htmlFor="profile-end-pos"
-              className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-            >
-              End position
-            </Label>
-            <Input
-              id="profile-end-pos"
-              value={endPos}
-              onChange={(e) => setEndPos(e.target.value)}
-              className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-            />
-          </div>
-        </div>
+        <ProfileGeneratorTopRow
+          gridClassName={topRowGrid}
+          type={type}
+          onTypeChange={setType}
+          profileTypes={PROFILE_TYPES}
+          profileCount={profileCount}
+          onProfileCountChange={setProfileCount}
+          startPos={startPos}
+          onStartPosChange={handleStartPosChange}
+          endPos={endPos}
+          onEndPosChange={setEndPos}
+        />
 
-        {(onSaveParameters || onGenerate || onSaveAndNext) && (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              {onSaveParameters && (
-                <button
-                  type="button"
-                  onClick={() => onSaveParameters(buildParams())}
-                  disabled={saving || !hasEnoughPoints}
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {saving ? 'Saving…' : 'Save parameters'}
-                </button>
-              )}
-              {onGenerate && (
-                <button
-                  type="button"
-                  onClick={() => onGenerate(buildParams())}
-                  disabled={generating || !hasEnoughPoints}
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {generating ? 'Generating…' : 'Generate'}
-                </button>
-              )}
-              {onSaveAndNext && (
-                <button
-                  type="button"
-                  onClick={() => onSaveAndNext(buildParams())}
-                  disabled={savingAndNext || !hasEnoughPoints}
-                  className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {savingAndNext ? 'Saving…' : 'Save & Next'}
-                </button>
-              )}
-            </div>
-            {!hasEnoughPoints && (
-              <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>
-            )}
-            {saveError && <p className="text-[13px] text-[#dc2626]">Failed to save parameters. Please try again.</p>}
-            {generateError && <p className="text-[13px] text-[#dc2626]">Failed to generate. Please try again.</p>}
-            {saveAndNextError && <p className="text-[13px] text-[#dc2626]">Failed to save profiles. Please try again.</p>}
-          </div>
-        )}
+        <ProfileGeneratorActions
+          onSaveParameters={onSaveParameters ? () => onSaveParameters(buildParams()) : undefined}
+          onGenerate={onGenerate ? () => onGenerate(buildParams()) : undefined}
+          onSaveAndNext={onSaveAndNext ? () => onSaveAndNext(buildParams()) : undefined}
+          saving={saving}
+          generating={generating}
+          savingAndNext={savingAndNext}
+          hasEnoughPoints={hasEnoughPoints}
+          saveError={saveError}
+          generateError={generateError}
+          saveAndNextError={saveAndNextError}
+        />
 
         <p className="pt-2 text-[16px] font-semibold leading-none text-[#0a0a0a]">
           Distribution curves

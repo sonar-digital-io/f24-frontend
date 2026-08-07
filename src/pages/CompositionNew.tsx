@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Check, Redo2, Undo2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CompositionEditToolbar, type CompositionTab } from '@/components/composition/CompositionEditToolbar';
+import { CompositionLayupMappingPanel } from '@/components/composition/CompositionLayupMappingPanel';
 import { LayupPickerDialog } from '@/components/composition/LayupPickerDialog';
 import { LayupMappingBezierDialog } from '@/components/composition/LayupMappingBezierDialog';
 import { TransversalMappingSection } from '@/components/composition/TransversalMappingSection';
@@ -12,7 +12,7 @@ import { CompositionGeometryTab } from '@/components/composition/CompositionGeom
 import { CompositionPreviewTab } from '@/components/composition/CompositionPreviewTab';
 import { CompositionLayupTab, type CompositionLayup } from '@/components/composition/CompositionLayupTab';
 import { getMaterialColor, type Ply } from '@/components/layup/LayupBuilder';
-import { LayupMappingTable, type LayupMapping } from '@/components/composition/LayupMappingTable';
+import { type LayupMapping } from '@/components/composition/LayupMappingTable';
 import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { computeMappingBounds, computeProfilesBoundingRect, niceStep } from '@/lib/bezierMath';
 import type { ControlPoint } from '@/types';
@@ -73,9 +73,7 @@ export function CompositionNew() {
   // that same absolute (real) scale as the top-view leading/trailing edge.
   const nominalRadius = topViewQuery.data?.nominal_radius || 1;
 
-  const [activeTab, setActiveTab] = useState<
-    'general' | 'geometry' | 'layup' | 'layup-mapping' | 'transversal-mapping' | 'preview'
-  >('general');
+  const [activeTab, setActiveTab] = useState<CompositionTab>('general');
 
   // General — hydrated from the backend for edit/duplicate. Layup mapping and
   // transversal mapping stay on local state: they carry rich shapes (bezier
@@ -389,85 +387,18 @@ export function CompositionNew() {
       <MainNav />
 
       <main className="relative flex-1 overflow-hidden bg-[#f8fafc]">
-      {/* Sub-toolbar */}
-      <div className="absolute inset-x-0 top-0 z-40 h-[52px] border-b border-[#e5e7eb]/70">
-        <div className="absolute inset-y-0 left-4 flex items-center">
-          <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as typeof activeTab); setBezierFor(null); }} className="h-9">
-            <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
-              {[
-                { value: 'general', label: 'General' },
-                { value: 'geometry', label: 'Geometry' },
-                { value: 'layup', label: 'Layup' },
-                { value: 'layup-mapping', label: 'Layup mapping' },
-                { value: 'transversal-mapping', label: 'Transversal mapping' },
-                { value: 'preview', label: 'Preview' },
-              ].map((t) => (
-                <TabsTrigger
-                  key={t.value}
-                  value={t.value}
-                  className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
-                >
-                  {t.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-
-        <h1 className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
-          {titleText}
-        </h1>
-
-        <div className="absolute inset-y-0 right-4 flex items-center gap-4">
-          <div className="flex items-center gap-[6px]">
-            <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-            <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Undo"
-              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-            >
-              <Undo2 className="h-4 w-4" strokeWidth={2} />
-            </button>
-            <button
-              type="button"
-              aria-label="Redo"
-              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-            >
-              <Redo2 className="h-4 w-4" strokeWidth={2} />
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={handleExit}
-            className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
-          >
-            Back to Compositions
-          </button>
-          {activeTab === 'general' && (
-            <button
-              type="button"
-              onClick={handleGeneralSubmit}
-              disabled={!name.trim() || !description.trim() || !date || savePending}
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {savePending ? 'Saving…' : isEditing ? 'Update composition' : 'Create composition'}
-            </button>
-          )}
-          {activeTab === 'layup-mapping' && (
-            <button
-              type="button"
-              onClick={handleSaveLayupMapping}
-              disabled={layupMappingSavePending}
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {layupMappingSavePending ? 'Saving…' : 'Save'}
-            </button>
-          )}
-        </div>
-      </div>
+      <CompositionEditToolbar
+        activeTab={activeTab}
+        onTabChange={(v) => { setActiveTab(v); setBezierFor(null); }}
+        titleText={titleText}
+        onExit={handleExit}
+        onSaveGeneral={handleGeneralSubmit}
+        generalSaveDisabled={!name.trim() || !description.trim() || !date}
+        generalSavePending={savePending}
+        isEditing={isEditing}
+        onSaveLayupMapping={handleSaveLayupMapping}
+        layupMappingSavePending={layupMappingSavePending}
+      />
       {saveError && (
         <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
           Failed to {isEditing ? 'update' : 'create'} composition. Please try again.
@@ -520,46 +451,27 @@ export function CompositionNew() {
           />
         )}
 
-        {/* Always mounted — hidden instead of unmounted so mapping state survives tab switches */}
-        <div ref={layupPanelRef} className={`pointer-events-auto flex max-h-[calc(100vh-145px)] w-full max-w-[560px] flex-col gap-6 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm${activeTab !== 'layup-mapping' ? ' hidden' : ''}`}>
-            <LayupMappingTable
-              title="Upper side"
-              copyLabel="Copy to lower side"
-              mappings={upperMappings}
-              layupOptions={layupOptions}
-              activeMappingId={bezierFor?.side === 'upper' ? bezierFor.mappingId : null}
-              onAdd={addUpper}
-              onDelete={(id) => deleteMapping('upper', id)}
-              onUpdate={(id, next) => updateMapping('upper', id, next)}
-              onCopy={copyUpperToLower}
-              onDuplicate={(id) => duplicateMapping('upper', id)}
-              onOpenBezier={(id) => {
-                const rect = layupPanelRef.current?.getBoundingClientRect();
-                setBezierFor({ side: 'upper', mappingId: id, anchorRight: rect?.right, anchorTop: rect?.top, anchorLeft: rect?.left });
-              }}
-              onReorder={(from, to) => reorderMapping('upper', from, to)}
-              onPickLayup={(id) => setLayupPicker({ side: 'upper', mappingId: id })}
-            />
-
-            <LayupMappingTable
-              title="Lower side"
-              copyLabel="Copy to upper side"
-              mappings={lowerMappings}
-              layupOptions={layupOptions}
-              activeMappingId={bezierFor?.side === 'lower' ? bezierFor.mappingId : null}
-              onAdd={addLower}
-              onDelete={(id) => deleteMapping('lower', id)}
-              onUpdate={(id, next) => updateMapping('lower', id, next)}
-              onCopy={copyLowerToUpper}
-              onDuplicate={(id) => duplicateMapping('lower', id)}
-              onOpenBezier={(id) => {
-                const rect = layupPanelRef.current?.getBoundingClientRect();
-                setBezierFor({ side: 'lower', mappingId: id, anchorRight: rect?.right, anchorTop: rect?.top, anchorLeft: rect?.left });
-              }}
-              onReorder={(from, to) => reorderMapping('lower', from, to)}
-              onPickLayup={(id) => setLayupPicker({ side: 'lower', mappingId: id })}
-            />
-          </div>
+        <CompositionLayupMappingPanel
+          ref={layupPanelRef}
+          visible={activeTab === 'layup-mapping'}
+          upperMappings={upperMappings}
+          lowerMappings={lowerMappings}
+          layupOptions={layupOptions}
+          activeBezierSide={bezierFor?.side ?? null}
+          activeBezierMappingId={bezierFor?.mappingId ?? null}
+          onAdd={(side) => (side === 'upper' ? addUpper() : addLower())}
+          onDelete={deleteMapping}
+          onUpdate={updateMapping}
+          onCopyUpperToLower={copyUpperToLower}
+          onCopyLowerToUpper={copyLowerToUpper}
+          onDuplicate={duplicateMapping}
+          onOpenBezier={(side, id) => {
+            const rect = layupPanelRef.current?.getBoundingClientRect();
+            setBezierFor({ side, mappingId: id, anchorRight: rect?.right, anchorTop: rect?.top, anchorLeft: rect?.left });
+          }}
+          onReorder={reorderMapping}
+          onPickLayup={(side, id) => setLayupPicker({ side, mappingId: id })}
+        />
 
         {/* Always mounted — hidden instead of unmounted so internal state survives tab switches */}
         <div className={`pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto${activeTab !== 'transversal-mapping' ? ' hidden' : ''}`}>

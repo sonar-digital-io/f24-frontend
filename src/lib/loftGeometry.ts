@@ -34,6 +34,62 @@ export function sampleClosedBezier(anchors: [number, number][], samples = 48): [
   return result;
 }
 
+/**
+ * Interpolates the raw anchor (control) points between the two planes
+ * surrounding a given world-space Y — used both to preview an edge-placement
+ * click (sampled into a curve for the dashed preview ring) and to seed a new
+ * plane's editable anchors when the click is confirmed.
+ */
+export function interpolateAnchorsAtY(
+  planes: { y: number; anchors: [number, number][] }[],
+  hitY: number,
+): { clampedY: number; anchors: [number, number][] } | null {
+  const sorted = planes.filter((p) => p.anchors.length >= 3).sort((a, b) => a.y - b.y);
+  if (sorted.length < 2) return null;
+
+  const minY = sorted[0].y;
+  const maxY = sorted[sorted.length - 1].y;
+  const clampedY = Math.max(minY, Math.min(maxY, hitY));
+
+  let below = sorted[0];
+  let above = sorted[sorted.length - 1];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (clampedY >= sorted[i].y && clampedY <= sorted[i + 1].y) {
+      below = sorted[i];
+      above = sorted[i + 1];
+      break;
+    }
+  }
+
+  const t = above.y === below.y ? 0.5 : (clampedY - below.y) / (above.y - below.y);
+  const anchorCount = Math.min(below.anchors.length, above.anchors.length);
+
+  const anchors: [number, number][] = [];
+  for (let i = 0; i < anchorCount; i++) {
+    anchors.push([
+      below.anchors[i][0] + (above.anchors[i][0] - below.anchors[i][0]) * t,
+      below.anchors[i][1] + (above.anchors[i][1] - below.anchors[i][1]) * t,
+    ]);
+  }
+
+  return { clampedY, anchors };
+}
+
+/**
+ * Preview variant of `interpolateAnchorsAtY` — same interpolation, sampled
+ * into a curve for the dashed edge-placement preview ring instead of raw
+ * anchors.
+ */
+export function interpolateProfileAtY(
+  planes: { y: number; anchors: [number, number][] }[],
+  hitY: number,
+  samples = 48,
+): { clampedY: number; curveXZ: [number, number][] } | null {
+  const interpolated = interpolateAnchorsAtY(planes, hitY);
+  if (!interpolated) return null;
+  return { clampedY: interpolated.clampedY, curveXZ: sampleClosedBezier(interpolated.anchors, samples) };
+}
+
 // Build lofted mesh between profiles (pure Three.js)
 export function buildLoftMesh(
   profiles: { y: number; points: [number, number][] }[],

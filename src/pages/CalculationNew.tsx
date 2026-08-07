@@ -1,60 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { CalculationSubToolbar } from '@/components/calculation/CalculationSubToolbar';
 import { CalculationGeneralTab } from '@/components/calculation/CalculationGeneralTab';
-import { CalculationCompositionTab, type CompositionListItem } from '@/components/calculation/CalculationCompositionTab';
+import { CalculationCompositionTab } from '@/components/calculation/CalculationCompositionTab';
 import { CalculationConfigurationTab } from '@/components/calculation/CalculationConfigurationTab';
-import { CalculationLoadGroupTab, type LoadGroupListItem } from '@/components/calculation/CalculationLoadGroupTab';
+import { CalculationLoadGroupTab } from '@/components/calculation/CalculationLoadGroupTab';
 import { CalculationFatigueProfileTab } from '@/components/calculation/CalculationFatigueProfileTab';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
+import { useCalculationCompositionState } from '@/hooks/useCalculationCompositionState';
+import { useCalculationLoadGroupState } from '@/hooks/useCalculationLoadGroupState';
+import { useCalculationFatigueProfileState } from '@/hooks/useCalculationFatigueProfileState';
 import {
   useCreateProject,
   useProject,
   useUpdateProject,
-  useUpdateProjectComposition,
-  useUpdateProjectLoad,
-  useUpdateProjectFatigue,
   useUpdateProjectState,
   useUpdateProjectSettings,
 } from '@/hooks/api/useProjects';
-import { useCompositionList } from '@/hooks/api/useComposition';
-import { useLoadGroupList, useLoadCases, useFatigueProfiles } from '@/hooks/api/useLoadGroups';
 import { useSysconfig, sysconfigKeys } from '@/hooks/api/useSysconfig';
 import { getSysconfig } from '@/api/sysconfig';
-import { todayISO, toIsoDateTime, toDateInputValue, formatDateTime } from '@/lib/utils';
-import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
+import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { buildAnalysisSettingsPayload } from '@/lib/calculationSettings';
-import type { Composition } from '@/api/types/composition';
-import type { LoadGroup, LoadCase } from '@/api/types/loadGroups';
-import type { SortState, Tab, CalcCompositionSortKey, CalcLoadGroupSortKey } from '@/types';
-
-const TAB_PAGE_SIZE = 10;
-
-function toCompositionListItem(c: Composition): CompositionListItem {
-  const targetWeight = c.settings?.find((s) => s.reference === 'target_weight')?.value;
-  return {
-    id: c.id,
-    name: c.name,
-    description: c.description ?? '',
-    type: '—',
-    targetWeight: targetWeight != null ? String(targetWeight) : '—',
-    user: c.user ?? '—',
-    lastUpdated: formatDateTime(c.last_modified),
-  };
-}
-
-function toLoadGroupListItem(g: LoadGroup): LoadGroupListItem {
-  return {
-    id: g.id,
-    name: g.name,
-    description: g.description ?? '',
-    user: g.user ?? '—',
-    lastUpdated: formatDateTime(g.last_modified ?? g.created_at),
-  };
-}
+import type { Tab } from '@/types';
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -67,9 +37,6 @@ export function CalculationNew() {
 
   const createMutation = useCreateProject();
   const updateMutation = useUpdateProject();
-  const updateCompositionMutation = useUpdateProjectComposition();
-  const updateLoadMutation = useUpdateProjectLoad();
-  const updateFatigueMutation = useUpdateProjectFatigue();
   const updateStateMutation = useUpdateProjectState();
   const updateSettingsMutation = useUpdateProjectSettings();
 
@@ -125,42 +92,19 @@ export function CalculationNew() {
   const isStaticStructural = analysisMethod.startsWith('Static structural');
 
   // ── Composition ──────────────────────────────────────────────────────────
-  const compositionsQuery = useCompositionList();
-  const [selectedCompositionId, setSelectedCompositionId] = useState<number | null>(null);
-  const [compSearch, setCompSearch] = useState('');
-  const [compSort, setCompSort] = useState<SortState<CalcCompositionSortKey>>({ key: 'name', direction: 'asc' });
-  const [compPage, setCompPage] = useState(1);
-
-  const compositionItems = useMemo(
-    () => (compositionsQuery.data ?? []).map(toCompositionListItem),
-    [compositionsQuery.data]
-  );
-  const compFiltered = useMemo(
-    () => compositionItems.filter((c) => matchesQuery(compSearch, [c.name, c.description])),
-    [compositionItems, compSearch]
-  );
-  const compSorted = useMemo(
-    () => sortItems(compFiltered, compSort, (c, key) => (key === 'last_modified' ? c.lastUpdated : c.name)),
-    [compFiltered, compSort]
-  );
-  const { totalPages: compTotalPages, pageRows: compPageRows } = paginate(compSorted, compPage, TAB_PAGE_SIZE);
-
-  function handleCompSearchChange(value: string) {
-    setCompSearch(value);
-    setCompPage(1);
-  }
-
-  function handleCompSort(key: CalcCompositionSortKey) {
-    setCompSort((prev) => toggleSort(prev, key));
-  }
-
-  async function handleSelectComposition(compositionId: number) {
-    const next = selectedCompositionId === compositionId ? null : compositionId;
-    setSelectedCompositionId(next);
-    if (next === null) return;
-    const pid = await ensureProjectId();
-    await updateCompositionMutation.mutateAsync({ projectId: pid, composition: next });
-  }
+  const {
+    compositionsQuery,
+    selectedCompositionId,
+    compSearch,
+    compSort,
+    compPage,
+    compPageRows,
+    compTotalPages,
+    handleCompSearchChange,
+    handleCompSort,
+    setCompPage,
+    handleSelectComposition,
+  } = useCalculationCompositionState(ensureProjectId);
 
   // ── Configuration ─────────────────────────────────────────────────────────
   // Only fetched while the Configuration tab is actually open — drives every
@@ -189,93 +133,36 @@ export function CalculationNew() {
   }
 
   // ── Load group tab ────────────────────────────────────────────────────────
-  const loadGroupsQuery = useLoadGroupList();
-  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
-  const [lgSearch, setLgSearch] = useState('');
-  const [lgSort, setLgSort] = useState<SortState<CalcLoadGroupSortKey>>({ key: 'last_modified', direction: 'desc' });
-  const [lgPage, setLgPage] = useState(1);
-
-  const loadGroupItems = useMemo(
-    () => (loadGroupsQuery.data ?? []).map(toLoadGroupListItem),
-    [loadGroupsQuery.data]
-  );
-  const lgFiltered = useMemo(
-    () => loadGroupItems.filter((g) => matchesQuery(lgSearch, [g.name, g.description, g.user])),
-    [loadGroupItems, lgSearch]
-  );
-  const lgSorted = useMemo(
-    () => sortItems(lgFiltered, lgSort, (g, key) => (key === 'last_modified' ? g.lastUpdated : g.name)),
-    [lgFiltered, lgSort]
-  );
-  const { totalPages: lgTotalPages, pageRows: lgPageRows } = paginate(lgSorted, lgPage, TAB_PAGE_SIZE);
-
-  function handleLgSearchChange(value: string) {
-    setLgSearch(value);
-    setLgPage(1);
-  }
-
-  function handleLgSort(key: CalcLoadGroupSortKey) {
-    setLgSort((prev) => toggleSort(prev, key));
-  }
-
-  async function handleSelectGroup(groupId: number) {
-    const next = selectedGroupId === groupId ? null : groupId;
-    setSelectedGroupId(next);
-    if (next === null) return;
-    const pid = await ensureProjectId();
-    await updateLoadMutation.mutateAsync({ projectId: pid, load_group: next });
-  }
-
-  const selectedLoadGroup = selectedGroupId
-    ? loadGroupsQuery.data?.find((g) => g.id === selectedGroupId) ?? null
-    : null;
+  const {
+    loadGroupsQuery,
+    selectedGroupId,
+    lgSearch,
+    lgSort,
+    lgPage,
+    lgPageRows,
+    lgTotalPages,
+    handleLgSearchChange,
+    handleLgSort,
+    setLgPage,
+    handleSelectGroup,
+    selectedLoadGroup,
+  } = useCalculationLoadGroupState(ensureProjectId);
 
   // ── Fatigue profile tab ───────────────────────────────────────────────────
-  const fatigueProfilesQuery = useFatigueProfiles(selectedGroupId ?? NaN);
-  const loadCasesQuery = useLoadCases(selectedGroupId ?? NaN);
-  const [fpSearch, setFpSearch] = useState('');
-  const [expandedProfileIds, setExpandedProfileIds] = useState<Set<number>>(new Set());
-  const [expandedCaseIds, setExpandedCaseIds] = useState<Set<number>>(new Set());
-  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
-
-  // Selecting a different load group invalidates whatever fatigue profile
-  // was picked/expanded for the previous one.
-  useEffect(() => {
-    setFpSearch('');
-    setExpandedProfileIds(new Set());
-    setExpandedCaseIds(new Set());
-    setSelectedProfileId(null);
-  }, [selectedGroupId]);
-
-  const loadCasesById = useMemo(() => {
-    const map: Record<number, LoadCase> = {};
-    for (const lc of loadCasesQuery.data?.load_cases ?? []) {
-      if (lc.id !== undefined) map[lc.id] = lc;
-    }
-    return map;
-  }, [loadCasesQuery.data]);
-
-  const fpFilteredProfiles = useMemo(() => {
-    const all = fatigueProfilesQuery.data ?? [];
-    if (!fpSearch.trim()) return all;
-    return all.filter((p) => matchesQuery(fpSearch, [p.name]));
-  }, [fatigueProfilesQuery.data, fpSearch]);
-
-  function toggleFPProfile(id: number) {
-    setExpandedProfileIds((prev) => toggleSetMember(prev, id));
-  }
-
-  function toggleFPCase(id: number) {
-    setExpandedCaseIds((prev) => toggleSetMember(prev, id));
-  }
-
-  async function handleSelectFatigueProfile(profileId: number) {
-    const next = selectedProfileId === profileId ? null : profileId;
-    setSelectedProfileId(next);
-    if (next === null) return;
-    const pid = await ensureProjectId();
-    await updateFatigueMutation.mutateAsync({ projectId: pid, fatigue_profile: next });
-  }
+  const {
+    fatigueProfilesQuery,
+    loadCasesQuery,
+    fpSearch,
+    setFpSearch,
+    expandedProfileIds,
+    expandedCaseIds,
+    selectedProfileId,
+    loadCasesById,
+    fpFilteredProfiles,
+    toggleFPProfile,
+    toggleFPCase,
+    handleSelectFatigueProfile,
+  } = useCalculationFatigueProfileState(selectedGroupId, ensureProjectId);
 
   const titleText = isNew ? name.trim() || 'New calculation' : name.trim() || id;
 

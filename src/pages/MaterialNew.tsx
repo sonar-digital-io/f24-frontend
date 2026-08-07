@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
 import { PropertyFormTab } from '@/components/material/PropertyFormTab';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { DropdownSelect as Select } from '@/components/common/form/DropdownSelect';
-import { MECHANICAL_SECTIONS, FATIGUE_SECTIONS } from '@/data/materialFormFields';
+import { MaterialGeneralTab } from '@/components/material/MaterialGeneralTab';
+import { MECHANICAL_SECTIONS } from '@/data/materialFormFields';
+import { FATIGUE_SECTIONS } from '@/data/materialFatigueFields';
 import {
   useCreateMaterial,
   useMaterialDetail,
@@ -15,8 +13,9 @@ import {
   useUpdateMechanicalProperties,
   useUpdateFatigueProperties,
 } from '@/hooks/api/useMaterials';
+import { useHydrateOnce } from '@/hooks/useHydrateOnce';
+import { MECH_PROP_TYPE_REFERENCE, toKeyValueList, toValueMap, keyValueSignature } from '@/lib/materialFormMapping';
 import type { MaterialPayload } from '@/api/types/materials';
-import type { KeyValuePair } from '@/api/types/common';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
 const TABS = [
@@ -25,48 +24,12 @@ const TABS = [
   { value: 'fatigue', label: 'Fatigue properties' },
 ];
 
-const MATERIAL_TYPES = [
-  'UD ply',
-  'Biaxial Ply (±45°)',
-  'Consolidated Ply',
-  'Hybrid Ply',
-  'Random Mat Ply',
-  'Surface Ply',
-  'Core (PET Foam)',
-  'Core (Balsa)',
-];
-
 interface Baseline {
   name: string;
   description: string;
   date: string;
   mechValues: Record<string, string>;
   fatigueValues: Record<string, string>;
-}
-
-/** Type isn't its own field on the material — it's a mechanical property, sent/read
- * as the "mech_prop_type" entry in mechanical_properties. */
-const MECH_PROP_TYPE_REFERENCE = 'mech_prop_type';
-
-function toKeyValueList(values: Record<string, string>) {
-  return Object.entries(values)
-    .filter(([, value]) => value.trim() !== '')
-    .map(([reference, value]) => ({ reference, value }));
-}
-
-function toValueMap(list?: KeyValuePair[]): Record<string, string> {
-  const map: Record<string, string> = {};
-  (list ?? []).forEach((kv) => {
-    map[kv.reference] = String(kv.value);
-  });
-  return map;
-}
-
-/** Order-independent signature of a values record, for change detection. */
-function keyValueSignature(values: Record<string, string>): string {
-  return JSON.stringify(
-    toKeyValueList(values).sort((a, b) => a.reference.localeCompare(b.reference))
-  );
 }
 
 export function MaterialNew() {
@@ -93,9 +56,7 @@ export function MaterialNew() {
     [MECH_PROP_TYPE_REFERENCE]: 'UD ply',
   });
   const [fatigueValues, setFatigueValues] = useState<Record<string, string>>({});
-  const [hydrated, setHydrated] = useState(false);
   const [baseline, setBaseline] = useState<Baseline | null>(null);
-  const [duplicateHydrated, setDuplicateHydrated] = useState(false);
 
   const type = mechValues[MECH_PROP_TYPE_REFERENCE] ?? 'UD ply';
   function setType(value: string) {
@@ -106,9 +67,8 @@ export function MaterialNew() {
   // baseline snapshot so saving can tell which of the 3 tabs actually changed. Waiting on
   // `isFetching` — not just `data` — means we never hydrate from a stale cache hit that
   // React Query may return synchronously before the real network refetch resolves.
-  useEffect(() => {
-    if (!isEditing || hydrated || detailQuery.isFetching || !detailQuery.data) return;
-    const m = detailQuery.data;
+  const hydrated = useHydrateOnce(isEditing && !detailQuery.isFetching && !!detailQuery.data, () => {
+    const m = detailQuery.data!;
     const hydratedDescription = m.description ?? '';
     const hydratedDate = toDateInputValue(m.date);
     const hydratedMech = toValueMap(m.mechanical_properties);
@@ -125,29 +85,21 @@ export function MaterialNew() {
       mechValues: hydratedMech,
       fatigueValues: hydratedFatigue,
     });
-    setHydrated(true);
-  }, [isEditing, hydrated, detailQuery.isFetching, detailQuery.data]);
+  });
 
   // Duplicate: prefill a NEW (create-mode) form from another material's data, with
   // "_copy" appended to the name. No baseline needed — Save always does a plain POST here.
-  useEffect(() => {
-    if (
-      isEditing ||
-      duplicateHydrated ||
-      !Number.isFinite(duplicateSourceId) ||
-      duplicateQuery.isFetching ||
-      !duplicateQuery.data
-    ) {
-      return;
+  const duplicateHydrated = useHydrateOnce(
+    !isEditing && Number.isFinite(duplicateSourceId) && !duplicateQuery.isFetching && !!duplicateQuery.data,
+    () => {
+      const m = duplicateQuery.data!;
+      setName(`${m.name}_copy`);
+      setDescription(m.description ?? '');
+      setDate(toDateInputValue(m.date));
+      setMechValues(toValueMap(m.mechanical_properties));
+      setFatigueValues(toValueMap(m.fatigue_properties));
     }
-    const m = duplicateQuery.data;
-    setName(`${m.name}_copy`);
-    setDescription(m.description ?? '');
-    setDate(toDateInputValue(m.date));
-    setMechValues(toValueMap(m.mechanical_properties));
-    setFatigueValues(toValueMap(m.fatigue_properties));
-    setDuplicateHydrated(true);
-  }, [isEditing, duplicateHydrated, duplicateSourceId, duplicateQuery.isFetching, duplicateQuery.data]);
+  );
 
   // Title: editing shows the material name everywhere; creating shows "New material" on General.
   const titleText = isEditing
@@ -265,69 +217,16 @@ export function MaterialNew() {
         )}
 
         {!showLoadingState && !showLoadErrorState && activeTab === 'general' && (
-          <form
-            onSubmit={(e) => e.preventDefault()}
-            className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
-          >
-            <div className="flex w-full flex-col gap-2">
-              <Label
-                htmlFor="material-name"
-                className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-              >
-                Name<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Input
-                id="material-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="ST-UD-C600-EP"
-                required
-                className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-
-            <div className="flex w-full flex-col gap-2">
-              <Label htmlFor="material-type" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                Type<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Select id="material-type" value={type} onChange={setType} options={MATERIAL_TYPES} />
-            </div>
-
-            <div className="flex w-full flex-col gap-2">
-              <Label
-                htmlFor="material-date"
-                className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-              >
-                Date<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Input
-                id="material-date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-                className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-
-            <div className="flex w-full flex-col gap-2">
-              <Label
-                htmlFor="material-description"
-                className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-              >
-                Description<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Textarea
-                id="material-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Carbon/Epoxy UD lamina. Fiber: Toray T700 (600gsm). Matrix: ST-Epoxy-Standard."
-                required
-                rows={4}
-                className="min-h-[98px] rounded-md border-[#e2e8f0] bg-white px-3 py-2 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-          </form>
+          <MaterialGeneralTab
+            name={name}
+            onNameChange={setName}
+            type={type}
+            onTypeChange={setType}
+            date={date}
+            onDateChange={setDate}
+            description={description}
+            onDescriptionChange={setDescription}
+          />
         )}
 
         {!showLoadingState && !showLoadErrorState && activeTab === 'mechanical' && (

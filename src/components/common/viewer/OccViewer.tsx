@@ -2,41 +2,24 @@
  * OccViewer — full-bleed Three.js canvas with three independent load pipelines:
  *
  *  - STL (when `stlData` is passed and doesn't sniff as a zip): parsed
- *    directly (see parseAsciiStl/parseBinaryStl below), not THREE.STLLoader:
- *    its binary/ASCII sniffing heuristic (peeking a face count at byte 80
- *    before even checking for "solid") can misfire and try to allocate a
- *    bogus-huge typed array.
+ *    directly via lib/stlParsing.ts, not THREE.STLLoader: its binary/ASCII
+ *    sniffing heuristic (peeking a face count at byte 80 before even
+ *    checking for "solid") can misfire and try to allocate a bogus-huge
+ *    typed array.
  *  - 3MF (when `stlData` is a zip, i.e. starts with the PK\x03\x04 local-file
  *    -header signature): despite the backend's documented "raw STL" contract,
  *    the real /result/ response observed in practice is a zip-based OPC
  *    package (3MF), so it's parsed with THREE.ThreeMFLoader instead.
  *  - IGES (opt-in via `igesUrl`, used only when `stlData` is unset): a real
- *    IGES file loaded through OpenCascade.js B-Rep → mesh tessellation,
- *    written into the OCC Emscripten virtual filesystem, parsed with
- *    IGESControl_Reader, and tessellated into a Three.js BufferGeometry. With
- *    no `stlData` and no `igesUrl`, the viewer just shows the loading ring —
- *    it never falls back to demo/mock geometry.
+ *    IGES file loaded through OpenCascade.js B-Rep → mesh tessellation (see
+ *    lib/occGeometry.ts), written into the OCC Emscripten virtual filesystem,
+ *    parsed with IGESControl_Reader. With no `stlData` and no `igesUrl`, the
+ *    viewer just shows the loading ring — it never falls back to demo/mock
+ *    geometry.
  *
  * No OCC involved for either STL or 3MF. Vertices/geometry are unitless
  * (fractions of the geometry's nominal_radius), so `stlScale` must be set to
  * rescale them. `stlData` takes priority over `igesUrl` whenever it's set.
- *
- * opencascade.js v1.1.1 API notes (v1.1.1 = OCC 7.5 bindings):
- *   Constructor overloads always use _N suffix (even if only one):
- *     IGESControl_Reader_1()
- *     Message_ProgressRange_1()        — default (no-arg) ctor
- *     TopLoc_Location_1()
- *   Method overloads only use _N when there are multiple overloads:
- *     reader.ReadFile(path)            — single overload → no suffix
- *     reader.TransferRoots()           — single overload, no args → no suffix
- *     reader.OneShape()                — single overload → no suffix
- *     IGESControl_Controller.Init()    — MUST be called before any IGESControl_Reader use!
- *   Other known suffixes:
- *     BRepMesh_IncrementalMesh_2(shape, linDefl, isRel, angDefl, inParallel)
- *     TopExp_Explorer_2(shape, TopAbs_ShapeEnum.TopAbs_FACE, ...)
- *     TopoDS.Face_1(shape)
- *     BRep_Tool.Triangulation(face, loc)     ← static, no suffix
- *     face.Orientation_1().value === TopAbs_Orientation.TopAbs_REVERSED.value
  *
  * Scene: IGES geometry with auto-fit camera + OrbitControls.
  * OrbitControls: left-drag = rotate, right-drag / middle = pan, scroll = zoom.
@@ -49,6 +32,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { getOcc } from '@/lib/occ-init';
+import { loadIgesShapes, tessellate } from '@/lib/occGeometry';
+import { looksLikeAsciiStl, looksLikeZip, hexDump, parseAsciiStl, parseBinaryStl } from '@/lib/stlParsing';
+import { createViewerScene, fitViewerSceneToBounds } from '@/lib/viewerScene';
 
 export interface OccViewerProps {
   wireframe?: boolean;
@@ -69,237 +55,6 @@ export interface OccViewerProps {
   /** Show/hide every other named 3MF object (layups). Composition preview only. Defaults to true. */
   showLayups?: boolean;
 }
-
-// ---------------------------------------------------------------------------
-// IGES loader — returns shape(s) ready for tessellation
-// ---------------------------------------------------------------------------
-
-// opencascade.js v1.1.1 ships no TypeScript types — the OCC module handle
-// stays `any`, but a TopoDS_Shape handle only ever needs `.delete()` called
-// on it in this file, so it gets a minimal local type instead of `any`.
-type OccShapeHandle = { delete: () => void };
-
-async function loadIgesShapes(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  oc: any,
-  url: string,
-): Promise<Array<{ shape: OccShapeHandle; color: number; opacity: number }>> {
-  // 1. Fetch the IGES file
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`IGES fetch failed: HTTP ${response.status} — ${url}`);
-  }
-  const buffer = await response.arrayBuffer();
-
-  // 2. Write into the OCC Emscripten virtual filesystem.
-  //    ⚠️  opencascade.js v1.1.1 WASM bug: ReadFile silently fails (RetError)
-  //    for virtual-FS paths longer than 10 characters total (incl. slash + ext).
-  //    Stem must be ≤ 5 chars: "/fan.igs" (8) ✓  "/fanobj.igs" (11) ✗
-  const tmpPath = '/fan.igs';
-  oc.FS.writeFile(tmpPath, new Uint8Array(buffer));
-
-  try {
-    // 3. IGES session must be initialised before any read (registers protocol)
-    oc.IGESControl_Controller.Init();
-
-    // 4. Create reader and parse — Emscripten heap object, must be freed
-    const reader = new oc.IGESControl_Reader_1();
-    try {
-      const retStatus = reader.ReadFile(tmpPath);
-
-      const RetDone = oc.IFSelect_ReturnStatus.IFSelect_RetDone;
-      if (retStatus.value !== RetDone.value) {
-        throw new Error(`IGESControl_Reader.ReadFile returned status ${retStatus.value}`);
-      }
-
-      // 5. Transfer all root entities to B-Rep shapes
-      //    Single overload, no args → no suffix
-      reader.TransferRoots();
-
-      // 6. Compound all transferred shapes into one
-      //    (OneShape returns its own TopoDS handle — the reader can be freed after)
-      const shape = reader.OneShape();
-
-      return [{ shape, color: 0x94a3b8, opacity: 1 }];
-    } finally {
-      reader.delete();
-    }
-  } finally {
-    try { oc.FS.unlink(tmpPath); } catch { /* virtual-FS cleanup */ }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// ASCII + binary STL parsers — deliberately not THREE.STLLoader: its
-// binary/ASCII auto-detection heuristic (peeking a "triangle count" at byte
-// 80, before even checking for a "solid" prefix) can misfire and try to
-// allocate a bogus-huge typed array. Detect the format by sniffing whether
-// the content actually starts with "solid" instead, and sanity-check a
-// binary header's face count against the real byte length before trusting it.
-// ---------------------------------------------------------------------------
-
-const STL_VERTEX_RE = /vertex\s+([+-]?[\d.eE+-]+)\s+([+-]?[\d.eE+-]+)\s+([+-]?[\d.eE+-]+)/g;
-
-function looksLikeAsciiStl(buffer: ArrayBuffer): boolean {
-  // Anchoring on "starts with solid" is too strict — a stray leading byte
-  // (BOM variant, whitespace the decoder doesn't normalize, etc.) makes a
-  // real ASCII file look binary. Instead just check that both STL keywords
-  // show up as readable text near the start of the file.
-  const head = new Uint8Array(buffer, 0, Math.min(4096, buffer.byteLength));
-  const text = new TextDecoder().decode(head);
-  return /\bsolid\b/i.test(text) && /\bfacet\b/i.test(text);
-}
-
-// Real-world observation: the backend's "STL" result actually comes back as
-// a zip archive (PK\x03\x04 local-file-header signature) containing an OPC
-// package — i.e. a 3MF file, the standard zip-based 3D-printing/CAD format.
-// Detect that up front so it takes a completely different load path.
-function looksLikeZip(buffer: ArrayBuffer): boolean {
-  if (buffer.byteLength < 4) return false;
-  const b = new Uint8Array(buffer, 0, 4);
-  return b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04;
-}
-
-function hexDump(buffer: ArrayBuffer, length = 64): string {
-  return Array.from(new Uint8Array(buffer, 0, Math.min(length, buffer.byteLength)))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join(' ');
-}
-
-function parseAsciiStl(text: string): Float32Array {
-  const vertices: number[] = [];
-  let m: RegExpExecArray | null;
-  STL_VERTEX_RE.lastIndex = 0;
-  while ((m = STL_VERTEX_RE.exec(text)) !== null) {
-    vertices.push(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
-  }
-  return new Float32Array(vertices);
-}
-
-function parseBinaryStl(buffer: ArrayBuffer): Float32Array {
-  const HEADER_SIZE = 84; // 80-byte header + uint32 face count
-  const FACE_SIZE    = 50; // 12 floats (normal + 3 vertices) + uint16 attribute count
-  if (buffer.byteLength < HEADER_SIZE) {
-    throw new Error(`Binary STL too short to contain a header (${buffer.byteLength} bytes)`);
-  }
-  const reader = new DataView(buffer);
-  const faces = reader.getUint32(80, true);
-  const expected = HEADER_SIZE + faces * FACE_SIZE;
-  if (expected !== buffer.byteLength) {
-    throw new Error(
-      `Binary STL face count doesn't match its byte length (header says ${faces} faces, ` +
-        `expected ${expected} bytes, got ${buffer.byteLength}) — likely misdetected as binary. ` +
-        `First bytes: ${hexDump(buffer)}`
-    );
-  }
-
-  const positions = new Float32Array(faces * 3 * 3);
-  let offset = HEADER_SIZE;
-  let vi = 0;
-  for (let f = 0; f < faces; f++) {
-    offset += 12; // skip the facet normal — recomputed later via computeVertexNormals
-    for (let v = 0; v < 3; v++) {
-      positions[vi++] = reader.getFloat32(offset, true); offset += 4;
-      positions[vi++] = reader.getFloat32(offset, true); offset += 4;
-      positions[vi++] = reader.getFloat32(offset, true); offset += 4;
-    }
-    offset += 2; // attribute byte count
-  }
-  return positions;
-}
-
-// ---------------------------------------------------------------------------
-// Tessellation: B-Rep → Three.js BufferGeometry (v1.1.1 API)
-// ---------------------------------------------------------------------------
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function tessellate(oc: any, shape: OccShapeHandle, color: number, opacity: number): THREE.Mesh | null {
-  const FACE     = oc.TopAbs_ShapeEnum.TopAbs_FACE;
-  const TOPSHAPE = oc.TopAbs_ShapeEnum.TopAbs_SHAPE;
-  const REVERSED = oc.TopAbs_Orientation.TopAbs_REVERSED;
-
-  // Meshing happens in the ctor — the mesher object itself can be freed afterwards
-  const mesher = new oc.BRepMesh_IncrementalMesh_2(shape, 0.05, false, 0.3, false);
-
-  const vertices: number[] = [];
-  const indices:  number[] = [];
-  let offset = 0;
-
-  const exp = new oc.TopExp_Explorer_2(shape, FACE, TOPSHAPE);
-  const loc = new oc.TopLoc_Location_1();
-
-  // Every oc.* instance below is an Emscripten heap object → .delete() when done.
-  // The extracted coordinates are copied into plain JS arrays, so nothing here
-  // needs to outlive this function.
-  try {
-    while (exp.More()) {
-      const cur  = exp.Current();
-      const face = oc.TopoDS.Face_1(cur);
-      const poly = oc.BRep_Tool.Triangulation(face, loc);
-
-      try {
-        if (!poly.IsNull()) {
-          // poly.get() is a raw pointer owned by the handle — do NOT delete it
-          const p  = poly.get();
-          const nb = p.NbNodes();
-          const nt = p.NbTriangles();
-
-          for (let i = 1; i <= nb; i++) {
-            const pt = p.Node(i);
-            vertices.push(pt.X(), pt.Y(), pt.Z());
-            pt.delete();
-          }
-
-          const rev = face.Orientation_1().value === REVERSED.value;
-          for (let i = 1; i <= nt; i++) {
-            const tri = p.Triangle(i);
-            const a = tri.Value(1) - 1 + offset;
-            const b = tri.Value(2) - 1 + offset;
-            const c = tri.Value(3) - 1 + offset;
-            if (rev) indices.push(a, c, b);
-            else indices.push(a, b, c);
-            tri.delete();
-          }
-          offset += nb;
-        }
-      } finally {
-        poly.delete();
-        face.delete();
-        cur.delete();
-      }
-      exp.Next();
-    }
-  } finally {
-    loc.delete();
-    exp.delete();
-    mesher.delete();
-  }
-
-  if (vertices.length === 0) return null;
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-
-  const mat = new THREE.MeshPhysicalMaterial({
-    color,
-    metalness: 0.3,
-    roughness: 0.4,
-    transparent: opacity < 1,
-    opacity,
-    side: THREE.DoubleSide,
-  });
-
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow    = true;
-  mesh.receiveShadow = true;
-  return mesh;
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function OccViewer({
   wireframe = false,
@@ -355,32 +110,9 @@ export function OccViewer({
     const w = container.clientWidth  || 800;
     const h = container.clientHeight || 600;
 
-    // ── Scene ──────────────────────────────────────────────────────────────
-    const scene = new THREE.Scene();
-
-    const bgCanvas = document.createElement('canvas');
-    bgCanvas.width = 2; bgCanvas.height = 512;
-    const bgCtx = bgCanvas.getContext('2d')!;
-    const grad = bgCtx.createLinearGradient(0, 0, 0, 512);
-    grad.addColorStop(0,   '#e8edf2');
-    grad.addColorStop(0.5, '#f1f5f9');
-    grad.addColorStop(1,   '#dde3ea');
-    bgCtx.fillStyle = grad;
-    bgCtx.fillRect(0, 0, 2, 512);
-    scene.background = new THREE.CanvasTexture(bgCanvas);
-
-    // ── Camera ─────────────────────────────────────────────────────────────
-    const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 5000);
-    camera.position.set(12, 7, 16);
-
-    // ── Renderer ───────────────────────────────────────────────────────────
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(w, h);
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
-    renderer.toneMapping       = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    // ── Scene / camera / renderer / lights / grid / loading ring ────────────
+    const { scene, camera, renderer, grid, ground, ring, ringGeo, ringMat } =
+      createViewerScene(w, h);
     container.appendChild(renderer.domElement);
 
     // ── OrbitControls ──────────────────────────────────────────────────────
@@ -390,44 +122,6 @@ export function OccViewer({
     controls.minDistance   = 0.1;
     controls.maxDistance   = 5000;
     controls.target.set(0, 0, 0);
-
-    // ── Lights ─────────────────────────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    keyLight.position.set(12, 18, 10);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(2048, 2048);
-    keyLight.shadow.camera.left   = -50;
-    keyLight.shadow.camera.right  = 50;
-    keyLight.shadow.camera.top    = 50;
-    keyLight.shadow.camera.bottom = -50;
-    scene.add(keyLight);
-
-    const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.35);
-    fillLight.position.set(-8, 4, -8);
-    scene.add(fillLight);
-
-    // ── Grid + ground shadow ────────────────────────────────────────────────
-    const grid = new THREE.GridHelper(200, 40, 0xc0ccd8, 0xd4dde6);
-    grid.position.y = -2;
-    (grid.material as THREE.Material).opacity = 0.5;
-    (grid.material as THREE.Material).transparent = true;
-    scene.add(grid);
-
-    const groundGeo = new THREE.PlaneGeometry(500, 500);
-    const groundMat = new THREE.ShadowMaterial({ opacity: 0.08 });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -2;
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    // ── Loading placeholder (spinning ring) ─────────────────────────────────
-    const ringGeo = new THREE.TorusGeometry(2, 0.15, 16, 60);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xcbd5e1, wireframe: true });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    scene.add(ring);
 
     // ── Animate ─────────────────────────────────────────────────────────────
     let animId = 0;
@@ -452,10 +146,10 @@ export function OccViewer({
     window.addEventListener('resize', onResize);
 
     // ── Load + build the scene's mesh(es) ───────────────────────────────────
-    // Two independent pipelines: STL (pre-triangulated, no OCC involved — used
-    // for the backend's generated result, which ships unitless vertices scaled
-    // by stlScale) and IGES (B-Rep loaded + tessellated via OpenCascade.js —
-    // used for the static demo geometry).
+    // Three independent pipelines: STL (pre-triangulated, no OCC involved —
+    // used for the backend's generated result, which ships unitless vertices
+    // scaled by stlScale), 3MF (composition preview) and IGES (B-Rep loaded +
+    // tessellated via OpenCascade.js — used for the static demo geometry).
     let disposed = false;
     setStatus('loading');
     bladeObjectsRef.current = [];
@@ -621,39 +315,7 @@ export function OccViewer({
           if (disposed) return;
 
           // ── Auto-fit camera + grid to loaded geometry ───────────────────────
-          if (roots.length > 0) {
-            const box = new THREE.Box3();
-            roots.forEach((r) => box.expandByObject(r));
-
-            if (!box.isEmpty()) {
-              const center  = box.getCenter(new THREE.Vector3());
-              const size    = box.getSize(new THREE.Vector3());
-              const maxDim  = Math.max(size.x, size.y, size.z);
-              const fitDist = maxDim * 2.0;
-
-              camera.position.set(
-                center.x + fitDist * 0.55,
-                center.y + fitDist * 0.38,
-                center.z + fitDist,
-              );
-              camera.near = maxDim * 0.001;
-              camera.far  = maxDim * 100;
-              camera.updateProjectionMatrix();
-
-              controls.target.copy(center);
-              controls.minDistance = maxDim * 0.05;
-              controls.maxDistance = maxDim * 20;
-              controls.update();
-
-              // Snap grid + shadow ground to the bottom of the geometry
-              const groundY = box.min.y - maxDim * 0.015;
-              grid.position.y   = groundY;
-              ground.position.y = groundY;
-              // Scale grid to match geometry footprint
-              const footprint = Math.max(size.x, size.z) * 3;
-              grid.scale.setScalar(footprint / 200);
-            }
-          }
+          fitViewerSceneToBounds(roots, camera, controls, grid, ground);
 
           meshesRef.current   = newMeshes;
           wireLineRef.current = newLines;
@@ -703,7 +365,7 @@ export function OccViewer({
       meshesRef.current   = [];
       wireLineRef.current = [];
     };
-     
+
   }, [igesUrl, stlData, stlScale]);
 
   return (

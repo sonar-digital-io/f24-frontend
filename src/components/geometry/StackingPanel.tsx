@@ -1,12 +1,9 @@
 import { useState } from 'react';
 import { FoldHorizontal } from 'lucide-react';
-import { BezierEditor } from '@/components/common/viewer/BezierEditor';
-import { BezierPointsTable } from '@/components/common/viewer/BezierPointsTable';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import type { ControlPoint } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldableSectionList } from '@/components/geometry/FoldableSectionList';
+import { StackingSectionBody } from '@/components/geometry/StackingSectionBody';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
 import { clamp } from '@/lib/bezierMath';
 import type { GeometryEdge, GeometryEdgeInput } from '@/api/types/geometry';
@@ -229,65 +226,25 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
   const hasEnoughPoints = SECTION_KEYS.every((key) => sectionPoints[key].length >= 2);
 
   function renderSectionBody(key: SectionKey) {
-    const points = sectionPoints[key];
     return (
-      <div
-        className={
-          folded
-            ? 'flex flex-col gap-4'
-            : 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]'
-        }
-      >
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor={`${key}-ymin`} className="text-[12px] text-[#6b7280]">
-                Y min
-              </Label>
-              <Input
-                id={`${key}-ymin`}
-                type="number"
-                step="0.1"
-                value={getBoundInputValue(key, 'min')}
-                onChange={(e) => handleBoundChange(key, 'min', e.target.value)}
-                onBlur={() => handleBoundBlur(key, 'min')}
-                className="h-8 w-24 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor={`${key}-ymax`} className="text-[12px] text-[#6b7280]">
-                Y max
-              </Label>
-              <Input
-                id={`${key}-ymax`}
-                type="number"
-                step="0.1"
-                value={getBoundInputValue(key, 'max')}
-                onChange={(e) => handleBoundChange(key, 'max', e.target.value)}
-                onBlur={() => handleBoundBlur(key, 'max')}
-                className="h-8 w-24 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-          </div>
-          <BezierEditor
-            points={points}
-            onChange={(next) => setPointsForSection(key, next)}
-            yMin={yBounds[key].min}
-            yMax={yBounds[key].max}
-            yStep={SECTION_Y_STEP[key]}
-            rootX={rootX}
-          />
-        </div>
-        <BezierPointsTable
-          points={points}
-          valueLabel={SECTION_TABLE_HEADING[key]}
-          idPrefix={key}
-          getInputValue={(idx, field) => getInputValue(key, idx, field)}
-          onChange={(idx, field, raw) => handleInputChange(key, idx, field, raw)}
-          onBlur={(idx, field) => handleInputBlur(key, idx, field)}
-          onAddPoint={() => addPoint(key)}
-        />
-      </div>
+      <StackingSectionBody
+        folded={folded}
+        sectionKey={key}
+        points={sectionPoints[key]}
+        onChange={(next) => setPointsForSection(key, next)}
+        yMin={yBounds[key].min}
+        yMax={yBounds[key].max}
+        yStep={SECTION_Y_STEP[key]}
+        rootX={rootX}
+        valueLabel={SECTION_TABLE_HEADING[key]}
+        getBoundInputValue={(field) => getBoundInputValue(key, field)}
+        onBoundChange={(field, raw) => handleBoundChange(key, field, raw)}
+        onBoundBlur={(field) => handleBoundBlur(key, field)}
+        getInputValue={(idx, field) => getInputValue(key, idx, field)}
+        onInputChange={(idx, field, raw) => handleInputChange(key, idx, field, raw)}
+        onInputBlur={(idx, field) => handleInputBlur(key, idx, field)}
+        onAddPoint={() => addPoint(key)}
+      />
     );
   }
 
