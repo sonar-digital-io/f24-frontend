@@ -10,7 +10,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Home', path: '/' },
   { label: 'Material', path: '/material' },
   { label: 'Geometry', path: '/geometry' },
-  { label: 'Layup', path: '/layup' },
   { label: 'Composition', path: '/composition' },
   { label: 'Load group', path: '/load-group' },
   { label: 'Calculation', path: '/calculation' },
