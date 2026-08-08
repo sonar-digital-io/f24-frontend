@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { apiClient } from '@/api/client';
 import { Settings } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
@@ -9,6 +10,7 @@ import { GeometryEditToolbar } from '@/components/geometry/GeometryEditToolbar';
 import { GeometryCreatePanel } from '@/components/geometry/GeometryCreatePanel';
 import { GeometryGlobalPropertiesPanel } from '@/components/geometry/GeometryGlobalPropertiesPanel';
 import { GeometryResultPanel } from '@/components/geometry/GeometryResultPanel';
+import { SparsSection } from '@/components/geometry/SparsSection';
 import { ProfileDistributionPanel } from '@/components/geometry/ProfileDistributionPanel';
 import { ProfilesPanel } from '@/components/geometry/ProfilesPanel';
 import { StackingPanel } from '@/components/geometry/StackingPanel';
@@ -58,6 +60,8 @@ function getPanelWidthClass(activeTab: string, profileFolded: boolean, stackingF
       return 'w-[404px] max-w-[calc(100vw-2rem)]';
     case 'stacking':
       return stackingFolded ? PANEL_WIDTH_NARROW : PANEL_WIDTH_WIDE;
+    case 'spars':
+      return PANEL_WIDTH_WIDE;
     default:
       return 'w-[280px]';
   }
@@ -269,8 +273,11 @@ export function GeometryEdit() {
       setResultScale(Number(props.nominalRadius) || 1);
       setResultStl(data);
     } catch (err) {
+      // responseType: 'arraybuffer' means even a JSON error body decodes to raw
+      // bytes here, not text — getApiErrorMessage can't read it, so this stays
+      // on the per-status friendly text instead of the backend's own message.
       const status = isAxiosError(err) ? err.response?.status : undefined;
-      setResultError(
+      const message =
         status === 409
           ? 'Geometry is invalid or incomplete (needs at least 2 profiles and a valid spline).'
           : status === 403
@@ -279,8 +286,9 @@ export function GeometryEdit() {
               ? 'Geometry not found.'
               : status === 500
                 ? 'Result generation failed on the server.'
-                : 'Failed to generate. Please try again.'
-      );
+                : 'Failed to generate. Please try again.';
+      setResultError(message);
+      toast.error(message);
       setResultStatus('error');
     }
   }
@@ -387,12 +395,15 @@ export function GeometryEdit() {
             />
           )}
           {activeTab === 'spars' && (
-            <GeometryResultPanel
-              onGenerate={handleGenerateResult}
-              requested={resultRequested}
-              status={resultStatus}
-              error={resultError}
-            />
+            <div className="flex flex-col gap-4">
+              <SparsSection geometryId={geometryId} />
+              <GeometryResultPanel
+                onGenerate={handleGenerateResult}
+                requested={resultRequested}
+                status={resultStatus}
+                error={resultError}
+              />
+            </div>
           )}
           {activeTab !== 'create' &&
             activeTab !== 'global-properties' &&

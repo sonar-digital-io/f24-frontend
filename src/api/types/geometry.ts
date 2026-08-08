@@ -100,10 +100,27 @@ export interface GeometryProfileQuery {
   standard?: boolean;
 }
 
+/**
+ * A single spar running between two profiles, each end carrying an
+ * upper/lower chordwise position (0 = leading edge, 1 = trailing edge).
+ * Field names are a best guess — the backend's exact spar shape isn't
+ * documented (see GeometrySparsPayload); adjust here if it turns out
+ * different, the rest of the app only depends on this interface.
+ */
+export interface GeometrySpar {
+  id?: number;
+  start_profile: number;
+  start_upper_position: number;
+  start_lower_position: number;
+  end_profile: number;
+  end_upper_position: number;
+  end_lower_position: number;
+}
+
 export interface GeometrySparsPayload {
   twist: boolean;
   parallel: boolean;
-  spars: unknown[];
+  spars: GeometrySpar[];
 }
 
 export interface GeometryTopView {

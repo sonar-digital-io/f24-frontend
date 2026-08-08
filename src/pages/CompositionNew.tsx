@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { CompositionEditToolbar, type CompositionTab } from '@/components/composition/CompositionEditToolbar';
 import { CompositionLayupMappingPanel } from '@/components/composition/CompositionLayupMappingPanel';
@@ -14,6 +15,7 @@ import { CompositionLayupTab, type CompositionLayup } from '@/components/composi
 import { getMaterialColor, type Ply } from '@/components/layup/LayupBuilder';
 import { type LayupMapping } from '@/components/composition/LayupMappingTable';
 import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
+import { getApiErrorMessage } from '@/lib/apiError';
 import { computeMappingBounds, computeProfilesBoundingRect, niceStep } from '@/lib/bezierMath';
 import type { ControlPoint } from '@/types';
 import {
@@ -84,9 +86,11 @@ export function CompositionNew() {
   const [date, setDate] = useState(todayISO());
   const [solidCore, setSolidCore] = useState(false);
   const [targetWeight, setTargetWeight] = useState('');
-  const [baseline, setBaseline] = useState<
-    { name: string; description: string; date: string; targetWeight: string } | null
-  >(null);
+  const [baseline, setBaseline] = useState<{ name: string; description: string; date: string } | null>(null);
+  // Separate from `baseline` (name/description/date): target weight saves
+  // only on blur, on its own schedule, so it needs its own "last persisted
+  // value" to diff against instead of riding along with the debounced autosave.
+  const [targetWeightBaseline, setTargetWeightBaseline] = useState('');
 
   useHydrateOnce(isEditing && !detailQuery.isFetching && !!detailQuery.data, () => {
     const c = detailQuery.data!;
@@ -100,7 +104,8 @@ export function CompositionNew() {
     setDate(hydratedDate);
     if (hydratedTargetWeightStr) setTargetWeight(hydratedTargetWeightStr);
     if (c.geometry != null) setSelectedGeometryId(String(c.geometry));
-    setBaseline({ name: c.name, description: hydratedDescription, date: hydratedDate, targetWeight: hydratedTargetWeightStr });
+    setBaseline({ name: c.name, description: hydratedDescription, date: hydratedDate });
+    setTargetWeightBaseline(hydratedTargetWeightStr);
   });
 
   useHydrateOnce(
@@ -273,34 +278,94 @@ export function CompositionNew() {
 
   const titleText = isEditing ? name.trim() || 'Loading…' : name.trim() || 'New composition';
 
-  const savePending = createMutation.isPending || updateMutation.isPending;
-  const saveError = createMutation.isError || updateMutation.isError;
+  const generalValid = Boolean(name.trim() && description.trim() && date);
+  const hasUnsavedGeneralFields =
+    !baseline || name !== baseline.name || description !== baseline.description || date !== baseline.date;
+  const hasUnsavedTargetWeight = targetWeight !== targetWeightBaseline;
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState(false);
+  const creatingRef = useRef<Promise<number> | null>(null);
 
-  async function handleGeneralSubmit() {
+  const generalSavePending = createMutation.isPending || updateMutation.isPending || settingsSaving;
+  const saveError = createMutation.isError || updateMutation.isError || settingsError;
+  const saveStatus: 'unsaved' | 'saving' | 'saved' = generalSavePending
+    ? 'saving'
+    : generalValid && !hasUnsavedGeneralFields && !hasUnsavedTargetWeight
+      ? 'saved'
+      : 'unsaved';
+
+  async function saveTargetWeightSetting(id: number) {
+    setSettingsSaving(true);
+    setSettingsError(false);
+    try {
+      await updateCompositionSettings(id, { settings: [{ reference: 'target_weight', value: targetWeight }] });
+      setTargetWeightBaseline(targetWeight);
+    } catch (err) {
+      setSettingsError(true);
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  // Creates the composition if needed, or updates name/description/date —
+  // shared by the General-tab autosave and by the target-weight blur handler
+  // below (which needs a real composition id before it can save its setting).
+  async function saveGeneralFields(): Promise<number> {
     if (isEditing) {
-      if (
-        !baseline ||
-        name !== baseline.name ||
-        description !== baseline.description ||
-        date !== baseline.date
-      ) {
+      if (hasUnsavedGeneralFields) {
         await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
       }
-      if (!baseline || targetWeight !== baseline.targetWeight) {
-        await updateCompositionSettings(compositionId, {
-          settings: [{ reference: 'target_weight', value: targetWeight }],
-        });
-      }
-      return;
+      setBaseline({ name, description, date });
+      return compositionId;
     }
-    const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
-    await updateCompositionSettings(created.id, {
-      settings: [{ reference: 'target_weight', value: targetWeight }],
-    });
-    // /composition/new and /composition/:id share a route, so this navigate does NOT
-    // remount the component — switching the URL just flips isEditing to true.
-    setActiveTab('geometry');
-    navigate(`/composition/${created.id}`, { replace: true });
+    // Autosave can fire again while a create is still in flight (e.g. the
+    // debounce timer re-triggers right as the mutation starts) — share the
+    // one in-progress create instead of racing a second one.
+    if (creatingRef.current) {
+      return creatingRef.current;
+    }
+    creatingRef.current = (async () => {
+      const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+      setBaseline({ name, description, date });
+      // /composition/new and /composition/:id share a route, so this navigate does NOT
+      // remount the component — switching the URL just flips isEditing to true.
+      navigate(`/composition/${created.id}`, { replace: true });
+      return created.id;
+    })();
+    try {
+      return await creatingRef.current;
+    } finally {
+      creatingRef.current = null;
+    }
+  }
+
+  // Autosave name/description/date once all are filled — debounced so it
+  // fires after the user pauses typing, not on every keystroke. Target
+  // weight is intentionally excluded: it only saves on blur (see below).
+  useEffect(() => {
+    if (!generalValid || generalSavePending || !hasUnsavedGeneralFields) return;
+    const timer = setTimeout(() => { saveGeneralFields(); }, 800);
+    return () => clearTimeout(timer);
+    // saveGeneralFields is a fresh closure every render; only the tracked
+    // values below should gate the debounce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, description, date, generalValid, generalSavePending, hasUnsavedGeneralFields]);
+
+  // Target weight saves only when the field loses focus, not on every
+  // keystroke — avoids a PUT /composition/:id/settings/ per character typed.
+  async function handleTargetWeightBlur() {
+    if (!hasUnsavedTargetWeight) return;
+    const id = generalValid ? await saveGeneralFields() : isEditing ? compositionId : null;
+    if (id == null) return;
+    await saveTargetWeightSetting(id);
+  }
+
+  // Enter-to-submit shortcut on the General tab's form — saves everything
+  // immediately instead of waiting on the debounce/blur triggers above.
+  async function handleGeneralFormSubmit() {
+    const id = await saveGeneralFields();
+    if (hasUnsavedTargetWeight) await saveTargetWeightSetting(id);
   }
 
   function handleExit() {
@@ -392,10 +457,8 @@ export function CompositionNew() {
         onTabChange={(v) => { setActiveTab(v); setBezierFor(null); }}
         titleText={titleText}
         onExit={handleExit}
-        onSaveGeneral={handleGeneralSubmit}
-        generalSaveDisabled={!name.trim() || !description.trim() || !date}
-        generalSavePending={savePending}
-        isEditing={isEditing}
+        saveStatus={saveStatus}
+        isSaved={isEditing}
         onSaveLayupMapping={handleSaveLayupMapping}
         layupMappingSavePending={layupMappingSavePending}
       />
@@ -424,7 +487,8 @@ export function CompositionNew() {
             onSolidCoreChange={setSolidCore}
             targetWeight={targetWeight}
             onTargetWeightChange={setTargetWeight}
-            onSubmit={handleGeneralSubmit}
+            onTargetWeightBlur={handleTargetWeightBlur}
+            onSubmit={handleGeneralFormSubmit}
           />
         )}
 

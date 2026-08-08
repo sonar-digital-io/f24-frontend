@@ -1,4 +1,4 @@
-import { Check, Redo2, Undo2 } from 'lucide-react';
+import { Check, Circle, Loader2, Redo2, Undo2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export type CompositionTab =
@@ -9,6 +9,8 @@ export type CompositionTab =
   | 'transversal-mapping'
   | 'preview';
 
+export type CompositionSaveStatus = 'unsaved' | 'saving' | 'saved';
+
 const TABS: { value: CompositionTab; label: string }[] = [
   { value: 'general', label: 'General' },
   { value: 'geometry', label: 'Geometry' },
@@ -18,15 +20,20 @@ const TABS: { value: CompositionTab; label: string }[] = [
   { value: 'preview', label: 'Preview' },
 ];
 
+const SAVE_STATUS_DISPLAY: Record<CompositionSaveStatus, { icon: typeof Check; label: string; spin?: boolean }> = {
+  unsaved: { icon: Circle, label: 'Not saved yet' },
+  saving: { icon: Loader2, label: 'Saving…', spin: true },
+  saved: { icon: Check, label: 'Saved' },
+};
+
 interface CompositionEditToolbarProps {
   activeTab: CompositionTab;
   onTabChange: (tab: CompositionTab) => void;
   titleText: string;
   onExit: () => void;
-  onSaveGeneral: () => void;
-  generalSaveDisabled: boolean;
-  generalSavePending: boolean;
-  isEditing: boolean;
+  saveStatus: CompositionSaveStatus;
+  /** Only 'general' is available until the composition has been saved at least once. */
+  isSaved: boolean;
   onSaveLayupMapping: () => void;
   layupMappingSavePending: boolean;
 }
@@ -37,13 +44,12 @@ export function CompositionEditToolbar({
   onTabChange,
   titleText,
   onExit,
-  onSaveGeneral,
-  generalSaveDisabled,
-  generalSavePending,
-  isEditing,
+  saveStatus,
+  isSaved,
   onSaveLayupMapping,
   layupMappingSavePending,
 }: CompositionEditToolbarProps) {
+  const { icon: StatusIcon, label: statusLabel, spin } = SAVE_STATUS_DISPLAY[saveStatus];
   return (
     <div className="absolute inset-x-0 top-0 z-40 h-[52px] border-b border-[#e5e7eb]/70">
       <div className="absolute inset-y-0 left-4 flex items-center">
@@ -53,7 +59,8 @@ export function CompositionEditToolbar({
               <TabsTrigger
                 key={t.value}
                 value={t.value}
-                className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
+                disabled={!isSaved && t.value !== 'general'}
+                className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] disabled:pointer-events-none disabled:opacity-40"
               >
                 {t.label}
               </TabsTrigger>
@@ -68,8 +75,8 @@ export function CompositionEditToolbar({
 
       <div className="absolute inset-y-0 right-4 flex items-center gap-4">
         <div className="flex items-center gap-[6px]">
-          <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-          <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
+          <StatusIcon className={`h-4 w-4 text-[#737373] ${spin ? 'animate-spin' : ''}`} strokeWidth={2} />
+          <span className="text-[14px] leading-5 text-[#737373]">{statusLabel}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -94,16 +101,6 @@ export function CompositionEditToolbar({
         >
           Back to Compositions
         </button>
-        {activeTab === 'general' && (
-          <button
-            type="button"
-            onClick={onSaveGeneral}
-            disabled={generalSaveDisabled || generalSavePending}
-            className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {generalSavePending ? 'Saving…' : isEditing ? 'Update composition' : 'Create composition'}
-          </button>
-        )}
         {activeTab === 'layup-mapping' && (
           <button
             type="button"

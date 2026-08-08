@@ -15,6 +15,7 @@ export interface CompositionGeneralTabProps {
   onSolidCoreChange: (v: boolean) => void;
   targetWeight: string;
   onTargetWeightChange: (v: string) => void;
+  onTargetWeightBlur?: () => void;
   onSubmit: () => void;
 }
 
@@ -29,6 +30,7 @@ export function CompositionGeneralTab({
   onSolidCoreChange,
   targetWeight,
   onTargetWeightChange,
+  onTargetWeightBlur,
   onSubmit,
 }: CompositionGeneralTabProps) {
   return (
@@ -112,13 +114,10 @@ export function CompositionGeneralTab({
           id="comp-target-weight"
           value={targetWeight}
           onChange={(e) => onTargetWeightChange(e.target.value)}
+          onBlur={onTargetWeightBlur}
           placeholder="Placeholder"
           className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
         />
-        <p className="text-[14px] leading-5 text-[#6b7280]">
-          Helper text: explain why is it important to add the target weight and what are the risks
-          of a miscalculated weight
-        </p>
       </div>
     </form>
   );

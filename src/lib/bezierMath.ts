@@ -140,6 +140,28 @@ export function computeProfilesBoundingRect(profiles: ControlPoint[][], paddingR
 }
 
 /**
+ * Linearly interpolates a sampled edge curve's y at a given x — used to find
+ * where the leading/trailing edge sits at an arbitrary spanwise position
+ * (e.g. a spar's profile position) instead of only at the sampled points
+ * themselves. Points must be sorted by x ascending. Falls back to the
+ * nearest endpoint's y when x is outside the sampled range.
+ */
+export function interpolateEdgeY(points: ControlPoint[], x: number): number {
+  if (points.length === 0) return 0;
+  if (x <= points[0].x) return points[0].y;
+  if (x >= points[points.length - 1].x) return points[points.length - 1].y;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (x >= a.x && x <= b.x) {
+      const t = b.x === a.x ? 0 : (x - a.x) / (b.x - a.x);
+      return a.y + (b.y - a.y) * t;
+    }
+  }
+  return points[points.length - 1].y;
+}
+
+/**
  * Constrains a control point's x drag to stay within its neighbors (with a
  * small margin). The first/last point may move too, but stay within the
  * xMin..xMax domain and can't cross their nearest neighbor — e.g. the first
