@@ -120,7 +120,6 @@ export function Material() {
         />
       ),
     },
-    { label: 'Source', sortKey: 'source', className: 'w-[110px]' },
     { label: 'Description' },
     {
       label: 'Last updated',
@@ -205,7 +204,7 @@ export function Material() {
                   leadingWidthClassName="w-[52px]"
                 />
                 <ListTableBody
-                  colSpan={7}
+                  colSpan={6}
                   isLoading={isLoading}
                   isError={isError}
                   loadingLabel="Loading materials…"

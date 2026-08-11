@@ -8,7 +8,6 @@ export function toUiMaterial(m: BackendMaterial): Material {
     type: m.type,
     description: m.description ?? '',
     lastUpdated: m.last_modified,
-    source: 'own',
     details: {
       reinforcement: '—',
       matrix: '—',

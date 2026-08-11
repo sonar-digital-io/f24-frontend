@@ -61,7 +61,7 @@ export type LoadGroupSortKey = 'name' | 'lastUpdated';
 // ─── /material ────────────────────────────────────────────────────────────────
 
 /** Sortable columns on the /material list page. */
-export type MaterialSortKey = 'name' | 'type' | 'source' | 'lastUpdated';
+export type MaterialSortKey = 'name' | 'type' | 'lastUpdated';
 
 // ─── /nurbs ───────────────────────────────────────────────────────────────────
 

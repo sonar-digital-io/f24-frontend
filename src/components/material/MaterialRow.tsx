@@ -39,8 +39,6 @@ export interface MaterialRowProps {
 }
 
 export function MaterialRow({ material, expanded, onToggle, onOpen, onDuplicate, onDelete }: MaterialRowProps) {
-  const isOwn = material.source === 'own';
-
   return (
     <>
       <tr
@@ -56,17 +54,6 @@ export function MaterialRow({ material, expanded, onToggle, onOpen, onDuplicate,
         <td className="w-[240px] px-3 py-4 align-top text-[14px] leading-5 text-[#0a0a0a]">
           {material.type}
         </td>
-        <td className="w-[110px] px-3 py-4 align-top">
-          {material.source === 'library' ? (
-            <span className="inline-flex items-center rounded-full bg-[#dbeafe] px-2 py-0.5 text-[12px] font-medium leading-none text-[#1d4ed8]">
-              Library
-            </span>
-          ) : (
-            <span className="inline-flex items-center rounded-full bg-[#dcfce7] px-2 py-0.5 text-[12px] font-medium leading-none text-[#15803d]">
-              Own
-            </span>
-          )}
-        </td>
         <td className="px-3 py-4 align-top text-[14px] leading-5 text-[#0a0a0a]">
           {material.description}
         </td>
@@ -79,12 +66,10 @@ export function MaterialRow({ material, expanded, onToggle, onOpen, onDuplicate,
               expanded ? 'opacity-100' : 'opacity-0 focus-within:opacity-100 group-hover:opacity-100'
             }`}
           >
-            {isOwn && <RowIconButton label="Edit material" icon={Pencil} onClick={onOpen} />}
+            <RowIconButton label="Edit material" icon={Pencil} onClick={onOpen} />
             <RowIconButton label="Export material" icon={Download} onClick={() => {}} />
             <RowIconButton label="Duplicate material" icon={Copy} onClick={onDuplicate} />
-            {isOwn && (
-              <RowIconButton label="Delete material" icon={Trash2} onClick={onDelete} variant="danger" />
-            )}
+            <RowIconButton label="Delete material" icon={Trash2} onClick={onDelete} variant="danger" />
           </div>
         </td>
       </tr>
