@@ -3,9 +3,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { DropdownSelect as Select } from '@/components/common/form/DropdownSelect';
 
-/** The "mech_prop_type" ids the backend actually accepts, with their display names
- *  (from GET /sysconfig/?material=:id's `mech_prop_type` parameter options). */
-const MATERIAL_TYPES: { id: string; name: string }[] = [
+/** Fallback shown before GET /sysconfig/?material=:id has loaded (or for a brand new,
+ *  not-yet-created material) — the real options once loaded come from its
+ *  `mech_prop_type` parameter and take over via the `typeOptions` prop. */
+const FALLBACK_TYPES: { id: string; name: string }[] = [
   { id: 'ud_ply', name: 'UD ply' },
   { id: 'woven_ply', name: 'woven ply' },
   { id: 'iso_ply', name: 'isotropic ply' },
@@ -19,6 +20,10 @@ interface MaterialGeneralTabProps {
   onNameChange: (v: string) => void;
   type: string;
   onTypeChange: (v: string) => void;
+  /** From sysconfig's `mech_prop_type` parameter's `name`; falls back to "Type" while unloaded. */
+  typeLabel?: string;
+  /** From that same parameter's `options`; falls back to a static list while unloaded. */
+  typeOptions?: { id: string; name: string }[];
   date: string;
   onDateChange: (v: string) => void;
   description: string;
@@ -32,12 +37,15 @@ export function MaterialGeneralTab({
   onNameChange,
   type,
   onTypeChange,
+  typeLabel,
+  typeOptions,
   date,
   onDateChange,
   description,
   onDescriptionChange,
   onBlur,
 }: MaterialGeneralTabProps) {
+  const types = typeOptions && typeOptions.length > 0 ? typeOptions : FALLBACK_TYPES;
   return (
     <form
       onSubmit={(e) => e.preventDefault()}
@@ -60,13 +68,13 @@ export function MaterialGeneralTab({
 
       <div className="flex w-full flex-col gap-2">
         <Label htmlFor="material-type" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-          Type<span className="text-[#dc2626]">*</span>
+          {typeLabel || 'Type'}<span className="text-[#dc2626]">*</span>
         </Label>
         <Select
           id="material-type"
-          value={MATERIAL_TYPES.find((t) => t.id === type)?.name ?? ''}
-          onChange={(name) => onTypeChange(MATERIAL_TYPES.find((t) => t.name === name)?.id ?? type)}
-          options={MATERIAL_TYPES.map((t) => t.name)}
+          value={types.find((t) => t.id === type)?.name ?? ''}
+          onChange={(name) => onTypeChange(types.find((t) => t.name === name)?.id ?? type)}
+          options={types.map((t) => t.name)}
         />
       </div>
 

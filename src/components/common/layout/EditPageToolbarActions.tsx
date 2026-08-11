@@ -1,20 +1,23 @@
 import type { ReactNode } from 'react';
-import { Check } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 
 interface EditPageToolbarActionsProps {
   title: string;
   onBack: () => void;
+  /** Whether the current tab's mandatory fields are actually persisted. Defaults to
+   *  true — most tabs don't track this yet and should keep showing "Saved" as before. */
+  saved?: boolean;
   /** Extra buttons rendered after the "Exit edit mode" button, e.g. CalculationNew's "Run calculation". */
   children?: ReactNode;
 }
 
 /**
- * Centered title + right-side "Saved" indicator / Exit button group shared
+ * Centered title + right-side Saved/Not saved indicator / Exit button group shared
  * by all edit-page sub-toolbars (`EditPageToolbar`, `CalculationSubToolbar`).
  * Each caller renders its own tabs on the left, since those differ too much
  * (disabled states, tooltips) to share.
  */
-export function EditPageToolbarActions({ title, onBack, children }: EditPageToolbarActionsProps) {
+export function EditPageToolbarActions({ title, onBack, saved = true, children }: EditPageToolbarActionsProps) {
   return (
     <>
       <h1 className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
@@ -23,8 +26,17 @@ export function EditPageToolbarActions({ title, onBack, children }: EditPageTool
 
       <div className="flex shrink-0 items-center gap-4">
         <div className="flex items-center gap-[6px]">
-          <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-          <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
+          {saved ? (
+            <>
+              <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
+              <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
+            </>
+          ) : (
+            <>
+              <X className="h-4 w-4 text-[#dc2626]" strokeWidth={2} />
+              <span className="text-[14px] leading-5 text-[#dc2626]">Not saved</span>
+            </>
+          )}
         </div>
         <button
           type="button"

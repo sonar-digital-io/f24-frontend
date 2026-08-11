@@ -22,12 +22,12 @@ export const materialSysconfigKeys = {
   detail: (materialId: number) => ['sysconfig', 'material', materialId] as const,
 };
 
-/** Pass NaN (e.g. when the caller's tab isn't active) to disable the fetch. */
+/** Pass NaN for a not-yet-created material — still fetches (just without `?material=`),
+ *  since the parameter catalog (e.g. mech_prop_type's options) doesn't need one. */
 export function useMaterialSysconfig(materialId: number) {
   return useQuery({
     queryKey: materialSysconfigKeys.detail(materialId),
-    queryFn: () => getMaterialSysconfig(materialId),
-    enabled: Number.isFinite(materialId),
+    queryFn: () => getMaterialSysconfig(Number.isFinite(materialId) ? materialId : undefined),
     // Same reasoning as useSysconfig above — `active`/`fixed`/`value` are resolved
     // against the material's current saved values, so don't trust a cached response.
     staleTime: 0,

@@ -61,8 +61,10 @@ export function useScrollSpy<T extends string>(sectionIds: readonly T[], initial
     if (!container || !el) return;
     const containerTop = container.getBoundingClientRect().top;
     const elTop = el.getBoundingClientRect().top;
-    // Instant scroll avoids timing races with the scroll-spy.
-    container.scrollBy({ top: elTop - containerTop - 16 });
+    // Smooth scroll fires many intermediate scroll events during the animation — the
+    // lastClickedRef guard above already keeps the clicked section active through those
+    // until it reaches the threshold or gets scrolled past, so this doesn't race the spy.
+    container.scrollBy({ top: elTop - containerTop - 16, behavior: 'smooth' });
   }
 
   return { activeId, setActiveId, containerRef, sectionRefs, jumpTo };

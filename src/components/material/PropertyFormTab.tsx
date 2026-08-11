@@ -8,9 +8,11 @@ interface PropertyFormTabProps {
   sections: FormSection[];
   values: Record<string, string>;
   onChange: (name: string, value: string) => void;
+  /** Fires when focus leaves a field (blur) or the form itself (click-out). */
+  onBlur?: () => void;
 }
 
-export function PropertyFormTab({ sections, values, onChange }: PropertyFormTabProps) {
+export function PropertyFormTab({ sections, values, onChange, onBlur }: PropertyFormTabProps) {
   const sectionIds = useMemo(() => sections.map((s) => s.id), [sections]);
   const {
     activeId: activeSectionId,
@@ -20,7 +22,10 @@ export function PropertyFormTab({ sections, values, onChange }: PropertyFormTabP
   } = useScrollSpy(sectionIds, sections[0]?.id ?? '');
 
   return (
-    <div className="flex h-full w-full max-w-[1200px] overflow-hidden rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] lg:flex-row">
+    <div
+      onBlur={onBlur}
+      className="flex h-full w-full max-w-[1200px] overflow-hidden rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] lg:flex-row"
+    >
       {/* Sidebar — fixed, nem görget */}
       <aside className="shrink-0 p-6">
         <nav className="flex flex-col gap-1" aria-label="Form sections">
@@ -100,13 +105,13 @@ function FieldRow({ name, label, required, helper, value, onChange }: FieldRowPr
           className="text-[14px] font-medium leading-none text-[#0a0a0a]"
         >
           {label}
-          {required && <span className="text-[#dc2626]">*</span>}
+          {required && <span className="text-[#0a0a0a]">*</span>}
         </Label>
         <Input
           id={`field-${name}`}
           value={value}
           onChange={(e) => onChange(e.target.value.replace(',', '.'))}
-          placeholder="0"
+          placeholder="Enter value"
           className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
         />
       </div>

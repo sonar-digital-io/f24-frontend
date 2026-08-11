@@ -14,7 +14,7 @@ import {
 import { useMaterialSysconfig } from '@/hooks/api/useSysconfig';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { MECH_PROP_TYPE_REFERENCE, toKeyValueList, toValueMap, keyValueSignature } from '@/lib/materialFormMapping';
-import { buildMaterialPropertySections } from '@/lib/materialSysconfigMapping';
+import { buildMaterialPropertySections, getMechPropTypeParameter } from '@/lib/materialSysconfigMapping';
 import type { MaterialPayload } from '@/api/types/materials';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
@@ -58,10 +58,13 @@ export function MaterialNew() {
 
   const type = mechValues[MECH_PROP_TYPE_REFERENCE] ?? 'ud_ply';
 
-  // Fetched only while the Mechanical/Fatigue tab is actually open (NaN disables the
-  // query) — its active/optional/unit info drives both tabs' fields directly off the backend.
-  const sysconfigQuery = useMaterialSysconfig(
-    activeTab === 'mechanical' || activeTab === 'fatigue' ? materialId : NaN
+  // Always fetched — with `?material=:id` once the material exists, or without it for a
+  // brand new one (materialId is NaN) — drives the General tab's Type options plus the
+  // Mechanical/Fatigue tabs' fields, all straight from the backend.
+  const sysconfigQuery = useMaterialSysconfig(materialId);
+  const typeParameter = useMemo(
+    () => (sysconfigQuery.data ? getMechPropTypeParameter(sysconfigQuery.data) : undefined),
+    [sysconfigQuery.data]
   );
   const mechanicalSections = useMemo(
     () =>
@@ -209,6 +212,27 @@ export function MaterialNew() {
     }
   }
 
+  // Whether every mandatory Mechanical-tab field is filled — the header's Saved/Not
+  // saved indicator and the blur-autosave below both gate on this.
+  const mechanicalMandatoryFilled = mechanicalSections
+    .flatMap((s) => s.fields)
+    .filter((f) => f.required)
+    .every((f) => (mechValues[f.name] ?? '').trim() !== '');
+  const mechanicalUnsaved = keyValueSignature(mechValues) !== keyValueSignature(baseline?.mechValues ?? {});
+  const mechanicalSaved = mechanicalMandatoryFilled && !mechanicalUnsaved;
+
+  // Autosave the Mechanical tab once every mandatory field is filled — same PUT as
+  // the Fatigue tab's Save button, just fired on blur instead of a button click.
+  async function handleMechanicalBlur() {
+    if (!mechanicalMandatoryFilled || !mechanicalUnsaved || updateMechanicalMutation.isPending) return;
+    try {
+      await updateMechanicalMutation.mutateAsync({ mechanical_properties: toKeyValueList(mechValues) });
+      setBaseline((prev) => (prev ? { ...prev, mechValues } : prev));
+    } catch {
+      // updateMechanicalMutation's onError (global mutation cache) already toasts.
+    }
+  }
+
   /**
    * By the time this is reachable, General has already created/saved the material (the
    * Mechanical/Fatigue tabs are disabled until then) — this only needs to PUT whichever
@@ -265,6 +289,7 @@ export function MaterialNew() {
         onTabChange={setActiveTab}
         title={titleText}
         onBack={handleExit}
+        saved={activeTab === 'mechanical' ? mechanicalSaved : undefined}
         actions={
           activeTab === 'fatigue' &&
           !showLoadingState &&
@@ -303,6 +328,8 @@ export function MaterialNew() {
             onNameChange={setName}
             type={type}
             onTypeChange={handleTypeChange}
+            typeLabel={typeParameter?.name}
+            typeOptions={typeParameter?.options}
             date={date}
             onDateChange={setDate}
             description={description}
@@ -326,6 +353,7 @@ export function MaterialNew() {
                 sections={mechanicalSections}
                 values={mechValues}
                 onChange={(name, value) => setMechValues((prev) => ({ ...prev, [name]: value }))}
+                onBlur={handleMechanicalBlur}
               />
             )}
           </>

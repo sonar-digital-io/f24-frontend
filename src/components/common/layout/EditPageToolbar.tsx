@@ -17,6 +17,8 @@ interface EditPageToolbarProps {
   onTabChange: (value: string) => void;
   title: string;
   onBack: () => void;
+  /** Passed straight through to EditPageToolbarActions — see there for the default. */
+  saved?: boolean;
   /** Extra button(s) rendered after the "Exit edit mode" button, e.g. MaterialNew's "Create material". */
   actions?: ReactNode;
 }
@@ -27,7 +29,15 @@ interface EditPageToolbarProps {
  * CompositionNew/GeometryEdit float their own variant above a 3D canvas and
  * don't reuse this — their positioning/backdrop styling differs too much.
  */
-export function EditPageToolbar({ tabs, activeTab, onTabChange, title, onBack, actions }: EditPageToolbarProps) {
+export function EditPageToolbar({
+  tabs,
+  activeTab,
+  onTabChange,
+  title,
+  onBack,
+  saved,
+  actions,
+}: EditPageToolbarProps) {
   return (
     <div className="relative flex h-[52px] w-full shrink-0 items-center justify-between bg-[#f8fafc] px-4 py-2">
       <Tabs value={activeTab} onValueChange={onTabChange} className="h-9 shrink-0">
@@ -45,7 +55,7 @@ export function EditPageToolbar({ tabs, activeTab, onTabChange, title, onBack, a
         </TabsList>
       </Tabs>
 
-      <EditPageToolbarActions title={title} onBack={onBack}>
+      <EditPageToolbarActions title={title} onBack={onBack} saved={saved}>
         {actions}
       </EditPageToolbarActions>
     </div>

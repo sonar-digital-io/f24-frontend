@@ -1,5 +1,11 @@
-import type { SysconfigResponse, SysconfigProjectSettings } from '@/api/types/sysconfig';
+import type { SysconfigParameter, SysconfigResponse, SysconfigProjectSettings } from '@/api/types/sysconfig';
 import type { FormSection } from '@/data/materialFormFields';
+
+/** The "mech_prop_type" parameter — its `name` is the Type dropdown's label, its
+ *  `options` are the real id/name values the dropdown must store, straight from the backend. */
+export function getMechPropTypeParameter(sysconfig: SysconfigResponse): SysconfigParameter | undefined {
+  return sysconfig.parameters.find((p) => p.id === 'mech_prop_type');
+}
 
 function unitSuffix(sysconfig: SysconfigResponse, unitId: string | undefined): string {
   if (!unitId) return '';
