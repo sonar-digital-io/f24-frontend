@@ -1,31 +1,50 @@
+import { useState } from 'react';
 import { Copy, Download, Pencil, Trash2 } from 'lucide-react';
 import { rowInteractionProps } from '@/lib/listTable';
 import { formatDateTime } from '@/lib/utils';
-import { DetailRow } from '@/components/common/list/DetailRow';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { ExpandToggleCell } from '@/components/common/list/ExpandToggleCell';
-import { type Material as MaterialItem, type MaterialDetails } from '@/data/materials';
+import { MaterialPropertyList } from '@/components/material/MaterialPropertyList';
+import { useMaterialDetail } from '@/hooks/api/useMaterials';
+import { type Material as MaterialItem } from '@/data/materials';
+import type { KeyValuePair } from '@/api/types/common';
 
-function MaterialDetailGrid({ details }: { details: MaterialDetails }) {
+function nonEmpty(list?: KeyValuePair[]): KeyValuePair[] {
+  return (list ?? []).filter((kv) => String(kv.value).trim() !== '');
+}
+
+interface MaterialDetailPanelProps {
+  materialId: number;
+  expanded: boolean;
+  mechanicalOpen: boolean;
+  onToggleMechanical: () => void;
+  fatigueOpen: boolean;
+  onToggleFatigue: () => void;
+}
+
+function MaterialDetailPanel({
+  materialId,
+  expanded,
+  mechanicalOpen,
+  onToggleMechanical,
+  fatigueOpen,
+  onToggleFatigue,
+}: MaterialDetailPanelProps) {
+  const { data, isLoading, isError } = useMaterialDetail(materialId, expanded);
+
+  if (isLoading) return <p className="px-1 py-2 text-[14px] text-[#6b7280]">Loading properties…</p>;
+  if (isError) {
+    return <p className="px-1 py-2 text-[14px] text-[#dc2626]">Failed to load material properties.</p>;
+  }
   return (
-    <div className="flex flex-col">
-      <DetailRow labelWidthClassName="w-[110px]" label="Reinforcement" value={details.reinforcement} />
-      <DetailRow labelWidthClassName="w-[110px]" label="Matrix" value={details.matrix} />
-      <DetailRow labelWidthClassName="w-[110px]" label="Modulus (tensile)" value={details.modulusTensile} />
-      <DetailRow labelWidthClassName="w-[110px]" label="Density" value={details.density} />
-      <DetailRow
-        labelWidthClassName="w-[110px]"
-        label="TDS Ref.:"
-        value={
-          <a
-            href="#"
-            className="text-[14px] font-semibold leading-5 text-[#007dbb] underline-offset-2 hover:underline"
-          >
-            {details.tdsRef}
-          </a>
-        }
-      />
-    </div>
+    <MaterialPropertyList
+      mechanicalProperties={nonEmpty(data?.mechanical_properties)}
+      fatigueProperties={nonEmpty(data?.fatigue_properties)}
+      mechanicalOpen={mechanicalOpen}
+      onToggleMechanical={onToggleMechanical}
+      fatigueOpen={fatigueOpen}
+      onToggleFatigue={onToggleFatigue}
+    />
   );
 }
 
@@ -34,11 +53,23 @@ export interface MaterialRowProps {
   expanded: boolean;
   onToggle: () => void;
   onOpen: () => void;
+  onExport: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }
 
-export function MaterialRow({ material, expanded, onToggle, onOpen, onDuplicate, onDelete }: MaterialRowProps) {
+export function MaterialRow({
+  material,
+  expanded,
+  onToggle,
+  onOpen,
+  onExport,
+  onDuplicate,
+  onDelete,
+}: MaterialRowProps) {
+  const [mechanicalOpen, setMechanicalOpen] = useState(true);
+  const [fatigueOpen, setFatigueOpen] = useState(true);
+
   return (
     <>
       <tr
@@ -67,20 +98,24 @@ export function MaterialRow({ material, expanded, onToggle, onOpen, onDuplicate,
             }`}
           >
             <RowIconButton label="Edit material" icon={Pencil} onClick={onOpen} />
-            <RowIconButton label="Export material" icon={Download} onClick={() => {}} />
+            <RowIconButton label="Export material" icon={Download} onClick={onExport} />
             <RowIconButton label="Duplicate material" icon={Copy} onClick={onDuplicate} />
             <RowIconButton label="Delete material" icon={Trash2} onClick={onDelete} variant="danger" />
           </div>
         </td>
       </tr>
       {expanded && (
-        <tr
-          id={`material-detail-${material.id}`}
-          className="border-b border-[#e5e7eb] bg-white"
-        >
+        <tr id={`material-detail-${material.id}`} className="border-b border-[#e5e7eb] bg-white">
           <td className="w-[52px]" />
-          <td colSpan={6} className="px-3 pb-5 pt-1">
-            <MaterialDetailGrid details={material.details} />
+          <td colSpan={5} className="px-3 pb-5 pt-1">
+            <MaterialDetailPanel
+              materialId={Number(material.id)}
+              expanded={expanded}
+              mechanicalOpen={mechanicalOpen}
+              onToggleMechanical={() => setMechanicalOpen((o) => !o)}
+              fatigueOpen={fatigueOpen}
+              onToggleFatigue={() => setFatigueOpen((o) => !o)}
+            />
           </td>
         </tr>
       )}

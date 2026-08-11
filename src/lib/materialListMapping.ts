@@ -8,13 +8,6 @@ export function toUiMaterial(m: BackendMaterial): Material {
     type: m.type,
     description: m.description ?? '',
     lastUpdated: m.last_modified,
-    details: {
-      reinforcement: '—',
-      matrix: '—',
-      modulusTensile: '—',
-      density: '—',
-      tdsRef: '—',
-    },
   };
 }
 
@@ -31,5 +24,8 @@ export function parseLastUpdated(s: string): Date | null {
   const vMatch = s.match(/^v(\d{4})\/(\d{2})$/);
   if (vMatch) return new Date(`${vMatch[1]}-${vMatch[2]}-01T00:00:00`);
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00');
-  return null;
+  // Backend datetimes arrive as "...T...Z" or the space-separated "... ...+00:00" variant.
+  const normalized = s.includes('T') ? s : s.replace(' ', 'T');
+  const d = new Date(normalized);
+  return Number.isNaN(d.getTime()) ? null : d;
 }

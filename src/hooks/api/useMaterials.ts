@@ -16,11 +16,11 @@ export function useMaterialList() {
   return useQuery({ queryKey: materialKeys.list(), queryFn: () => materialsApi.getMaterialList() });
 }
 
-export function useMaterialDetail(materialId: number) {
+export function useMaterialDetail(materialId: number, enabled = true) {
   return useQuery({
     queryKey: materialKeys.detail(materialId),
     queryFn: () => materialsApi.getMaterial(materialId),
-    enabled: Number.isFinite(materialId),
+    enabled: enabled && Number.isFinite(materialId),
     // The edit form must never show a stale cached copy (e.g. reopening right after
     // a previous edit) — always hit the network on mount instead of trusting staleTime.
     staleTime: 0,

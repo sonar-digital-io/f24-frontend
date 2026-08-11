@@ -43,7 +43,13 @@ export async function updateFatigueProperties(materialId: number, payload: Mater
   return data;
 }
 
-export async function exportMaterial(materialId: number): Promise<Blob> {
-  const { data } = await apiClient.get(`/material/${materialId}/export/`, { responseType: 'blob' });
-  return data;
+export interface MaterialExport {
+  blob: Blob;
+  filename: string;
+}
+
+export async function exportMaterial(materialId: number): Promise<MaterialExport> {
+  const response = await apiClient.get(`/material/${materialId}/export/`, { responseType: 'blob' });
+  const match = response.headers['content-disposition']?.match(/filename="?([^"]+)"?/);
+  return { blob: response.data, filename: match?.[1] ?? `material-${materialId}.txt` };
 }

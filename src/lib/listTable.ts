@@ -28,11 +28,11 @@ export function paginate<T>(sorted: T[], page: number, pageSize: number): { tota
   return { totalPages, pageRows };
 }
 
-/** True when `query` is empty, or found (case-insensitively) in any of `fields`. */
-export function matchesQuery(query: string, fields: string[]): boolean {
+/** True when `query` is empty, or found (case-insensitively) in any of `fields` (nullable fields are skipped). */
+export function matchesQuery(query: string, fields: Array<string | null | undefined>): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return fields.some((f) => f.toLowerCase().includes(q));
+  return fields.some((f) => f?.toLowerCase().includes(q));
 }
 
 /**
