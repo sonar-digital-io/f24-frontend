@@ -8,16 +8,9 @@ interface PropertyFormTabProps {
   sections: FormSection[];
   values: Record<string, string>;
   onChange: (name: string, value: string) => void;
-  /** Marks the section's `(optional)` suffix in the heading. The first section is required by convention. */
-  optionalAfterIndex?: number;
 }
 
-export function PropertyFormTab({
-  sections,
-  values,
-  onChange,
-  optionalAfterIndex = 0,
-}: PropertyFormTabProps) {
+export function PropertyFormTab({ sections, values, onChange }: PropertyFormTabProps) {
   const sectionIds = useMemo(() => sections.map((s) => s.id), [sections]);
   const {
     activeId: activeSectionId,
@@ -55,7 +48,7 @@ export function PropertyFormTab({
       {/* Form body — ez görget */}
       <div ref={scrollContainerRef} className="min-w-0 flex-1 overflow-y-auto p-6">
         <div className="flex flex-col gap-12">
-          {sections.map((section, idx) => (
+          {sections.map((section) => (
             <section
               key={section.id}
               id={section.id}
@@ -64,7 +57,7 @@ export function PropertyFormTab({
             >
               <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">
                 {section.label}
-                {idx > optionalAfterIndex && (
+                {section.fields.every((f) => !f.required) && (
                   <span className="ml-2 text-[14px] font-normal text-[#6b7280]">(optional)</span>
                 )}
               </h2>

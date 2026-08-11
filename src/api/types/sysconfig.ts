@@ -48,6 +48,8 @@ export interface SysconfigParamGroup {
   parameters: SysconfigParamEntry[];
 }
 
+/** Same shape as `project_settings` — reused for any top-level config section
+ *  (project_settings, mechanical_properties, fatigue_properties, …). */
 export interface SysconfigProjectSettings {
   parameters: SysconfigParamEntry[];
   groups: SysconfigParamGroup[];
@@ -55,7 +57,9 @@ export interface SysconfigProjectSettings {
 
 export interface SysconfigConfiguration {
   project_settings: SysconfigProjectSettings;
-  /** engine_settings, mechanical_properties, etc. — other pages' sections, not modeled here. */
+  mechanical_properties?: SysconfigProjectSettings;
+  fatigue_properties?: SysconfigProjectSettings;
+  /** engine_settings, etc. — other pages' sections, not modeled here. */
   [key: string]: unknown;
 }
 

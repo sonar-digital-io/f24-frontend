@@ -1,11 +1,9 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
 import { PropertyFormTab } from '@/components/material/PropertyFormTab';
 import { MaterialGeneralTab } from '@/components/material/MaterialGeneralTab';
-import { MECHANICAL_SECTIONS } from '@/data/materialFormFields';
-import { FATIGUE_SECTIONS } from '@/data/materialFatigueFields';
 import {
   useCreateMaterial,
   useMaterialDetail,
@@ -13,8 +11,10 @@ import {
   useUpdateMechanicalProperties,
   useUpdateFatigueProperties,
 } from '@/hooks/api/useMaterials';
+import { useMaterialSysconfig } from '@/hooks/api/useSysconfig';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { MECH_PROP_TYPE_REFERENCE, toKeyValueList, toValueMap, keyValueSignature } from '@/lib/materialFormMapping';
+import { buildMaterialPropertySections } from '@/lib/materialSysconfigMapping';
 import type { MaterialPayload } from '@/api/types/materials';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
@@ -47,7 +47,7 @@ export function MaterialNew() {
   const [date, setDate] = useState(todayISO());
   const [activeTab, setActiveTab] = useState('general');
   const [mechValues, setMechValues] = useState<Record<string, string>>({
-    [MECH_PROP_TYPE_REFERENCE]: 'UD ply',
+    [MECH_PROP_TYPE_REFERENCE]: 'ud_ply',
   });
   const [fatigueValues, setFatigueValues] = useState<Record<string, string>>({});
   const [baseline, setBaseline] = useState<Baseline | null>(null);
@@ -56,10 +56,27 @@ export function MaterialNew() {
   // we already have its data locally; the background refetch is just React Query's habit.
   const [justCreatedId, setJustCreatedId] = useState<number | null>(null);
 
-  const type = mechValues[MECH_PROP_TYPE_REFERENCE] ?? 'UD ply';
-  function setType(value: string) {
-    setMechValues((prev) => ({ ...prev, [MECH_PROP_TYPE_REFERENCE]: value }));
-  }
+  const type = mechValues[MECH_PROP_TYPE_REFERENCE] ?? 'ud_ply';
+
+  // Fetched only while the Mechanical/Fatigue tab is actually open (NaN disables the
+  // query) — its active/optional/unit info drives both tabs' fields directly off the backend.
+  const sysconfigQuery = useMaterialSysconfig(
+    activeTab === 'mechanical' || activeTab === 'fatigue' ? materialId : NaN
+  );
+  const mechanicalSections = useMemo(
+    () =>
+      sysconfigQuery.data
+        ? buildMaterialPropertySections(sysconfigQuery.data, sysconfigQuery.data.configuration.mechanical_properties)
+        : [],
+    [sysconfigQuery.data]
+  );
+  const fatigueSections = useMemo(
+    () =>
+      sysconfigQuery.data
+        ? buildMaterialPropertySections(sysconfigQuery.data, sysconfigQuery.data.configuration.fatigue_properties)
+        : [],
+    [sysconfigQuery.data]
+  );
 
   // Populate the form once the (forced, never-cached) detail fetch settles, and record a
   // baseline snapshot so saving can tell which of the 3 tabs actually changed. Waiting on
@@ -170,6 +187,28 @@ export function MaterialNew() {
     saveGeneralFields();
   }
 
+  // Type lives on the General tab but is actually a mechanical property. On an
+  // already-created material, persist it immediately: PUT general first (only if
+  // something there is actually unsaved), then PUT just the mech_prop_type entry —
+  // isolated from whatever else might be pending on the Mechanical tab. On a material
+  // that doesn't exist yet, just update local state; it rides along in the initial
+  // create POST once General gets saved.
+  async function handleTypeChange(newType: string) {
+    setMechValues((prev) => ({ ...prev, [MECH_PROP_TYPE_REFERENCE]: newType }));
+    if (!isEditing) return;
+    try {
+      await saveGeneralFields();
+      await updateMechanicalMutation.mutateAsync({
+        mechanical_properties: [{ reference: MECH_PROP_TYPE_REFERENCE, value: newType }],
+      });
+      setBaseline((prev) =>
+        prev ? { ...prev, mechValues: { ...prev.mechValues, [MECH_PROP_TYPE_REFERENCE]: newType } } : prev
+      );
+    } catch {
+      // saveGeneralFields/updateMechanicalMutation's onError (global mutation cache) already toasts.
+    }
+  }
+
   /**
    * By the time this is reachable, General has already created/saved the material (the
    * Mechanical/Fatigue tabs are disabled until then) — this only needs to PUT whichever
@@ -263,7 +302,7 @@ export function MaterialNew() {
             name={name}
             onNameChange={setName}
             type={type}
-            onTypeChange={setType}
+            onTypeChange={handleTypeChange}
             date={date}
             onDateChange={setDate}
             description={description}
@@ -273,21 +312,43 @@ export function MaterialNew() {
         )}
 
         {!showLoadingState && !showLoadErrorState && activeTab === 'mechanical' && (
-          <PropertyFormTab
-            sections={MECHANICAL_SECTIONS}
-            values={mechValues}
-            onChange={(name, value) => setMechValues((prev) => ({ ...prev, [name]: value }))}
-            optionalAfterIndex={0}
-          />
+          <>
+            {sysconfigQuery.isLoading && (
+              <p className="px-2 py-8 text-center text-[14px] text-[#6b7280]">Loading configuration…</p>
+            )}
+            {sysconfigQuery.isError && (
+              <p className="px-2 py-8 text-center text-[14px] text-[#dc2626]">
+                Failed to load configuration from the server.
+              </p>
+            )}
+            {sysconfigQuery.data && (
+              <PropertyFormTab
+                sections={mechanicalSections}
+                values={mechValues}
+                onChange={(name, value) => setMechValues((prev) => ({ ...prev, [name]: value }))}
+              />
+            )}
+          </>
         )}
 
         {!showLoadingState && !showLoadErrorState && activeTab === 'fatigue' && (
-          <PropertyFormTab
-            sections={FATIGUE_SECTIONS}
-            values={fatigueValues}
-            onChange={(name, value) => setFatigueValues((prev) => ({ ...prev, [name]: value }))}
-            optionalAfterIndex={-1}
-          />
+          <>
+            {sysconfigQuery.isLoading && (
+              <p className="px-2 py-8 text-center text-[14px] text-[#6b7280]">Loading configuration…</p>
+            )}
+            {sysconfigQuery.isError && (
+              <p className="px-2 py-8 text-center text-[14px] text-[#dc2626]">
+                Failed to load configuration from the server.
+              </p>
+            )}
+            {sysconfigQuery.data && (
+              <PropertyFormTab
+                sections={fatigueSections}
+                values={fatigueValues}
+                onChange={(name, value) => setFatigueValues((prev) => ({ ...prev, [name]: value }))}
+              />
+            )}
+          </>
         )}
       </main>
     </div>

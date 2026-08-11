@@ -3,15 +3,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { DropdownSelect as Select } from '@/components/common/form/DropdownSelect';
 
-const MATERIAL_TYPES = [
-  'UD ply',
-  'Biaxial Ply (±45°)',
-  'Consolidated Ply',
-  'Hybrid Ply',
-  'Random Mat Ply',
-  'Surface Ply',
-  'Core (PET Foam)',
-  'Core (Balsa)',
+/** The "mech_prop_type" ids the backend actually accepts, with their display names
+ *  (from GET /sysconfig/?material=:id's `mech_prop_type` parameter options). */
+const MATERIAL_TYPES: { id: string; name: string }[] = [
+  { id: 'ud_ply', name: 'UD ply' },
+  { id: 'woven_ply', name: 'woven ply' },
+  { id: 'iso_ply', name: 'isotropic ply' },
+  { id: 'iso_core', name: 'isotropic core' },
+  { id: 'ortho_core', name: 'orthotropic core' },
+  { id: 'honey_core', name: 'honeycomb core' },
 ];
 
 interface MaterialGeneralTabProps {
@@ -62,7 +62,12 @@ export function MaterialGeneralTab({
         <Label htmlFor="material-type" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
           Type<span className="text-[#dc2626]">*</span>
         </Label>
-        <Select id="material-type" value={type} onChange={onTypeChange} options={MATERIAL_TYPES} />
+        <Select
+          id="material-type"
+          value={MATERIAL_TYPES.find((t) => t.id === type)?.name ?? ''}
+          onChange={(name) => onTypeChange(MATERIAL_TYPES.find((t) => t.name === name)?.id ?? type)}
+          options={MATERIAL_TYPES.map((t) => t.name)}
+        />
       </div>
 
       <div className="flex w-full flex-col gap-2">
