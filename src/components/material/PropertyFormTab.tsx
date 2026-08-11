@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { FormSection } from '@/data/materialFormFields';
+import { isFieldInRange, type FormField, type FormSection } from '@/data/materialFormFields';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 
 interface PropertyFormTabProps {
@@ -70,10 +70,7 @@ export function PropertyFormTab({ sections, values, onChange, onBlur }: Property
                 {section.fields.map((field) => (
                   <FieldRow
                     key={field.name}
-                    name={field.name}
-                    label={field.label}
-                    required={field.required}
-                    helper={field.helper}
+                    field={field}
                     value={values[field.name] ?? ''}
                     onChange={(v) => onChange(field.name, v)}
                   />
@@ -88,35 +85,41 @@ export function PropertyFormTab({ sections, values, onChange, onBlur }: Property
 }
 
 interface FieldRowProps {
-  name: string;
-  label: string;
-  required?: boolean;
-  helper?: string;
+  field: FormField;
   value: string;
   onChange: (value: string) => void;
 }
 
-function FieldRow({ name, label, required, helper, value, onChange }: FieldRowProps) {
+function FieldRow({ field, value, onChange }: FieldRowProps) {
+  const outOfRange = !isFieldInRange(value, field);
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
       <div className="flex w-full flex-col gap-2 md:w-[424px]">
         <Label
-          htmlFor={`field-${name}`}
+          htmlFor={`field-${field.name}`}
           className="text-[14px] font-medium leading-none text-[#0a0a0a]"
         >
-          {label}
-          {required && <span className="text-[#0a0a0a]">*</span>}
+          {field.label}
+          {field.required && <span className="text-[#0a0a0a]">*</span>}
         </Label>
         <Input
-          id={`field-${name}`}
+          id={`field-${field.name}`}
           value={value}
           onChange={(e) => onChange(e.target.value.replace(',', '.'))}
           placeholder="Enter value"
-          className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+          aria-invalid={outOfRange}
+          className={`h-9 rounded-md bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] ${
+            outOfRange ? 'border-[#dc2626] focus-visible:ring-[#dc2626]' : 'border-[#e2e8f0]'
+          }`}
         />
+        {outOfRange && (
+          <p className="text-[13px] leading-4 text-[#dc2626]">
+            Value must be between {field.min ?? '…'} and {field.max ?? '…'}.
+          </p>
+        )}
       </div>
-      {helper && (
-        <p className="text-[14px] leading-5 text-[#6b7280] md:w-[424px] md:pt-[26px]">{helper}</p>
+      {field.helper && (
+        <p className="text-[14px] leading-5 text-[#6b7280] md:w-[424px] md:pt-[26px]">{field.helper}</p>
       )}
     </div>
   );

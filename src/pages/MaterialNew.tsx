@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
+import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import { PropertyFormTab } from '@/components/material/PropertyFormTab';
 import { MaterialGeneralTab } from '@/components/material/MaterialGeneralTab';
 import {
@@ -15,6 +16,7 @@ import { useMaterialSysconfig } from '@/hooks/api/useSysconfig';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { MECH_PROP_TYPE_REFERENCE, toKeyValueList, toValueMap, keyValueSignature } from '@/lib/materialFormMapping';
 import { buildMaterialPropertySections, getMechPropTypeParameter } from '@/lib/materialSysconfigMapping';
+import { isFormValid } from '@/data/materialFormFields';
 import type { MaterialPayload } from '@/api/types/materials';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
@@ -183,6 +185,13 @@ export function MaterialNew() {
     }
   }
 
+  const generalSaved = generalValid && !hasUnsavedGeneral;
+  const generalStatus: SaveStatus = createMaterialMutation.isPending || updateGeneralMutation.isPending
+    ? 'saving'
+    : generalSaved
+      ? 'saved'
+      : 'not-saved';
+
   // Autosave the General tab once every required field is filled — fires when focus
   // leaves a field (blur) or the form itself (click-out), not on every keystroke.
   function handleGeneralBlur() {
@@ -212,19 +221,22 @@ export function MaterialNew() {
     }
   }
 
-  // Whether every mandatory Mechanical-tab field is filled — the header's Saved/Not
-  // saved indicator and the blur-autosave below both gate on this.
-  const mechanicalMandatoryFilled = mechanicalSections
-    .flatMap((s) => s.fields)
-    .filter((f) => f.required)
-    .every((f) => (mechValues[f.name] ?? '').trim() !== '');
+  // Whether every mandatory Mechanical-tab field is filled AND every filled field is
+  // within its min/max — the header's Saved/Not saved indicator and the blur-autosave
+  // below both gate on this, so an out-of-range value blocks saving.
+  const mechanicalValid = isFormValid(mechanicalSections, mechValues);
   const mechanicalUnsaved = keyValueSignature(mechValues) !== keyValueSignature(baseline?.mechValues ?? {});
-  const mechanicalSaved = mechanicalMandatoryFilled && !mechanicalUnsaved;
+  const mechanicalSaved = mechanicalValid && !mechanicalUnsaved;
+  const mechanicalStatus: SaveStatus = updateMechanicalMutation.isPending
+    ? 'saving'
+    : mechanicalSaved
+      ? 'saved'
+      : 'not-saved';
 
-  // Autosave the Mechanical tab once every mandatory field is filled — same PUT as
-  // the Fatigue tab's Save button, just fired on blur instead of a button click.
+  // Autosave the Mechanical tab once every mandatory field is filled and valid — same
+  // PUT as the Fatigue tab's Save button, just fired on blur instead of a button click.
   async function handleMechanicalBlur() {
-    if (!mechanicalMandatoryFilled || !mechanicalUnsaved || updateMechanicalMutation.isPending) return;
+    if (!mechanicalValid || !mechanicalUnsaved || updateMechanicalMutation.isPending) return;
     try {
       await updateMechanicalMutation.mutateAsync({ mechanical_properties: toKeyValueList(mechValues) });
       setBaseline((prev) => (prev ? { ...prev, mechValues } : prev));
@@ -233,36 +245,27 @@ export function MaterialNew() {
     }
   }
 
-  /**
-   * By the time this is reachable, General has already created/saved the material (the
-   * Mechanical/Fatigue tabs are disabled until then) — this only needs to PUT whichever
-   * of the 3 tabs actually changed since: PUT /material/:id/ (general), PUT
-   * .../mechanical-properties/ (mechanical tab, including Type as the "mech_prop_type"
-   * entry), PUT .../fatigue-properties/ (fatigue tab).
-   */
-  async function handleSave() {
-    if (!baseline) return;
+  // Whether every mandatory Fatigue-tab field is filled AND every filled field is
+  // within its min/max — same structure as the Mechanical tab above.
+  const fatigueValid = isFormValid(fatigueSections, fatigueValues);
+  const fatigueUnsaved = keyValueSignature(fatigueValues) !== keyValueSignature(baseline?.fatigueValues ?? {});
+  const fatigueSaved = fatigueValid && !fatigueUnsaved;
+  const fatigueStatus: SaveStatus = updateFatigueMutation.isPending
+    ? 'saving'
+    : fatigueSaved
+      ? 'saved'
+      : 'not-saved';
 
-    const generalChanged =
-      name !== baseline.name || date !== baseline.date || description !== baseline.description;
-    const mechanicalChanged = keyValueSignature(mechValues) !== keyValueSignature(baseline.mechValues);
-    const fatigueChanged = keyValueSignature(fatigueValues) !== keyValueSignature(baseline.fatigueValues);
-
-    const tasks: Promise<unknown>[] = [];
-    if (generalChanged) {
-      tasks.push(updateGeneralMutation.mutateAsync({ name, date: toIsoDateTime(date), description }));
+  // Autosave the Fatigue tab once every mandatory field is filled and valid — same PUT
+  // as before, just fired on blur instead of a button click (same structure as Mechanical).
+  async function handleFatigueBlur() {
+    if (!fatigueValid || !fatigueUnsaved || updateFatigueMutation.isPending) return;
+    try {
+      await updateFatigueMutation.mutateAsync({ fatigue_properties: toKeyValueList(fatigueValues) });
+      setBaseline((prev) => (prev ? { ...prev, fatigueValues } : prev));
+    } catch {
+      // updateFatigueMutation's onError (global mutation cache) already toasts.
     }
-    if (mechanicalChanged) {
-      tasks.push(updateMechanicalMutation.mutateAsync({ mechanical_properties: toKeyValueList(mechValues) }));
-    }
-    if (fatigueChanged) {
-      tasks.push(updateFatigueMutation.mutateAsync({ fatigue_properties: toKeyValueList(fatigueValues) }));
-    }
-
-    if (tasks.length > 0) {
-      await Promise.all(tasks);
-    }
-    navigate('/material');
   }
 
   function handleExit() {
@@ -289,20 +292,14 @@ export function MaterialNew() {
         onTabChange={setActiveTab}
         title={titleText}
         onBack={handleExit}
-        saved={activeTab === 'mechanical' ? mechanicalSaved : undefined}
-        actions={
-          activeTab === 'fatigue' &&
-          !showLoadingState &&
-          !showLoadErrorState && (
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!name.trim() || !description.trim() || !date || savePending}
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {savePending ? 'Saving…' : isEditing ? 'Update material' : 'Create material'}
-            </button>
-          )
+        status={
+          activeTab === 'mechanical'
+            ? mechanicalStatus
+            : activeTab === 'fatigue'
+              ? fatigueStatus
+              : activeTab === 'general'
+                ? generalStatus
+                : undefined
         }
       />
       {saveError && (
@@ -374,6 +371,7 @@ export function MaterialNew() {
                 sections={fatigueSections}
                 values={fatigueValues}
                 onChange={(name, value) => setFatigueValues((prev) => ({ ...prev, [name]: value }))}
+                onBlur={handleFatigueBlur}
               />
             )}
           </>

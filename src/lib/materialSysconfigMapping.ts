@@ -38,7 +38,14 @@ export function buildMaterialPropertySections(
             entry.minimum || entry.maximum
               ? `Range: ${entry.minimum ?? '…'} – ${entry.maximum ?? '…'}`
               : undefined;
-          return { name: entry.reference, label, required: !entry.optional, helper };
+          return {
+            name: entry.reference,
+            label,
+            required: !entry.optional,
+            helper,
+            min: entry.minimum,
+            max: entry.maximum,
+          };
         }),
     }))
     .filter((s) => s.fields.length > 0);

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { EditPageToolbarActions } from '@/components/common/layout/EditPageToolbarActions';
+import { EditPageToolbarActions, type SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 
 const TRIGGER_CLASS =
   'h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]';
@@ -18,7 +18,7 @@ interface EditPageToolbarProps {
   title: string;
   onBack: () => void;
   /** Passed straight through to EditPageToolbarActions — see there for the default. */
-  saved?: boolean;
+  status?: SaveStatus;
   /** Extra button(s) rendered after the "Exit edit mode" button, e.g. MaterialNew's "Create material". */
   actions?: ReactNode;
 }
@@ -35,7 +35,7 @@ export function EditPageToolbar({
   onTabChange,
   title,
   onBack,
-  saved,
+  status,
   actions,
 }: EditPageToolbarProps) {
   return (
@@ -55,7 +55,7 @@ export function EditPageToolbar({
         </TabsList>
       </Tabs>
 
-      <EditPageToolbarActions title={title} onBack={onBack} saved={saved}>
+      <EditPageToolbarActions title={title} onBack={onBack} status={status}>
         {actions}
       </EditPageToolbarActions>
     </div>
