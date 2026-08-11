@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
@@ -17,12 +17,6 @@ import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { MECH_PROP_TYPE_REFERENCE, toKeyValueList, toValueMap, keyValueSignature } from '@/lib/materialFormMapping';
 import type { MaterialPayload } from '@/api/types/materials';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
-
-const TABS = [
-  { value: 'general', label: 'General' },
-  { value: 'mechanical', label: 'Mechanical properties' },
-  { value: 'fatigue', label: 'Fatigue properties' },
-];
 
 interface Baseline {
   name: string;
@@ -57,6 +51,10 @@ export function MaterialNew() {
   });
   const [fatigueValues, setFatigueValues] = useState<Record<string, string>>({});
   const [baseline, setBaseline] = useState<Baseline | null>(null);
+  // Set right after the blur-autosave creates the material, so the loading state below
+  // doesn't flash "Loading material…" over the tab the user is actively filling in —
+  // we already have its data locally; the background refetch is just React Query's habit.
+  const [justCreatedId, setJustCreatedId] = useState<number | null>(null);
 
   const type = mechValues[MECH_PROP_TYPE_REFERENCE] ?? 'UD ply';
   function setType(value: string) {
@@ -119,14 +117,30 @@ export function MaterialNew() {
     updateMechanicalMutation.isError ||
     updateFatigueMutation.isError;
 
-  /**
-   * Creating sends one POST with everything. Editing calls only the endpoints whose
-   * tab actually changed: PUT /material/:id/ (general — name/date/description), PUT
-   * .../mechanical-properties/ (mechanical tab, including Type as the "mech_prop_type"
-   * entry), PUT .../fatigue-properties/ (fatigue tab).
-   */
-  async function handleSave() {
-    if (!isEditing) {
+  // General tab is "done" once the material exists on the backend — gates the
+  // Mechanical/Fatigue tabs, which need a real material id to save against.
+  const isSaved = isEditing;
+  const generalValid = Boolean(name.trim() && description.trim() && date);
+  const hasUnsavedGeneral =
+    !baseline || name !== baseline.name || date !== baseline.date || description !== baseline.description;
+  const creatingRef = useRef<Promise<number> | null>(null);
+
+  // Creates the material (POSTing the current mechanical/fatigue defaults along with
+  // it, since the backend requires them) the first time General is complete, or PUTs
+  // name/date/description on an already-created one. Shared by the blur-autosave below
+  // and by the final Save button on the Fatigue tab.
+  async function saveGeneralFields(): Promise<number> {
+    if (isEditing) {
+      if (hasUnsavedGeneral) {
+        await updateGeneralMutation.mutateAsync({ name, date: toIsoDateTime(date), description });
+        setBaseline((prev) => (prev ? { ...prev, name, date, description } : prev));
+      }
+      return materialId;
+    }
+    // Blur can fire again while a create is still in flight (e.g. tabbing through
+    // several fields quickly) — share the one in-progress create instead of racing a second one.
+    if (creatingRef.current) return creatingRef.current;
+    creatingRef.current = (async () => {
       const payload: MaterialPayload = {
         name,
         date: toIsoDateTime(date),
@@ -134,11 +148,36 @@ export function MaterialNew() {
         mechanical_properties: toKeyValueList(mechValues),
         fatigue_properties: toKeyValueList(fatigueValues),
       };
-      await createMaterialMutation.mutateAsync(payload);
-      navigate('/material');
-      return;
+      const created = await createMaterialMutation.mutateAsync(payload);
+      setBaseline({ name, description, date, mechValues, fatigueValues });
+      setJustCreatedId(created.id);
+      // /material/new and /material/:id share a route, so this navigate does NOT
+      // remount the component — switching the URL just flips isEditing to true.
+      navigate(`/material/${created.id}`, { replace: true });
+      return created.id;
+    })();
+    try {
+      return await creatingRef.current;
+    } finally {
+      creatingRef.current = null;
     }
+  }
 
+  // Autosave the General tab once every required field is filled — fires when focus
+  // leaves a field (blur) or the form itself (click-out), not on every keystroke.
+  function handleGeneralBlur() {
+    if (!generalValid || !hasUnsavedGeneral || savePending) return;
+    saveGeneralFields();
+  }
+
+  /**
+   * By the time this is reachable, General has already created/saved the material (the
+   * Mechanical/Fatigue tabs are disabled until then) — this only needs to PUT whichever
+   * of the 3 tabs actually changed since: PUT /material/:id/ (general), PUT
+   * .../mechanical-properties/ (mechanical tab, including Type as the "mech_prop_type"
+   * entry), PUT .../fatigue-properties/ (fatigue tab).
+   */
+  async function handleSave() {
     if (!baseline) return;
 
     const generalChanged =
@@ -169,7 +208,7 @@ export function MaterialNew() {
 
   const isDuplicating = !isEditing && Number.isFinite(duplicateSourceId);
   const showLoadingState =
-    (isEditing && !hydrated && (detailQuery.isLoading || detailQuery.isFetching)) ||
+    (isEditing && materialId !== justCreatedId && !hydrated && (detailQuery.isLoading || detailQuery.isFetching)) ||
     (isDuplicating && !duplicateHydrated && (duplicateQuery.isLoading || duplicateQuery.isFetching));
   const showLoadErrorState = (isEditing && detailQuery.isError) || (isDuplicating && duplicateQuery.isError);
 
@@ -178,11 +217,14 @@ export function MaterialNew() {
       <MainNav />
 
       <EditPageToolbar
-        tabs={TABS}
+        tabs={[
+          { value: 'general', label: 'General' },
+          { value: 'mechanical', label: 'Mechanical properties', disabled: !isSaved },
+          { value: 'fatigue', label: 'Fatigue properties', disabled: !isSaved },
+        ]}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         title={titleText}
-        backLabel="Back to Materials"
         onBack={handleExit}
         actions={
           activeTab === 'fatigue' &&
@@ -226,6 +268,7 @@ export function MaterialNew() {
             onDateChange={setDate}
             description={description}
             onDescriptionChange={setDescription}
+            onBlur={handleGeneralBlur}
           />
         )}
 

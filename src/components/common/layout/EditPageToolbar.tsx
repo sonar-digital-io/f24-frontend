@@ -8,6 +8,7 @@ const TRIGGER_CLASS =
 export interface EditPageTab {
   value: string;
   label: string;
+  disabled?: boolean;
 }
 
 interface EditPageToolbarProps {
@@ -15,40 +16,36 @@ interface EditPageToolbarProps {
   activeTab: string;
   onTabChange: (value: string) => void;
   title: string;
-  backLabel: string;
   onBack: () => void;
-  /** Extra button(s) rendered after the "Back to …" button, e.g. MaterialNew's "Create material". */
+  /** Extra button(s) rendered after the "Exit edit mode" button, e.g. MaterialNew's "Create material". */
   actions?: ReactNode;
 }
 
 /**
- * Sub-toolbar row (tabs + centered title + Saved/Undo/Redo/Back) used by the
- * plain (non-floating-canvas) edit pages: MaterialNew, LayupNew, LoadGroupNew.
+ * Sub-toolbar row (tabs + centered title + Saved/Exit) used by the plain
+ * (non-floating-canvas) edit pages: MaterialNew, LayupNew, LoadGroupNew.
  * CompositionNew/GeometryEdit float their own variant above a 3D canvas and
  * don't reuse this — their positioning/backdrop styling differs too much.
  */
-export function EditPageToolbar({
-  tabs,
-  activeTab,
-  onTabChange,
-  title,
-  backLabel,
-  onBack,
-  actions,
-}: EditPageToolbarProps) {
+export function EditPageToolbar({ tabs, activeTab, onTabChange, title, onBack, actions }: EditPageToolbarProps) {
   return (
     <div className="relative flex h-[52px] w-full shrink-0 items-center justify-between bg-[#f8fafc] px-4 py-2">
       <Tabs value={activeTab} onValueChange={onTabChange} className="h-9 shrink-0">
         <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className={TRIGGER_CLASS}>
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              disabled={tab.disabled}
+              className={`${TRIGGER_CLASS} disabled:cursor-not-allowed disabled:opacity-40`}
+            >
               {tab.label}
             </TabsTrigger>
           ))}
         </TabsList>
       </Tabs>
 
-      <EditPageToolbarActions title={title} backLabel={backLabel} onBack={onBack}>
+      <EditPageToolbarActions title={title} onBack={onBack}>
         {actions}
       </EditPageToolbarActions>
     </div>

@@ -23,6 +23,8 @@ interface MaterialGeneralTabProps {
   onDateChange: (v: string) => void;
   description: string;
   onDescriptionChange: (v: string) => void;
+  /** Fires when focus leaves the form — blurring a field or clicking out. */
+  onBlur?: () => void;
 }
 
 export function MaterialGeneralTab({
@@ -34,10 +36,12 @@ export function MaterialGeneralTab({
   onDateChange,
   description,
   onDescriptionChange,
+  onBlur,
 }: MaterialGeneralTabProps) {
   return (
     <form
       onSubmit={(e) => e.preventDefault()}
+      onBlur={onBlur}
       className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
     >
       <div className="flex w-full flex-col gap-2">

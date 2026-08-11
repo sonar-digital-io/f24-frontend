@@ -100,7 +100,6 @@ export function LayupNew() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         title={titleText}
-        backLabel="Back to Layups"
         onBack={handleExit}
       />
 
