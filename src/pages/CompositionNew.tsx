@@ -1,359 +1,194 @@
-import { useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { CompositionEditToolbar, type CompositionTab } from '@/components/composition/CompositionEditToolbar';
+import { CompositionLayupMappingPanel } from '@/components/composition/CompositionLayupMappingPanel';
+import { LayupPickerDialog } from '@/components/composition/LayupPickerDialog';
+import { LayupMappingBezierDialog } from '@/components/composition/LayupMappingBezierDialog';
+import { TransversalMappingSection } from '@/components/composition/TransversalMappingSection';
+import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
+import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
+import { CompositionPreviewTab } from '@/components/composition/CompositionPreviewTab';
+import { CompositionLayupTab, type CompositionLayup } from '@/components/composition/CompositionLayupTab';
+import { getMaterialColor, type Ply } from '@/components/layup/LayupBuilder';
+import { type LayupMapping } from '@/components/composition/LayupMappingTable';
+import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
+import { getApiErrorMessage } from '@/lib/apiError';
+import { computeMappingBounds, computeProfilesBoundingRect, niceStep } from '@/lib/bezierMath';
+import type { ControlPoint } from '@/types';
 import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  GripVertical,
-  LayoutGrid,
-  List as ListIcon,
-  Plus,
-  Redo2,
-  Search,
-  Settings,
-  Spline,
-  Trash2,
-  Undo2,
-} from 'lucide-react';
-import { MainNav } from '@/components/MainNav';
-import { OccViewer } from '@/components/OccViewer';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GeometryCard } from '@/components/GeometryCard';
-import { LayupPickerDialog } from '@/components/LayupPickerDialog';
-import {
-  DEFAULT_MAPPING_POINTS,
-  LayupMappingBezierDialog,
-} from '@/components/LayupMappingBezierDialog';
-import type { ControlPoint } from '@/components/BezierEditor';
-import { TransversalMappingSection } from '@/components/TransversalMappingSection';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipRoot, TooltipTrigger } from '@/components/ui/tooltip';
-import { GEOMETRIES } from '@/data/geometries';
-import { LAYUPS } from '@/data/layups';
-import { COMPOSITIONS, createComposition, updateComposition } from '@/data/compositions';
-import { nextLocalId } from '@/lib/utils';
-
-type RenderMode = 'solid' | 'wireframe';
-
-interface RenderToggleProps {
-  value: RenderMode;
-  onChange: (v: RenderMode) => void;
-}
-
-function CoordinateGizmo() {
-  return (
-    <svg viewBox="0 0 100 100" className="h-20 w-20" aria-hidden="true">
-      <line x1="50" y1="50" x2="50" y2="15" stroke="#16a34a" strokeWidth="2" />
-      <polygon points="50,10 46,18 54,18" fill="#16a34a" />
-      <text x="55" y="14" fontSize="9" fill="#16a34a">z</text>
-      <line x1="50" y1="50" x2="85" y2="50" stroke="#2563eb" strokeWidth="2" />
-      <polygon points="90,50 82,46 82,54" fill="#2563eb" />
-      <text x="80" y="64" fontSize="9" fill="#2563eb">y</text>
-      <line x1="50" y1="50" x2="22" y2="78" stroke="#dc2626" strokeWidth="2" />
-      <polygon points="18,82 26,80 22,72" fill="#dc2626" />
-      <text x="10" y="78" fontSize="9" fill="#dc2626">x</text>
-    </svg>
-  );
-}
-
-function RenderToggle({ value, onChange }: RenderToggleProps) {
-  return (
-    <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white/95 p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm">
-      {(['solid', 'wireframe'] as const).map((mode) => {
-        const active = value === mode;
-        return (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => onChange(mode)}
-            className={`inline-flex h-6 items-center gap-1 rounded px-2 text-[12px] font-medium capitalize ${
-              active ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-            }`}
-          >
-            {active && <Check className="h-3 w-3" strokeWidth={2.5} />}
-            {mode}
-          </button>
-        );
-      })}
-      <button
-        type="button"
-        aria-label="Render mode menu"
-        className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9]"
-      >
-        <ChevronDown className="h-3 w-3" strokeWidth={2} />
-      </button>
-    </div>
-  );
-}
-
-interface LayupMapping {
-  id: string;
-  name: string;
-  layupId: string | null;
-  /** Bezier curve edited in LayupMappingBezierDialog; undefined = default curve. */
-  points?: ControlPoint[];
-}
-
-const DEFAULT_UPPER_MAPPINGS: LayupMapping[] = [
-  { id: 'u0', name: 'OUTER-SHELL', layupId: 'biax-skin-04' },
-  { id: 'u1', name: 'MID-SHELL',   layupId: 'biax-skin-08' },
-  { id: 'u2', name: 'INNER-SHELL', layupId: 'hyb-trans-12' },
-];
-
-const DEFAULT_LOWER_MAPPINGS: LayupMapping[] = [
-  { id: 'l0', name: 'OUTER-SHELL copy', layupId: 'biax-skin-04' },
-  { id: 'l1', name: 'MID-SHELL copy',   layupId: 'biax-skin-08' },
-  { id: 'l2', name: 'INNER-SHELL copy', layupId: 'hyb-trans-12' },
-];
-
-interface LayupMappingTableProps {
-  title: string;
-  copyLabel: string;
-  mappings: LayupMapping[];
-  activeMappingId?: string | null;
-  onAdd: () => void;
-  onDelete: (id: string) => void;
-  onUpdate: (id: string, next: Partial<LayupMapping>) => void;
-  onCopy: () => void;
-  onDuplicate: (id: string) => void;
-  onOpenBezier: (id: string) => void;
-  onReorder: (fromIdx: number, toIdx: number) => void;
-  onPickLayup: (mappingId: string) => void;
-}
-
-function LayupMappingTable({
-  title,
-  copyLabel,
-  mappings,
-  activeMappingId,
-  onAdd,
-  onDelete,
-  onUpdate,
-  onCopy,
-  onDuplicate,
-  onOpenBezier,
-  onReorder,
-  onPickLayup,
-}: LayupMappingTableProps) {
-  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
-  const [insertBeforeIdx, setInsertBeforeIdx] = useState<number | null>(null);
-  const dragFromHandleRef = useRef<string | null>(null);
-
-  function handleDragStart(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
-    setDraggingIdx(idx);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(idx));
-  }
-  function handleDragOver(idx: number, e: React.DragEvent<HTMLTableRowElement>) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = e.currentTarget.getBoundingClientRect();
-    const newInsert = e.clientY < rect.top + rect.height / 2 ? idx : idx + 1;
-    if (insertBeforeIdx !== newInsert) setInsertBeforeIdx(newInsert);
-  }
-  function handleDragLeave() {
-    setInsertBeforeIdx(null);
-  }
-  function handleDrop(e: React.DragEvent<HTMLTableRowElement>) {
-    e.preventDefault();
-    const fromIdx = Number(e.dataTransfer.getData('text/plain'));
-    if (insertBeforeIdx !== null && !Number.isNaN(fromIdx) && insertBeforeIdx !== fromIdx && insertBeforeIdx !== fromIdx + 1) {
-      const toIdx = insertBeforeIdx > fromIdx ? insertBeforeIdx - 1 : insertBeforeIdx;
-      onReorder(fromIdx, toIdx);
-    }
-    setDraggingIdx(null);
-    setInsertBeforeIdx(null);
-  }
-  function handleDragEnd() {
-    dragFromHandleRef.current = null;
-    setDraggingIdx(null);
-    setInsertBeforeIdx(null);
-  }
-
-  return (
-    <TooltipProvider>
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[16px] font-semibold leading-6 text-[#0a0a0a]">{title}</h3>
-        <button
-          type="button"
-          onClick={onCopy}
-          className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
-        >
-          {copyLabel}
-        </button>
-      </div>
-      <table className="w-full border-collapse text-[13px]">
-        <thead>
-          <tr className="border-b border-[#e5e7eb]">
-            <th className="h-8 w-9 px-2" />
-            <th className="h-8 w-12 px-2 text-left font-medium text-[#6b7280]">Index</th>
-            <th className="h-8 px-2 text-left font-medium text-[#6b7280]">Name</th>
-            <th className="h-8 w-[150px] px-2 text-left font-medium text-[#6b7280]">Layup</th>
-            <th className="h-8 w-[120px] px-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {mappings.flatMap((m, idx) => {
-            const layupLabel = LAYUPS.find((l) => l.id === m.layupId)?.name;
-            const isDragging = draggingIdx === idx;
-            const insertLine = (key: string) => (
-              <tr key={key} className="pointer-events-none">
-                <td colSpan={5} className="p-0">
-                  <div className="mx-2 h-0.5 rounded-full bg-[#006496]" />
-                </td>
-              </tr>
-            );
-            const row = (
-              <tr
-                key={m.id}
-                draggable
-                onDragStart={(e) => {
-                  if (dragFromHandleRef.current !== m.id) {
-                    e.preventDefault();
-                    return;
-                  }
-                  handleDragStart(idx, e);
-                }}
-                onDragOver={(e) => handleDragOver(idx, e)}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onDragEnd={handleDragEnd}
-                className={`group border-b border-[#e5e7eb] last:border-b-0 transition-colors ${
-                  isDragging ? 'opacity-40' : ''
-                } ${activeMappingId === m.id ? 'bg-[#eef9ff]' : ''}`}
-              >
-                <td className="px-2 py-2 align-middle">
-                  <span
-                    aria-label="Drag handle"
-                    onMouseDown={() => { dragFromHandleRef.current = m.id; }}
-                    onMouseUp={() => { dragFromHandleRef.current = null; }}
-                    className="flex h-7 w-7 cursor-grab items-center justify-center text-[#cbd5e1] opacity-0 transition-opacity hover:text-[#0a0a0a] active:cursor-grabbing group-hover:opacity-100"
-                  >
-                    <GripVertical className="h-4 w-4" strokeWidth={2} />
-                  </span>
-                </td>
-                <td className="px-2 py-2 text-[#0a0a0a]">{idx}</td>
-                <td className="px-2 py-2">
-                  <TooltipRoot delayDuration={400}>
-                    <TooltipTrigger asChild>
-                      <Input
-                        value={m.name}
-                        onChange={(e) => onUpdate(m.id, { name: e.target.value })}
-                        placeholder="Placeholder"
-                        className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] text-ellipsis"
-                      />
-                    </TooltipTrigger>
-                    {m.name && <TooltipContent>{m.name}</TooltipContent>}
-                  </TooltipRoot>
-                </td>
-                <td className="px-2 py-2">
-                  <button
-                    type="button"
-                    onClick={() => onPickLayup(m.id)}
-                    className={`flex h-8 w-full items-center justify-between gap-2 rounded-md border border-[#e2e8f0] bg-white px-2 py-1 text-left text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f9fafb] ${
-                      layupLabel ? 'text-[#0a0a0a]' : 'text-[#6b7280]'
-                    }`}
-                  >
-                    <span className="truncate">{layupLabel ?? 'Select'}</span>
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={1.5} />
-                  </button>
-                </td>
-                <td className="px-2 py-2">
-                  <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                    <Tooltip content="Edit mapping">
-                      <button
-                        type="button"
-                        onClick={() => onOpenBezier(m.id)}
-                        aria-label="Open mapping bezier view"
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                      >
-                        <Spline className="h-3.5 w-3.5" strokeWidth={2} />
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="Duplicate">
-                      <button
-                        type="button"
-                        onClick={() => onDuplicate(m.id)}
-                        aria-label="Duplicate mapping"
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                      >
-                        <Copy className="h-3.5 w-3.5" strokeWidth={2} />
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="Delete">
-                      <button
-                        type="button"
-                        onClick={() => onDelete(m.id)}
-                        aria-label="Delete mapping"
-                        className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#fef2f2] hover:text-[#dc2626]"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
-                      </button>
-                    </Tooltip>
-                  </div>
-                </td>
-              </tr>
-            );
-            const result = [];
-            if (draggingIdx !== null && insertBeforeIdx === idx) result.push(insertLine(`insert-before-${idx}`));
-            result.push(row);
-            if (draggingIdx !== null && idx === mappings.length - 1 && insertBeforeIdx === mappings.length) result.push(insertLine('insert-end'));
-            return result;
-          })}
-          {mappings.length === 0 && (
-            <tr>
-              <td colSpan={5} className="px-2 py-4 text-center text-[12px] text-[#6b7280]">
-                No mappings yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      <button
-        type="button"
-        onClick={onAdd}
-        className="inline-flex h-8 items-center gap-2 self-start rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-      >
-        <Plus className="h-4 w-4" strokeWidth={2} />
-        Add layup mapping
-      </button>
-    </div>
-    </TooltipProvider>
-  );
-}
+  useCreateComposition,
+  useCompositionDetail,
+  useUpdateComposition,
+  useUpdateCompositionMappingLongitudinal,
+  useFetchCompositionIntersections,
+  useFetchCompositionMappingTransversal,
+} from '@/hooks/api/useComposition';
+import { useMaterialList } from '@/hooks/api/useMaterials';
+import { useHydrateOnce } from '@/hooks/useHydrateOnce';
+import { updateCompositionSettings } from '@/api/composition';
+import { getGeometryProfile } from '@/api/geometry';
+import { geometryKeys, useGeometryTopView } from '@/hooks/api/useGeometry';
 
 export function CompositionNew() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const existing = id ? COMPOSITIONS.find((c) => c.id === id) : undefined;
-  const [activeTab, setActiveTab] = useState<
-    'general' | 'geometry' | 'layup-mapping' | 'transversal-mapping'
-  >('general');
-  const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
+  const [searchParams] = useSearchParams();
+  const isEditing = Boolean(id);
+  const compositionId = isEditing ? Number(id) : NaN;
+  const duplicateFromRaw = !isEditing ? searchParams.get('duplicateFrom') : null;
+  const duplicateSourceId = duplicateFromRaw ? Number(duplicateFromRaw) : NaN;
 
-  // General
-  const [name, setName] = useState(existing?.name ?? '');
-  const [description, setDescription] = useState(existing?.description ?? '');
-  const [solidCore, setSolidCore] = useState(false);
-  const [targetWeight, setTargetWeight] = useState('');
+  const queryClient = useQueryClient();
+  const detailQuery = useCompositionDetail(compositionId);
+  const duplicateQuery = useCompositionDetail(duplicateSourceId);
+  const createMutation = useCreateComposition();
+  const updateMutation = useUpdateComposition(compositionId);
+  const updateMappingLongitudinalMutation = useUpdateCompositionMappingLongitudinal(compositionId);
+  const fetchIntersectionsMutation = useFetchCompositionIntersections();
+  const fetchMappingTransversalMutation = useFetchCompositionMappingTransversal();
+  const layupOptions = detailQuery.data?.layups ?? [];
+  const materialsQuery = useMaterialList();
 
   // Geometry pick
   const [geomQuery, setGeomQuery] = useState('');
   const [geomView, setGeomView] = useState<'list' | 'grid'>('grid');
   const [selectedGeometryId, setSelectedGeometryId] = useState<string | null>(null);
 
-  // Layup mapping — pre-filled with defaults for existing compositions
-  const [upperMappings, setUpperMappings] = useState<LayupMapping[]>(
-    existing ? DEFAULT_UPPER_MAPPINGS : [{ id: 'u0', name: '', layupId: null }],
+  // The top-view data (blade planform, used by the layup mapping charts) has
+  // to come from whichever geometry is current — the persisted composition's
+  // geometry once saved, but the locally-picked one during creation/before
+  // the first save, since there's no persisted composition yet to read it from.
+  const geometryId =
+    typeof detailQuery.data?.geometry === 'number'
+      ? detailQuery.data.geometry
+      : selectedGeometryId
+        ? Number(selectedGeometryId)
+        : NaN;
+  const topViewQuery = useGeometryTopView(geometryId);
+  const leadingEdge = (topViewQuery.data?.leading_edge ?? []).map(([x, y]) => ({ x, y }));
+  const trailingEdge = (topViewQuery.data?.trailing_edge ?? []).map(([x, y]) => ({ x, y }));
+  // Longitudinal/transversal mapping points are stored by the API as a
+  // fraction of the geometry's nominal_radius; the bezier editor works in
+  // that same absolute (real) scale as the top-view leading/trailing edge.
+  const nominalRadius = topViewQuery.data?.nominal_radius || 1;
+
+  const [activeTab, setActiveTab] = useState<CompositionTab>('general');
+
+  // General — hydrated from the backend for edit/duplicate. Layup mapping and
+  // transversal mapping stay on local state: they carry rich shapes (bezier
+  // curves, per-side tables) the typed backend payloads don't fully describe
+  // yet — wiring those needs a real data-source swap, left for a follow-up.
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [date, setDate] = useState(todayISO());
+  const [solidCore, setSolidCore] = useState(false);
+  const [targetWeight, setTargetWeight] = useState('');
+  const [baseline, setBaseline] = useState<{ name: string; description: string; date: string } | null>(null);
+  // Separate from `baseline` (name/description/date): target weight saves
+  // only on blur, on its own schedule, so it needs its own "last persisted
+  // value" to diff against instead of riding along with the debounced autosave.
+  const [targetWeightBaseline, setTargetWeightBaseline] = useState('');
+
+  useHydrateOnce(isEditing && !detailQuery.isFetching && !!detailQuery.data, () => {
+    const c = detailQuery.data!;
+    const hydratedDescription = c.description ?? '';
+    const hydratedDate =
+      typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO();
+    const hydratedTargetWeight = c.settings?.find((s) => s.reference === 'target_weight')?.value;
+    const hydratedTargetWeightStr = hydratedTargetWeight !== undefined ? String(hydratedTargetWeight) : '';
+    setName(c.name);
+    setDescription(hydratedDescription);
+    setDate(hydratedDate);
+    if (hydratedTargetWeightStr) setTargetWeight(hydratedTargetWeightStr);
+    if (c.geometry != null) setSelectedGeometryId(String(c.geometry));
+    setBaseline({ name: c.name, description: hydratedDescription, date: hydratedDate });
+    setTargetWeightBaseline(hydratedTargetWeightStr);
+  });
+
+  useHydrateOnce(
+    !isEditing && Number.isFinite(duplicateSourceId) && !duplicateQuery.isFetching && !!duplicateQuery.data,
+    () => {
+      const c = duplicateQuery.data!;
+      setName(`${c.name}_copy`);
+      setDescription(c.description ?? '');
+      setDate(typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO());
+    }
   );
-  const [lowerMappings, setLowerMappings] = useState<LayupMapping[]>(
-    existing ? DEFAULT_LOWER_MAPPINGS : [{ id: 'l0', name: '', layupId: null }],
+
+  // Layup — locally-created layups for this composition, separate from the
+  // per-side layup mapping below (which maps the shared LAYUPS catalog).
+  const [layups, setLayups] = useState<CompositionLayup[]>([]);
+  function addLayup(name: string) {
+    setLayups((arr) => [...arr, { id: nextLocalId('layup'), name, plies: [] }]);
+  }
+  function updateLayupPlies(layupId: string, updater: (current: Ply[]) => Ply[]) {
+    setLayups((arr) => arr.map((l) => (l.id === layupId ? { ...l, plies: updater(l.plies) } : l)));
+  }
+
+  // Hydrate saved layups (and their layers) from the backend — separate from
+  // the general hydration above since it also needs the materials list
+  // loaded, to resolve each layer's material id back to a name.
+  useHydrateOnce(
+    isEditing && !detailQuery.isFetching && !!detailQuery.data && !materialsQuery.isLoading,
+    () => {
+      const materials = materialsQuery.data ?? [];
+      const savedLayups = detailQuery.data!.layups ?? [];
+      setLayups(
+        savedLayups.map((l) => ({
+          id: String(l.id),
+          name: l.name,
+          plies: l.layers.map((layer) => {
+            const materialName = materials.find((m) => m.id === layer.material)?.name ?? 'Select';
+            return {
+              id: String(layer.id),
+              name: layer.name,
+              material: materialName,
+              thickness: layer.thickness,
+              orientation: layer.orientation,
+              color: getMaterialColor(materialName),
+            };
+          }),
+        }))
+      );
+    }
   );
+
+  // Layup mapping — no mapping rows by default; the user adds them explicitly.
+  const [upperMappings, setUpperMappings] = useState<LayupMapping[]>([]);
+  const [lowerMappings, setLowerMappings] = useState<LayupMapping[]>([]);
+
+  // Hydrate saved layup mapping rows (upper/lower side) from the backend.
+  // Waits on the top-view fetch too — the API stores longitudinal/transversal
+  // position as a fraction of nominal_radius; the bezier editor works in that
+  // same absolute scale (see the matching /nominalRadius conversion in
+  // handleSaveLayupMapping below).
+  useHydrateOnce(
+    isEditing &&
+      !detailQuery.isFetching &&
+      !!detailQuery.data &&
+      !(Number.isFinite(geometryId) && !topViewQuery.data),
+    () => {
+      const c = detailQuery.data!;
+      const toLayupMapping = (entry: NonNullable<typeof c.longitudinal_mapping>['upper_side'][number]): LayupMapping => ({
+        id: String(entry.id),
+        name: entry.name,
+        layupId: String(entry.layup),
+        points: entry.mappings.map((m) => ({
+          x: m.longitudinal_position * nominalRadius,
+          y: m.transversal_position * nominalRadius,
+        })),
+      });
+      const longitudinalMapping = c.longitudinal_mapping;
+      if (longitudinalMapping) {
+        setUpperMappings(longitudinalMapping.upper_side.map(toLayupMapping));
+        setLowerMappings(longitudinalMapping.lower_side.map(toLayupMapping));
+      }
+    }
+  );
+
   const [layupPicker, setLayupPicker] = useState<{
     side: 'upper' | 'lower';
     mappingId: string;
@@ -383,10 +218,35 @@ export function CompositionNew() {
     return `${sideLabel} / ${m?.name?.trim() || 'untitled'}`;
   })();
 
+  // Chart bounds — the blade's real leading/trailing edge extents (padded),
+  // expanded to fit any already-saved mapping point. See computeMappingBounds.
+  const mappingBounds = computeMappingBounds(
+    leadingEdge,
+    trailingEdge,
+    [...upperMappings, ...lowerMappings].flatMap((m) => m.points ?? []),
+  );
+  const mappingXStep = niceStep(mappingBounds.longitudinalMax - mappingBounds.longitudinalMin);
+  const mappingYStep = niceStep(mappingBounds.transversalMax - mappingBounds.transversalMin);
+
+  // A brand-new mapping's rectangle is seeded from the top-view API's
+  // `profiles` (root/tip cross-section boundary points, and any others) —
+  // the extreme top-left/top-right/bottom-left/bottom-right corners across
+  // all of them, padded 10% in each direction. See computeProfilesBoundingRect.
+  const profilePoints = (topViewQuery.data?.profiles ?? []).map((segment) =>
+    segment.map(([x, y]) => ({ x, y }))
+  );
+  const profileRect = computeProfilesBoundingRect(profilePoints);
+  const defaultMappingPoints: ControlPoint[] = [
+    { x: profileRect.longitudinalMin, y: profileRect.transversalMin },
+    { x: profileRect.longitudinalMin, y: profileRect.transversalMax },
+    { x: profileRect.longitudinalMax, y: profileRect.transversalMax },
+    { x: profileRect.longitudinalMax, y: profileRect.transversalMin },
+  ];
+
   const bezierPoints = (() => {
-    if (!bezierFor) return DEFAULT_MAPPING_POINTS;
+    if (!bezierFor) return defaultMappingPoints;
     const arr = bezierFor.side === 'upper' ? upperMappings : lowerMappings;
-    return arr.find((x) => x.id === bezierFor.mappingId)?.points ?? DEFAULT_MAPPING_POINTS;
+    return arr.find((x) => x.id === bezierFor.mappingId)?.points ?? defaultMappingPoints;
   })();
 
   function duplicateMapping(side: 'upper' | 'lower', id: string) {
@@ -416,35 +276,101 @@ export function CompositionNew() {
     });
   }
 
-  const titleText = name.trim() || existing?.name || 'New composition';
+  const titleText = isEditing ? name.trim() || 'Loading…' : name.trim() || 'New composition';
 
-  function handleGeneralSubmit() {
-    if (existing) {
-      updateComposition(existing.id, { name, description });
-      navigate('/composition');
-      return;
+  const generalValid = Boolean(name.trim() && description.trim() && date);
+  const hasUnsavedGeneralFields =
+    !baseline || name !== baseline.name || description !== baseline.description || date !== baseline.date;
+  const hasUnsavedTargetWeight = targetWeight !== targetWeightBaseline;
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState(false);
+  const creatingRef = useRef<Promise<number> | null>(null);
+
+  const generalSavePending = createMutation.isPending || updateMutation.isPending || settingsSaving;
+  const saveError = createMutation.isError || updateMutation.isError || settingsError;
+  const saveStatus: 'unsaved' | 'saving' | 'saved' = generalSavePending
+    ? 'saving'
+    : generalValid && !hasUnsavedGeneralFields && !hasUnsavedTargetWeight
+      ? 'saved'
+      : 'unsaved';
+
+  async function saveTargetWeightSetting(id: number) {
+    setSettingsSaving(true);
+    setSettingsError(false);
+    try {
+      await updateCompositionSettings(id, { settings: [{ reference: 'target_weight', value: targetWeight }] });
+      setTargetWeightBaseline(targetWeight);
+    } catch (err) {
+      setSettingsError(true);
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setSettingsSaving(false);
     }
-    // Mock stand-in for a POST: append to the list, then open the new composition.
-    const composition = createComposition(name, description);
-    navigate(`/composition/${composition.id}`);
   }
 
-  /** Save (create or update) then go back to the list — called by Exit edit mode. */
-  function handleExit() {
-    if (existing) {
-      updateComposition(existing.id, { name, description });
-    } else if (name.trim()) {
-      createComposition(name, description);
+  // Creates the composition if needed, or updates name/description/date —
+  // shared by the General-tab autosave and by the target-weight blur handler
+  // below (which needs a real composition id before it can save its setting).
+  async function saveGeneralFields(): Promise<number> {
+    if (isEditing) {
+      if (hasUnsavedGeneralFields) {
+        await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+      }
+      setBaseline({ name, description, date });
+      return compositionId;
     }
+    // Autosave can fire again while a create is still in flight (e.g. the
+    // debounce timer re-triggers right as the mutation starts) — share the
+    // one in-progress create instead of racing a second one.
+    if (creatingRef.current) {
+      return creatingRef.current;
+    }
+    creatingRef.current = (async () => {
+      const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+      setBaseline({ name, description, date });
+      // /composition/new and /composition/:id share a route, so this navigate does NOT
+      // remount the component — switching the URL just flips isEditing to true.
+      navigate(`/composition/${created.id}`, { replace: true });
+      return created.id;
+    })();
+    try {
+      return await creatingRef.current;
+    } finally {
+      creatingRef.current = null;
+    }
+  }
+
+  // Autosave name/description/date once all are filled — debounced so it
+  // fires after the user pauses typing, not on every keystroke. Target
+  // weight is intentionally excluded: it only saves on blur (see below).
+  useEffect(() => {
+    if (!generalValid || generalSavePending || !hasUnsavedGeneralFields) return;
+    const timer = setTimeout(() => { saveGeneralFields(); }, 800);
+    return () => clearTimeout(timer);
+    // saveGeneralFields is a fresh closure every render; only the tracked
+    // values below should gate the debounce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, description, date, generalValid, generalSavePending, hasUnsavedGeneralFields]);
+
+  // Target weight saves only when the field loses focus, not on every
+  // keystroke — avoids a PUT /composition/:id/settings/ per character typed.
+  async function handleTargetWeightBlur() {
+    if (!hasUnsavedTargetWeight) return;
+    const id = generalValid ? await saveGeneralFields() : isEditing ? compositionId : null;
+    if (id == null) return;
+    await saveTargetWeightSetting(id);
+  }
+
+  // Enter-to-submit shortcut on the General tab's form — saves everything
+  // immediately instead of waiting on the debounce/blur triggers above.
+  async function handleGeneralFormSubmit() {
+    const id = await saveGeneralFields();
+    if (hasUnsavedTargetWeight) await saveTargetWeightSetting(id);
+  }
+
+  function handleExit() {
     navigate('/composition');
   }
-
-  const filteredGeometries = GEOMETRIES.filter(
-    (g) =>
-      !geomQuery.trim() ||
-      g.name.toLowerCase().includes(geomQuery.trim().toLowerCase()) ||
-      g.description.toLowerCase().includes(geomQuery.trim().toLowerCase())
-  );
 
   function addUpper() {
     setUpperMappings((arr) => [
@@ -473,323 +399,160 @@ export function CompositionNew() {
     setUpperMappings(lowerMappings.map((m) => ({ ...m, id: nextLocalId('u-copy'), name: m.name ? `${m.name} copy` : '' })));
   }
 
+  const layupMappingSavePending =
+    updateMappingLongitudinalMutation.isPending ||
+    fetchIntersectionsMutation.isPending ||
+    fetchMappingTransversalMutation.isPending;
+  const layupMappingSaveError =
+    updateMappingLongitudinalMutation.isError ||
+    fetchIntersectionsMutation.isError ||
+    fetchMappingTransversalMutation.isError;
+
+  async function handleSaveLayupMapping() {
+    // The bezier editor works in the blade's absolute (real) scale; the API
+    // expects longitudinal/transversal position as a fraction of nominal_radius.
+    // A row's id is only a real backend id once hydrated (String(entry.id), a
+    // plain digit string) — rows added locally get nextLocalId's prefixed id
+    // (e.g. "u-kx3f2a1-4") and must not send one, so the backend creates it.
+    const toEntries = (mappings: LayupMapping[]) =>
+      mappings
+        .filter((m) => m.layupId)
+        .map((m) => ({
+          ...(/^\d+$/.test(m.id) ? { id: Number(m.id) } : {}),
+          name: m.name,
+          layup: Number(m.layupId),
+          mappings: (m.points ?? defaultMappingPoints).map((p) => ({
+            longitudinal_position: p.x / nominalRadius,
+            transversal_position: p.y / nominalRadius,
+          })),
+        }));
+
+    await updateMappingLongitudinalMutation.mutateAsync({
+      upper_side: toEntries(upperMappings),
+      lower_side: toEntries(lowerMappings),
+    });
+    const intersections = await fetchIntersectionsMutation.mutateAsync(compositionId);
+    setActiveTab('transversal-mapping');
+    await fetchMappingTransversalMutation.mutateAsync(compositionId);
+
+    if (Number.isFinite(geometryId)) {
+      await Promise.all(
+        intersections.map(({ profile_id }) =>
+          queryClient.prefetchQuery({
+            queryKey: geometryKeys.profile(geometryId, profile_id),
+            queryFn: () => getGeometryProfile(geometryId, profile_id),
+          })
+        )
+      );
+    }
+  }
+
   return (
     <div className="flex min-h-screen w-full flex-col">
       <MainNav />
 
-      {/* Body: full-bleed OCC canvas + floating overlays */}
-      <main className="relative flex-1 overflow-hidden">
-        {/* OCC canvas fills the whole area */}
-        <OccViewer wireframe={renderMode === 'wireframe'} className="absolute inset-0 w-full h-full" />
-
-      {/* Sub-toolbar floating above the canvas */}
-      <div className="absolute inset-x-0 top-0 z-40 h-[52px] border-b border-[#e5e7eb]/70">
-        <div className="absolute inset-y-0 left-4 flex items-center">
-          <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as typeof activeTab); setBezierFor(null); }} className="h-9">
-            <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
-              {[
-                { value: 'general', label: 'General' },
-                { value: 'geometry', label: 'Geometry' },
-                { value: 'layup-mapping', label: 'Layup mapping' },
-                { value: 'transversal-mapping', label: 'Transversal mapping' },
-              ].map((t) => (
-                <TabsTrigger
-                  key={t.value}
-                  value={t.value}
-                  className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
-                >
-                  {t.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+      <main className="relative flex-1 overflow-hidden bg-[#f8fafc]">
+      <CompositionEditToolbar
+        activeTab={activeTab}
+        onTabChange={(v) => { setActiveTab(v); setBezierFor(null); }}
+        titleText={titleText}
+        onExit={handleExit}
+        saveStatus={saveStatus}
+        isSaved={isEditing}
+        onSaveLayupMapping={handleSaveLayupMapping}
+        layupMappingSavePending={layupMappingSavePending}
+      />
+      {saveError && (
+        <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
+          Failed to {isEditing ? 'update' : 'create'} composition. Please try again.
         </div>
-
-        <h1 className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
-          {titleText}
-        </h1>
-
-        <div className="absolute inset-y-0 right-4 flex items-center gap-4">
-          <div className="flex items-center gap-[6px]">
-            <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-            <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              aria-label="Undo"
-              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-            >
-              <Undo2 className="h-4 w-4" strokeWidth={2} />
-            </button>
-            <button
-              type="button"
-              aria-label="Redo"
-              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-            >
-              <Redo2 className="h-4 w-4" strokeWidth={2} />
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={handleExit}
-            className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
-          >
-            Back to Compositions
-          </button>
+      )}
+      {layupMappingSaveError && (
+        <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
+          Failed to save layup mapping. Please try again.
         </div>
-      </div>
+      )}
 
-      {/* Render toggle + settings (top-center, below sub-toolbar) */}
-      <div className={`absolute left-1/2 top-[60px] z-20 flex -translate-x-1/2 items-center gap-2 pt-2${activeTab === 'geometry' ? ' hidden' : ''}`}>
-        <RenderToggle value={renderMode} onChange={setRenderMode} />
-        <button
-          type="button"
-          aria-label="Viewer settings"
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] bg-white/95 text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#f1f5f9]"
-        >
-          <Settings className="h-4 w-4" strokeWidth={2} />
-        </button>
-      </div>
-
-      {/* Coordinate gizmo (bottom-left) */}
-      <div className="pointer-events-none absolute bottom-4 left-4 z-20">
-        <CoordinateGizmo />
-      </div>
-
-      {/* Tab content panels — pointer-events-none on wrapper so the canvas
-           behind receives orbit/zoom events; each panel restores pointer-events */}
-      <div className="pointer-events-none absolute bottom-4 left-4 right-4 top-[60px]">
+      {/* Tab content panels */}
+      <div className="absolute bottom-4 left-4 right-4 top-[60px]">
         {activeTab === 'general' && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleGeneralSubmit();
-            }}
-            className="pointer-events-auto flex w-full max-w-[468px] flex-col gap-4 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm [max-height:calc(100vh-145px)]"
-          >
-            <div className="flex w-full flex-col gap-2">
-              <Label htmlFor="comp-name" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                Name<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Input
-                id="comp-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                placeholder="Name the composition"
-                className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-
-            <div className="flex w-full flex-col gap-2">
-              <Label htmlFor="comp-description" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                Description<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Textarea
-                id="comp-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                required
-                rows={3}
-                placeholder="Placeholder"
-                className="min-h-[76px] rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="comp-solid-core"
-                  checked={solidCore}
-                  onCheckedChange={(c) => setSolidCore(Boolean(c))}
-                  className="size-4 rounded border-[#e2e8f0] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
-                />
-                <Label htmlFor="comp-solid-core" className="cursor-pointer text-[14px] font-medium text-[#0a0a0a]">
-                  Solid core
-                </Label>
-              </div>
-              <button
-                type="button"
-                disabled={!solidCore}
-                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Select material
-                <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
-              </button>
-            </div>
-
-            <div className="flex w-full flex-col gap-2">
-              <Label htmlFor="comp-target-weight" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                Target weight (kg)
-              </Label>
-              <Input
-                id="comp-target-weight"
-                value={targetWeight}
-                onChange={(e) => setTargetWeight(e.target.value)}
-                placeholder="Placeholder"
-                className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-              <p className="text-[14px] leading-5 text-[#6b7280]">
-                Helper text: explain why is it important to add the target weight and what are the risks
-                of a miscalculated weight
-              </p>
-            </div>
-          </form>
+          <CompositionGeneralTab
+            name={name}
+            onNameChange={setName}
+            date={date}
+            onDateChange={setDate}
+            description={description}
+            onDescriptionChange={setDescription}
+            solidCore={solidCore}
+            onSolidCoreChange={setSolidCore}
+            targetWeight={targetWeight}
+            onTargetWeightChange={setTargetWeight}
+            onTargetWeightBlur={handleTargetWeightBlur}
+            onSubmit={handleGeneralFormSubmit}
+          />
         )}
 
         {activeTab === 'geometry' && (
-          <div className="pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Geometries</h2>
-              <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
-                <button
-                  type="button"
-                  onClick={() => setGeomView('list')}
-                  aria-label="List view"
-                  aria-pressed={geomView === 'list'}
-                  className={`flex h-7 w-7 items-center justify-center rounded ${
-                    geomView === 'list'
-                      ? 'bg-[#eef9ff] text-[#171717]'
-                      : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <ListIcon className="h-4 w-4" strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGeomView('grid')}
-                  aria-label="Grid view"
-                  aria-pressed={geomView === 'grid'}
-                  className={`flex h-7 w-7 items-center justify-center rounded ${
-                    geomView === 'grid'
-                      ? 'bg-[#eef9ff] text-[#171717]'
-                      : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <LayoutGrid className="h-4 w-4" strokeWidth={2} />
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 max-w-[384px]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
-                <Input
-                  value={geomQuery}
-                  onChange={(e) => setGeomQuery(e.target.value)}
-                  placeholder="Placeholder"
-                  className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
-                />
-              </div>
-            </div>
-
-            {geomView === 'grid' ? (
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                {filteredGeometries.map((g) => (
-                  <GeometryCard
-                    key={g.id}
-                    geometry={g}
-                    onClick={() => setSelectedGeometryId(g.id)}
-                    selected={selectedGeometryId === g.id}
-                    showMenu={false}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 overflow-hidden rounded-md border border-[#e5e7eb]">
-                <table className="w-full border-separate border-spacing-0 text-[14px]">
-                  <thead>
-                    <tr>
-                      <th className="h-10 w-[240px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                        Name
-                      </th>
-                      <th className="h-10 border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                        Description
-                      </th>
-                      <th className="h-10 w-[160px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                        Last updated
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredGeometries.map((g, idx) => {
-                      const isLast = idx === filteredGeometries.length - 1;
-                      const isSelected = selectedGeometryId === g.id;
-                      const cellBorder = isLast || isSelected ? '' : 'border-b border-[#e5e7eb]';
-                      return (
-                        <tr
-                          key={g.id}
-                          onClick={() => setSelectedGeometryId(g.id)}
-                          className={`cursor-pointer ${
-                            isSelected
-                              ? 'bg-[#eef9ff] shadow-[inset_2px_0_0_#006496]'
-                              : 'hover:bg-[#f9fafb]'
-                          }`}
-                        >
-                          <td className={`px-3 py-3 font-medium text-[#0a0a0a] ${cellBorder}`}>{g.name}</td>
-                          <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>{g.description}</td>
-                          <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>{g.lastUpdated}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <CompositionGeometryTab
+            compositionId={compositionId}
+            geomQuery={geomQuery}
+            onGeomQueryChange={setGeomQuery}
+            geomView={geomView}
+            onGeomViewChange={setGeomView}
+            selectedGeometryId={selectedGeometryId}
+            onSelectGeometry={setSelectedGeometryId}
+            onAfterSelect={() => setActiveTab('layup')}
+          />
         )}
 
-        {/* Always mounted — hidden instead of unmounted so mapping state survives tab switches */}
-        <div ref={layupPanelRef} className={`pointer-events-auto flex max-h-[calc(100vh-145px)] w-full max-w-[560px] flex-col gap-6 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm${activeTab !== 'layup-mapping' ? ' hidden' : ''}`}>
-            <LayupMappingTable
-              title="Upper side"
-              copyLabel="Copy to lower side"
-              mappings={upperMappings}
-              activeMappingId={bezierFor?.side === 'upper' ? bezierFor.mappingId : null}
-              onAdd={addUpper}
-              onDelete={(id) => deleteMapping('upper', id)}
-              onUpdate={(id, next) => updateMapping('upper', id, next)}
-              onCopy={copyUpperToLower}
-              onDuplicate={(id) => duplicateMapping('upper', id)}
-              onOpenBezier={(id) => {
-                const rect = layupPanelRef.current?.getBoundingClientRect();
-                setBezierFor({ side: 'upper', mappingId: id, anchorRight: rect?.right, anchorTop: rect?.top, anchorLeft: rect?.left });
-              }}
-              onReorder={(from, to) => reorderMapping('upper', from, to)}
-              onPickLayup={(id) => setLayupPicker({ side: 'upper', mappingId: id })}
-            />
+        {activeTab === 'layup' && (
+          <CompositionLayupTab
+            compositionId={compositionId}
+            layups={layups}
+            onAddLayup={addLayup}
+            onUpdateLayupPlies={updateLayupPlies}
+            onSaved={() => setActiveTab('layup-mapping')}
+          />
+        )}
 
-            <LayupMappingTable
-              title="Lower side"
-              copyLabel="Copy to upper side"
-              mappings={lowerMappings}
-              activeMappingId={bezierFor?.side === 'lower' ? bezierFor.mappingId : null}
-              onAdd={addLower}
-              onDelete={(id) => deleteMapping('lower', id)}
-              onUpdate={(id, next) => updateMapping('lower', id, next)}
-              onCopy={copyLowerToUpper}
-              onDuplicate={(id) => duplicateMapping('lower', id)}
-              onOpenBezier={(id) => {
-                const rect = layupPanelRef.current?.getBoundingClientRect();
-                setBezierFor({ side: 'lower', mappingId: id, anchorRight: rect?.right, anchorTop: rect?.top, anchorLeft: rect?.left });
-              }}
-              onReorder={(from, to) => reorderMapping('lower', from, to)}
-              onPickLayup={(id) => setLayupPicker({ side: 'lower', mappingId: id })}
-            />
-          </div>
+        <CompositionLayupMappingPanel
+          ref={layupPanelRef}
+          visible={activeTab === 'layup-mapping'}
+          upperMappings={upperMappings}
+          lowerMappings={lowerMappings}
+          layupOptions={layupOptions}
+          activeBezierSide={bezierFor?.side ?? null}
+          activeBezierMappingId={bezierFor?.mappingId ?? null}
+          onAdd={(side) => (side === 'upper' ? addUpper() : addLower())}
+          onDelete={deleteMapping}
+          onUpdate={updateMapping}
+          onCopyUpperToLower={copyUpperToLower}
+          onCopyLowerToUpper={copyLowerToUpper}
+          onDuplicate={duplicateMapping}
+          onOpenBezier={(side, id) => {
+            const rect = layupPanelRef.current?.getBoundingClientRect();
+            setBezierFor({ side, mappingId: id, anchorRight: rect?.right, anchorTop: rect?.top, anchorLeft: rect?.left });
+          }}
+          onReorder={reorderMapping}
+          onPickLayup={(side, id) => setLayupPicker({ side, mappingId: id })}
+        />
 
         {/* Always mounted — hidden instead of unmounted so internal state survives tab switches */}
         <div className={`pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto${activeTab !== 'transversal-mapping' ? ' hidden' : ''}`}>
-          <TransversalMappingSection
-            useDefaultData={!!existing}
-            upperMappingNames={upperMappings.map((m) => m.name)}
-          />
+          <TransversalMappingSection compositionId={compositionId} />
         </div>
+
+        {activeTab === 'preview' && (
+          <CompositionPreviewTab
+            compositionId={compositionId}
+            geometryId={geometryId}
+          />
+        )}
       </div>
       </main>
 
       <LayupPickerDialog
+        compositionId={compositionId}
         open={layupPicker !== null}
         currentLayupId={pickerCurrentLayupId}
         onSelect={(layupId) => {
@@ -816,6 +579,14 @@ export function CompositionNew() {
           title={bezierTitle}
           points={bezierPoints}
           onChange={(pts) => updateMapping(bezierFor.side, bezierFor.mappingId, { points: pts })}
+          leadingEdge={leadingEdge}
+          trailingEdge={trailingEdge}
+          xMin={mappingBounds.longitudinalMin}
+          xMax={mappingBounds.longitudinalMax}
+          xStep={mappingXStep}
+          yMin={mappingBounds.transversalMin}
+          yMax={mappingBounds.transversalMax}
+          yStep={mappingYStep}
           anchorRight={bezierFor.anchorRight}
           anchorTop={bezierFor.anchorTop}
           anchorLeft={bezierFor.anchorLeft}

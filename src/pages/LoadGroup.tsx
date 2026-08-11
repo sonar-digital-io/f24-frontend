@@ -1,39 +1,41 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, Download, Pencil, Search, Trash2 } from 'lucide-react';
-import { MainNav } from '@/components/MainNav';
-import { Footer } from '@/components/Footer';
-import {
-  Pagination,
-  SortableHeader,
-  rowInteractionProps,
-  toggleSort,
-  type SortState,
-} from '@/components/ListTable';
-import { Input } from '@/components/ui/input';
-import { LOAD_GROUPS, type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
+import { Copy, Download, Pencil, Trash2 } from 'lucide-react';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { Footer } from '@/components/common/layout/Footer';
+import { Pagination } from '@/components/common/list/Pagination';
+import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
+import { ListPageHeader } from '@/components/common/list/ListPageHeader';
+import { ListSearchInput } from '@/components/common/list/ListSearchInput';
+import { ListTableBody } from '@/components/common/list/ListTableBody';
+import { RowIconButton } from '@/components/common/list/RowIconButton';
+import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { matchesQuery, paginate, rowInteractionProps, sortItems, toggleSort } from '@/lib/listTable';
+import type { SortState, LoadGroupSortKey } from '@/types';
+import { type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
+import { useDeleteLoadGroup, useLoadGroupList } from '@/hooks/api/useLoadGroups';
+import type { LoadGroup as BackendLoadGroup } from '@/api/types/loadGroups';
 
 const PAGE_SIZE = 10;
 
-type SortKey = 'name' | 'lastUpdated';
-
-function Tip({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="group/tip relative">
-      {children}
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100">
-        {label}
-      </span>
-    </div>
-  );
+function toUiLoadGroup(g: BackendLoadGroup): LoadGroupItem {
+  return {
+    id: String(g.id),
+    name: g.name,
+    description: g.description ?? '',
+    lastUpdated: '—',
+    profiles: [],
+  };
 }
 
 interface LoadGroupRowProps {
   item: LoadGroupItem;
   onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }
 
-function LoadGroupRow({ item, onEdit }: LoadGroupRowProps) {
+function LoadGroupRow({ item, onEdit, onDuplicate, onDelete }: LoadGroupRowProps) {
   return (
     <tr
       {...rowInteractionProps(onEdit)}
@@ -46,43 +48,10 @@ function LoadGroupRow({ item, onEdit }: LoadGroupRowProps) {
       </td>
       <td className="px-3 py-4">
         <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <Tip label="Edit">
-            <button
-              type="button"
-              aria-label="Edit load group"
-              onClick={onEdit}
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-            >
-              <Pencil className="h-4 w-4" strokeWidth={2} />
-            </button>
-          </Tip>
-          <Tip label="Export">
-            <button
-              type="button"
-              aria-label="Export load group"
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-            >
-              <Download className="h-4 w-4" strokeWidth={2} />
-            </button>
-          </Tip>
-          <Tip label="Duplicate">
-            <button
-              type="button"
-              aria-label="Duplicate load group"
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-            >
-              <Copy className="h-4 w-4" strokeWidth={2} />
-            </button>
-          </Tip>
-          <Tip label="Delete">
-            <button
-              type="button"
-              aria-label="Delete load group"
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-[#e5e7eb] bg-white text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#fee2e2] hover:text-[#dc2626]"
-            >
-              <Trash2 className="h-4 w-4" strokeWidth={2} />
-            </button>
-          </Tip>
+          <RowIconButton label="Edit load group" icon={Pencil} onClick={onEdit} />
+          <RowIconButton label="Export load group" icon={Download} onClick={() => {}} />
+          <RowIconButton label="Duplicate load group" icon={Copy} onClick={onDuplicate} />
+          <RowIconButton label="Delete load group" icon={Trash2} onClick={onDelete} variant="danger" />
         </div>
       </td>
     </tr>
@@ -92,35 +61,43 @@ function LoadGroupRow({ item, onEdit }: LoadGroupRowProps) {
 export function LoadGroup() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<SortKey>>({ key: 'lastUpdated', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<LoadGroupSortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return LOAD_GROUPS;
-    return LOAD_GROUPS.filter(
-      (g) => g.name.toLowerCase().includes(q) || g.description.toLowerCase().includes(q)
-    );
-  }, [query]);
+  const { data: backendLoadGroups, isLoading, isError } = useLoadGroupList();
+  const LOAD_GROUPS = useMemo(() => (backendLoadGroups ?? []).map(toUiLoadGroup), [backendLoadGroups]);
 
-  const sorted = useMemo(() => {
-    const copy = [...filtered];
-    copy.sort((a, b) => {
-      const aVal = a[sort.key].toLowerCase();
-      const bVal = b[sort.key].toLowerCase();
-      if (aVal === bVal) return 0;
-      const cmp = aVal < bVal ? -1 : 1;
-      return sort.direction === 'asc' ? cmp : -cmp;
-    });
-    return copy;
-  }, [filtered, sort]);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const deleteMutation = useDeleteLoadGroup();
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    try {
+      await deleteMutation.mutateAsync(Number(pendingDelete.id));
+      setPendingDelete(null);
+    } catch {
+      // deleteMutation.isError surfaces the failure in the dialog — stay open so the user can retry.
+    }
+  }
 
-  function handleSort(key: SortKey) {
+  const filtered = useMemo(
+    () => LOAD_GROUPS.filter((g) => matchesQuery(query, [g.name, g.description])),
+    [LOAD_GROUPS, query]
+  );
+
+  const sorted = useMemo(() => sortItems(filtered, sort, (g, key) => g[key]), [filtered, sort]);
+
+  const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
+
+  function handleSort(key: LoadGroupSortKey) {
     setSort((prev) => toggleSort(prev, key));
   }
+
+  const COLUMNS: ListTableHeadColumn<LoadGroupSortKey>[] = [
+    { label: 'Name', sortKey: 'name', className: 'w-[260px]' },
+    { label: 'Description' },
+    { label: 'Last updated', sortKey: 'lastUpdated', className: 'w-[160px]' },
+  ];
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
@@ -129,88 +106,58 @@ export function LoadGroup() {
       <main className="flex-1 px-4 py-6 sm:px-8 lg:px-16">
         <div className="mx-auto w-full max-w-[1400px]">
           <div className="rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-            {/* Header */}
-            <div className="flex h-9 items-center justify-between">
-              <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Load groups</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-4 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#f1f5f9]"
-                >
-                  Import
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/load-group/new')}
-                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
-                >
-                  New load group
-                </button>
-              </div>
-            </div>
+            <ListPageHeader
+              title="Load groups"
+              actions={
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-4 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#f1f5f9]"
+                  >
+                    Import
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/load-group/new')}
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
+                  >
+                    New load group
+                  </button>
+                </div>
+              }
+            />
 
             {/* Search */}
             <div className="mt-4 max-w-[384px]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
-                <Input
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search"
-                  className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
-                />
-              </div>
+              <ListSearchInput
+                value={query}
+                onChange={(v) => { setQuery(v); setPage(1); }}
+                widthClassName=""
+              />
             </div>
 
             {/* Table */}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b border-[#e5e7eb]">
-                    <SortableHeader
-                      label="Name"
-                      sortKey="name"
-                      currentSort={sort}
-                      onClick={handleSort}
-                      className="w-[260px]"
-                    />
-                    <th className="h-10 px-3 text-left">
-                      <span className="text-[14px] font-medium leading-5 text-[#6b7280]">
-                        Description
-                      </span>
-                    </th>
-                    <SortableHeader
-                      label="Last updated"
-                      sortKey="lastUpdated"
-                      currentSort={sort}
-                      onClick={handleSort}
-                      className="w-[160px]"
-                    />
-                    <th className="h-10 w-[208px] px-3 text-left" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageRows.map((item) => (
+                <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
+                <ListTableBody
+                  colSpan={4}
+                  isLoading={isLoading}
+                  isError={isError}
+                  loadingLabel="Loading load groups…"
+                  errorLabel="Failed to load load groups from the server."
+                  rows={pageRows}
+                  renderRow={(item) => (
                     <LoadGroupRow
                       key={item.id}
                       item={item}
                       onEdit={() => navigate(`/load-group/${item.id}`)}
+                      onDuplicate={() => navigate(`/load-group/new?duplicateFrom=${item.id}`)}
+                      onDelete={() => setPendingDelete({ id: item.id, name: item.name })}
                     />
-                  ))}
-                  {pageRows.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={4}
-                        className="px-3 py-8 text-center text-[14px] text-[#6b7280]"
-                      >
-                        No load groups match your search.
-                      </td>
-                    </tr>
                   )}
-                </tbody>
+                  emptyLabel="No load groups match your search."
+                />
               </table>
             </div>
 
@@ -223,6 +170,18 @@ export function LoadGroup() {
       </main>
 
       <Footer />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete load group"
+        message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
+        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+        confirmDisabled={deleteMutation.isPending}
+        errorMessage={deleteMutation.isError ? 'Failed to delete. Please try again.' : undefined}
+        danger
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
-import { MainNav } from '@/components/MainNav';
-import { Footer } from '@/components/Footer';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { Footer } from '@/components/common/layout/Footer';
 
 export function NotFound() {
   return (

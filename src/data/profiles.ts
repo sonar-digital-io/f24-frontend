@@ -11,6 +11,18 @@ export interface Profile {
 
 export const PROFILE_TYPES = ['NACA 4 digit', 'NACA 5 digit', 'Custom airfoil'];
 
+/** UI dropdown labels <-> backend profile "type" reference, per the profile-generator spec example. */
+export const API_TO_UI_PROFILE_TYPE: Record<string, string> = {
+  naca_4_digit: 'NACA 4 digit',
+  naca_5_digit: 'NACA 5 digit',
+  custom_airfoil: 'Custom airfoil',
+};
+export const UI_TO_API_PROFILE_TYPE: Record<string, string> = {
+  'NACA 4 digit': 'naca_4_digit',
+  'NACA 5 digit': 'naca_5_digit',
+  'Custom airfoil': 'custom_airfoil',
+};
+
 export const INITIAL_PROFILES: Profile[] = [
   {
     id: 'p0',

@@ -1,219 +1,126 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Settings, Check, Undo2, Redo2 } from 'lucide-react';
-import { MainNav } from '@/components/MainNav';
-import { OccViewer } from '@/components/OccViewer';
-import { ProfileDistributionPanel } from '@/components/ProfileDistributionPanel';
-import { ProfilesPanel } from '@/components/ProfilesPanel';
-import { StackingPanel } from '@/components/StackingPanel';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BLADE_TYPES, GEOMETRIES, createGeometry, updateGeometry } from '@/data/geometries';
-import type { BladeType } from '@/data/geometries';
-
-
-const MANUFACTURING_TECHNOLOGIES = [
-  'To be determined',
-  'Vacuum infusion',
-  'Prepreg autoclave',
-  'Filament winding',
-  'Resin transfer moulding',
-];
-
-type RenderMode = 'solid' | 'wireframe';
+import { useEffect, useState } from 'react';
+import { isAxiosError } from 'axios';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import { apiClient } from '@/api/client';
+import { Settings } from 'lucide-react';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { OccViewer } from '@/components/common/viewer/OccViewer';
+import { GeometryEditToolbar } from '@/components/geometry/GeometryEditToolbar';
+import { GeometryCreatePanel } from '@/components/geometry/GeometryCreatePanel';
+import { GeometryGlobalPropertiesPanel } from '@/components/geometry/GeometryGlobalPropertiesPanel';
+import { GeometryResultPanel } from '@/components/geometry/GeometryResultPanel';
+import { SparsSection } from '@/components/geometry/SparsSection';
+import { ProfileDistributionPanel } from '@/components/geometry/ProfileDistributionPanel';
+import { ProfilesPanel } from '@/components/geometry/ProfilesPanel';
+import { StackingPanel } from '@/components/geometry/StackingPanel';
+import { CoordinateGizmo } from '@/components/common/viewer/CoordinateGizmo';
+import { RenderToggle } from '@/components/common/viewer/RenderToggle';
+import type { RenderMode } from '@/types';
+import {
+  useCreateGeometry,
+  useGeometryDetail,
+  useUpdateGeometry,
+  useUpdateGeometrySettings,
+  useUpdateGeometryProfiles,
+  useRunProfileGenerator,
+  useUpdateProfileGenerator,
+  useUpdateGeometryEdges,
+  useGeometryEdges,
+} from '@/hooks/api/useGeometry';
+import { useHydrateOnce } from '@/hooks/useHydrateOnce';
+import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
+import { toUiProfile, toApiProfile } from '@/lib/geometryProfileMapping';
+import type { Profile } from '@/data/profiles';
+import type { GeometryEdgeInput, ProfileGeneratorParameters } from '@/api/types/geometry';
 
 interface GlobalProperties {
   nominalRadius: string;
   rootRadius: string;
-  stackingReference: string;
+  stackingLine: string;
+  bladeNumber: string;
 }
 
-interface SelectProps {
-  value: string;
-  onChange: (value: string) => void;
-  options: readonly string[];
-  placeholder?: string;
-  disabled?: boolean;
-}
+/** Always sent as-is to PUT /geometry/:id/settings/ — shown in the form but not editable. */
+const AIRFOIL_ORIENTATION = 'normal';
+const AIRFOIL_DRAWING_PLANE = 'xy';
 
-function Select({ value, onChange, options, placeholder = 'Select', disabled = false }: SelectProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+const PANEL_WIDTH_NARROW = 'w-[516px] max-w-[calc(100vw-2rem)]';
+const PANEL_WIDTH_WIDE = 'w-[924px] max-w-[calc(100vw-2rem)]';
 
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => !disabled && setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={disabled}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-[#e2e8f0] bg-white px-3 py-1 text-left text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <span className={value ? 'text-[#0a0a0a]' : 'text-[#6b7280]'}>{value || placeholder}</span>
-        <ChevronDown
-          className={`h-4 w-4 text-[#6b7280] transition-transform ${open ? 'rotate-180' : ''}`}
-          strokeWidth={2}
-        />
-      </button>
-      {open && (
-        <ul
-          role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-64 overflow-y-auto rounded-md border border-[#e5e7eb] bg-white py-1 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"
-        >
-          {options.map((opt) => {
-            const selected = opt === value;
-            return (
-              <li key={opt} role="option" aria-selected={selected}>
-                <button
-                  type="button"
-                  onClick={() => { onChange(opt); setOpen(false); }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-[14px] leading-5 ${
-                    selected ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <span>{opt}</span>
-                  {selected && <Check className="h-4 w-4" strokeWidth={2} />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function CoordinateGizmo() {
-  return (
-    <svg viewBox="0 0 100 100" className="h-20 w-20" aria-hidden="true">
-      {/* Z axis (up, green) */}
-      <line x1="50" y1="50" x2="50" y2="15" stroke="#16a34a" strokeWidth="2" />
-      <polygon points="50,10 46,18 54,18" fill="#16a34a" />
-      <text x="55" y="14" fontSize="9" fill="#16a34a">z</text>
-      {/* Y axis (right, blue) */}
-      <line x1="50" y1="50" x2="85" y2="50" stroke="#2563eb" strokeWidth="2" />
-      <polygon points="90,50 82,46 82,54" fill="#2563eb" />
-      <text x="80" y="64" fontSize="9" fill="#2563eb">y</text>
-      {/* X axis (lower-left, red) */}
-      <line x1="50" y1="50" x2="22" y2="78" stroke="#dc2626" strokeWidth="2" />
-      <polygon points="18,82 26,80 22,72" fill="#dc2626" />
-      <text x="10" y="78" fontSize="9" fill="#dc2626">x</text>
-    </svg>
-  );
-}
-
-interface RenderToggleProps {
-  value: RenderMode;
-  onChange: (v: RenderMode) => void;
-}
-
-function RenderToggle({ value, onChange }: RenderToggleProps) {
-  return (
-    <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white/95 p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm">
-      {(['solid', 'wireframe'] as const).map((mode) => {
-        const active = value === mode;
-        return (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => onChange(mode)}
-            className={`inline-flex h-6 items-center gap-1 rounded px-2 text-[12px] font-medium capitalize ${
-              active ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-            }`}
-          >
-            {active && <Check className="h-3 w-3" strokeWidth={2.5} />}
-            {mode}
-          </button>
-        );
-      })}
-      <button
-        type="button"
-        aria-label="Render mode menu"
-        className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] hover:bg-[#f1f5f9]"
-      >
-        <ChevronDown className="h-3 w-3" strokeWidth={2} />
-      </button>
-    </div>
-  );
-}
-
-function Tip({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="group/tip relative">
-      {children}
-      {label && (
-        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1.5 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100">
-          {label}
-        </span>
-      )}
-    </div>
-  );
-}
-
-interface FormFieldProps {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}
-
-function FormField({ label, value, onChange }: FormFieldProps) {
-  const inputId = `geometry-field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-  return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor={inputId} className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-        {label}
-      </Label>
-      <Input
-        id={inputId}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-      />
-    </div>
-  );
+/** The floating properties panel's width depends on the active tab (and, for
+ *  the two foldable tabs, whether their side panel is folded). */
+function getPanelWidthClass(activeTab: string, profileFolded: boolean, stackingFolded: boolean): string {
+  switch (activeTab) {
+    case 'create':
+      return 'w-[468px] max-w-[calc(100vw-2rem)]';
+    case 'profile-distribution':
+      return profileFolded ? PANEL_WIDTH_NARROW : PANEL_WIDTH_WIDE;
+    case 'profiles':
+      return 'w-[404px] max-w-[calc(100vw-2rem)]';
+    case 'stacking':
+      return stackingFolded ? PANEL_WIDTH_NARROW : PANEL_WIDTH_WIDE;
+    case 'spars':
+      return PANEL_WIDTH_WIDE;
+    default:
+      return 'w-[280px]';
+  }
 }
 
 export function GeometryEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isNew = id === 'new';
-  const geometry = isNew ? undefined : GEOMETRIES.find((g) => g.id === id);
-  const name = isNew ? 'New geometry' : (geometry?.name ?? id ?? 'New geometry');
+  const geometryId = isNew ? NaN : Number(id);
+  const duplicateFromRaw = isNew ? searchParams.get('duplicateFrom') : null;
+  const duplicateSourceId = duplicateFromRaw ? Number(duplicateFromRaw) : NaN;
+
+  const detailQuery = useGeometryDetail(geometryId);
+  const duplicateQuery = useGeometryDetail(duplicateSourceId);
+  const createMutation = useCreateGeometry();
+  const updateGeneralMutation = useUpdateGeometry(geometryId);
+  const updateSettingsMutation = useUpdateGeometrySettings(geometryId);
+  const updateProfilesMutation = useUpdateGeometryProfiles(geometryId);
+  const runGeneratorMutation = useRunProfileGenerator();
+  const updateGeneratorMutation = useUpdateProfileGenerator();
+  const updateEdgesMutation = useUpdateGeometryEdges(geometryId);
+  const edgesQuery = useGeometryEdges(geometryId);
+  // Profile distribution's tab unmounts on tab switch, so its bezier curves
+  // need to be remembered here — seeded from GET /geometry/:id/'s nested
+  // profile_generator_parameters on load, then kept in sync with whatever
+  // was last sent to PUT/POST /geometry/:id/tools/profile-generator/.
+  const [savedProfileParams, setSavedProfileParams] = useState<ProfileGeneratorParameters | undefined>(undefined);
+  const [resultStl, setResultStl] = useState<ArrayBuffer | undefined>(undefined);
+  const [resultScale, setResultScale] = useState(1);
+  const [resultRequested, setResultRequested] = useState(false);
+  const [resultStatus, setResultStatus] = useState<'loading' | 'ready' | 'error'>('ready');
+  const [resultError, setResultError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState(isNew ? 'create' : 'global-properties');
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
   const [profileFolded, setProfileFolded] = useState(false);
   const [stackingFolded, setStackingFolded] = useState(true);
+  // Global properties — sent via PUT /geometry/:id/settings/ as key/value pairs, and
+  // hydrated below from the `settings` array nested in GET /geometry/:id/ when present.
   const [props, setProps] = useState<GlobalProperties>({
-    nominalRadius: '75.0',
-    rootRadius: '5.0',
-    stackingReference: '0.3',
+    nominalRadius: '',
+    rootRadius: '',
+    stackingLine: '',
+    bladeNumber: '',
   });
 
-  // New geometry project config state — pre-filled from existing geometry when returning to this tab
-  const [newBladeType, setNewBladeType] = useState(geometry?.type ?? '');
-  const [newManufacturing, setNewManufacturing] = useState('To be determined');
-  const [newName, setNewName] = useState(geometry?.name ?? '');
-  const [newDescription, setNewDescription] = useState(geometry?.description ?? '');
+  // Profiles — hydrated from the `profiles` array nested in GET /geometry/:id/.
+  const [hydratedProfiles, setHydratedProfiles] = useState<Profile[] | null>(null);
+
+  // Project config state — name/date/description, sent to POST /geometry/ on create
+  // or PUT /geometry/:id/ on edit. For edits, hydrated from GET /geometry/:id/.
+  const [newName, setNewName] = useState('');
+  const [newDate, setNewDate] = useState(todayISO());
+  const [newDescription, setNewDescription] = useState('');
+  const [baseline, setBaseline] = useState<{ name: string; date: string; description: string } | null>(
+    null
+  );
 
   // When Create is clicked, navigate replaces /geometry/new → /geometry/:id without
   // remounting (same route pattern). Switch to Global properties once isNew turns false.
@@ -221,30 +128,172 @@ export function GeometryEdit() {
     if (!isNew && activeTab === 'create') {
       setActiveTab('global-properties');
     }
+    // Only re-run on the isNew transition (after Create succeeds) — not on every
+    // manual tab switch, which would defeat the point of this one-time redirect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew]);
+
+  // Load the existing geometry's name/date/description — plus, when present, the nested
+  // settings/profiles arrays — into the form when editing.
+  const hydrated = useHydrateOnce(!isNew && !detailQuery.isFetching && !!detailQuery.data, () => {
+    const g = detailQuery.data!;
+    const hydratedDate = toDateInputValue(g.created_at);
+    const hydratedDescription = g.description ?? '';
+    setNewName(g.name);
+    setNewDate(hydratedDate);
+    setNewDescription(hydratedDescription);
+    setBaseline({ name: g.name, date: hydratedDate, description: hydratedDescription });
+
+    if (g.settings) {
+      const settingsMap = new Map(g.settings.map((kv) => [kv.reference, String(kv.value)]));
+      setProps({
+        nominalRadius: settingsMap.get('nominal_radius') ?? '',
+        rootRadius: settingsMap.get('root_radius') ?? '',
+        stackingLine: settingsMap.get('stacking_line') ?? '',
+        bladeNumber: settingsMap.get('blade_number') ?? '',
+      });
+    }
+
+    if (g.profiles) {
+      setHydratedProfiles(g.profiles.map(toUiProfile));
+    }
+
+    if (g.profile_generator_parameters) {
+      setSavedProfileParams(g.profile_generator_parameters);
+    }
+  });
+
+  useHydrateOnce(
+    isNew && Number.isFinite(duplicateSourceId) && !duplicateQuery.isFetching && !!duplicateQuery.data,
+    () => {
+      const g = duplicateQuery.data!;
+      setNewName(`${g.name}_copy`);
+      setNewDate(toDateInputValue(g.created_at));
+      setNewDescription(g.description ?? '');
+    }
+  );
 
   function updateField(key: keyof GlobalProperties, value: string) {
     setProps((p) => ({ ...p, [key]: value }));
   }
 
-  function handleCreate() {
-    if (!newBladeType || !newName.trim()) return;
-    const geom = createGeometry(newName.trim(), newDescription.trim(), newBladeType as BladeType);
-    // /geometry/new and /geometry/:id share a route, so this navigate does NOT
-    // remount the component — leave the create tab and clear the form explicitly,
-    // otherwise the create panel stays up and a second click creates a duplicate.
-    setActiveTab('global-properties');
-    setNewBladeType('');
-    setNewName('');
-    setNewDescription('');
-    navigate(`/geometry/${geom.id}`, { replace: true });
+  async function handleCreate() {
+    if (!newName.trim() || !newDate || !newDescription.trim()) return;
+    try {
+      const result = await createMutation.mutateAsync({
+        name: newName.trim(),
+        created_at: toIsoDateTime(newDate),
+        description: newDescription.trim(),
+      });
+      // /geometry/new and /geometry/:id share a route, so this navigate does NOT
+      // remount the component — leave the create tab and clear the form explicitly,
+      // otherwise the create panel stays up and a second click creates a duplicate.
+      setActiveTab('global-properties');
+      setNewName('');
+      setNewDate(todayISO());
+      setNewDescription('');
+      navigate(`/geometry/${result.id}`, { replace: true });
+    } catch {
+      // createMutation.isError already surfaces the failure in the UI — stay on this tab.
+    }
+  }
+
+  async function handleUpdateGeneral() {
+    if (!newName.trim() || !newDate || !newDescription.trim() || !baseline) return;
+    if (newName === baseline.name && newDate === baseline.date && newDescription === baseline.description) {
+      return;
+    }
+    await updateGeneralMutation.mutateAsync({
+      name: newName.trim(),
+      created_at: toIsoDateTime(newDate),
+      description: newDescription.trim(),
+    });
+    setBaseline({ name: newName, date: newDate, description: newDescription });
+  }
+
+  async function handleSaveGlobalProperties() {
+    await updateSettingsMutation.mutateAsync({
+      settings: [
+        { reference: 'nominal_radius', value: props.nominalRadius },
+        { reference: 'root_radius', value: props.rootRadius },
+        { reference: 'airfoil_orientation', value: AIRFOIL_ORIENTATION },
+        { reference: 'airfoil_drawing_plane', value: AIRFOIL_DRAWING_PLANE },
+        { reference: 'stacking_line', value: props.stackingLine },
+        { reference: 'blade_number', value: props.bladeNumber },
+      ],
+    });
+  }
+
+  async function handleSaveProfiles(profiles: Profile[]) {
+    await updateProfilesMutation.mutateAsync({ profiles: profiles.map(toApiProfile) });
+  }
+
+  async function handleSaveProfileGeneratorParams(params: ProfileGeneratorParameters) {
+    await updateGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
+    setSavedProfileParams(params);
+  }
+
+  async function handleGenerateProfiles(params: ProfileGeneratorParameters) {
+    await runGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
+    setSavedProfileParams(params);
+  }
+
+  // Generate profiles from the distribution curves, persist them via
+  // PUT /geometry/:id/profiles/, then move on to the Profiles tab.
+  async function handleSaveAndNextDistribution(params: ProfileGeneratorParameters) {
+    const { profiles } = await runGeneratorMutation.mutateAsync({
+      geometryId,
+      payload: { profile_generator_parameters: params },
+    });
+    await updateProfilesMutation.mutateAsync({ profiles });
+    setSavedProfileParams(params);
+    setHydratedProfiles(profiles.map((p, i) => toUiProfile({ ...p, id: i, file: null })));
+    setActiveTab('profiles');
+  }
+
+  async function handleSaveEdges(edges: GeometryEdgeInput[]) {
+    await updateEdgesMutation.mutateAsync({ edges });
+  }
+
+  // GET /geometry/:id/result/ returns binary mesh data, not JSON — in
+  // practice either an ASCII/binary STL or a zip-based 3MF package (both
+  // unitless: vertices are fractions of nominal_radius). Fetched as an
+  // ArrayBuffer and handed to OccViewer, which sniffs the actual format and
+  // scales the result by the geometry's nominal_radius.
+  async function handleGenerateResult() {
+    setResultRequested(true);
+    setResultStatus('loading');
+    setResultError(null);
+    try {
+      // CAD kernel generation can take a while — well past the default 10s timeout.
+      const { data } = await apiClient.get<ArrayBuffer>(`/geometry/${geometryId}/result/`, {
+        responseType: 'arraybuffer',
+        timeout: 120_000,
+      });
+      setResultScale(Number(props.nominalRadius) || 1);
+      setResultStl(data);
+    } catch (err) {
+      // responseType: 'arraybuffer' means even a JSON error body decodes to raw
+      // bytes here, not text — getApiErrorMessage can't read it, so this stays
+      // on the per-status friendly text instead of the backend's own message.
+      const status = isAxiosError(err) ? err.response?.status : undefined;
+      const message =
+        status === 409
+          ? 'Geometry is invalid or incomplete (needs at least 2 profiles and a valid spline).'
+          : status === 403
+            ? 'You do not have permission to generate this result.'
+            : status === 404
+              ? 'Geometry not found.'
+              : status === 500
+                ? 'Result generation failed on the server.'
+                : 'Failed to generate. Please try again.';
+      setResultError(message);
+      toast.error(message);
+      setResultStatus('error');
+    }
   }
 
   function handleExit() {
-    if (!isNew && geometry) {
-      // Touch lastUpdated to signal it was worked on (physics props aren't in the data model yet)
-      updateGeometry(geometry.id, {});
-    }
     navigate('/geometry');
   }
 
@@ -255,205 +304,113 @@ export function GeometryEdit() {
       {/* Body: full-bleed 3D scene with floating overlays (incl. sub-toolbar) */}
       <main className="relative flex-1 overflow-hidden">
         {/* Three.js canvas fills the whole body, including under the sub-toolbar */}
-        <OccViewer wireframe={renderMode === 'wireframe'} />
+        <OccViewer
+          wireframe={renderMode === 'wireframe'}
+          stlData={resultStl}
+          stlScale={resultScale}
+          onStatusChange={setResultStatus}
+        />
 
-        {/* Floating sub-toolbar — transparent bg so the canvas shows through.
-            Title is absolutely positioned at viewport center, independent of
-            left/right element widths. */}
-        <div className="absolute inset-x-0 top-0 z-30 h-[52px]">
-          <div className="absolute inset-y-0 left-4 flex items-center">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-9">
-              <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6]/95 p-[3px] backdrop-blur-sm">
-                {[
-                  { value: 'create', label: 'Project configuration' },
-                  { value: 'global-properties', label: 'Global properties' },
-                  { value: 'profile-distribution', label: 'Profile distribution' },
-                  { value: 'profiles', label: 'Profiles' },
-                  { value: 'stacking', label: 'Stacking' },
-                  { value: 'spars', label: 'Spars' },
-                ].map((tab) => (
-                  <TabsTrigger
-                    key={tab.value}
-                    value={tab.value}
-                    disabled={isNew && tab.value !== 'create'}
-                    className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] disabled:pointer-events-none disabled:opacity-40"
-                  >
-                    {tab.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </div>
-
-          <h1 className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
-            {name}
-          </h1>
-
-          <div className="absolute inset-y-0 right-4 flex items-center gap-4">
-            {!isNew && (
-              <div className="flex items-center gap-[6px]">
-                <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-                <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
-              </div>
-            )}
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                aria-label="Undo"
-                className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-              >
-                <Undo2 className="h-4 w-4" strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                aria-label="Redo"
-                className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-              >
-                <Redo2 className="h-4 w-4" strokeWidth={2} />
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={handleExit}
-              className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
-            >
-              Back to Geometries
-            </button>
-          </div>
-        </div>
+        <GeometryEditToolbar activeTab={activeTab} onTabChange={setActiveTab} isNew={isNew} onExit={handleExit} />
 
         {/* Floating properties panel (top-left, gap below toolbar matches gap above tab pill = 8px).
             Width depends on the active tab. z-30 so it sits above the render toggle (z-20). */}
         <aside
-          className={`absolute left-4 top-[52px] z-30 ${
-            activeTab === 'create'
-              ? 'w-[468px] max-w-[calc(100vw-2rem)]'
-              : activeTab === 'profile-distribution'
-                ? profileFolded
-                  ? 'w-[516px] max-w-[calc(100vw-2rem)]'
-                  : 'w-[924px] max-w-[calc(100vw-2rem)]'
-                : activeTab === 'profiles'
-                  ? 'w-[404px] max-w-[calc(100vw-2rem)]'
-                  : activeTab === 'stacking'
-                    ? stackingFolded
-                      ? 'w-[516px] max-w-[calc(100vw-2rem)]'
-                      : 'w-[924px] max-w-[calc(100vw-2rem)]'
-                    : 'w-[280px]'
-          }`}
+          className={`absolute left-4 top-[52px] z-30 ${getPanelWidthClass(activeTab, profileFolded, stackingFolded)}`}
         >
-          {activeTab === 'create' && (
-            <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
-              <div className="flex flex-col gap-1">
-                <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">
-                  Project configuration
-                </p>
-                <p className="text-[13px] leading-5 text-[#6b7280]">
-                  Your selection defines the starting geometry, which can be fully customized in the next steps.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                  Blade type<span className="text-[#dc2626]">*</span>
-                </Label>
-                <Tip label={!isNew ? 'Cannot be changed after creation' : ''}>
-                  <Select value={newBladeType} onChange={setNewBladeType} options={BLADE_TYPES} disabled={!isNew} />
-                </Tip>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                  Manufacturing technology
-                </Label>
-                <Tip label={!isNew ? 'Cannot be changed after creation' : ''}>
-                  <Select value={newManufacturing} onChange={setNewManufacturing} options={MANUFACTURING_TECHNOLOGIES} disabled={!isNew} />
-                </Tip>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                  Name<span className="text-[#dc2626]">*</span>
-                </Label>
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Geometry name"
-                  className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">Description</Label>
-                <Textarea
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder="Optional description"
-                  rows={2}
-                  className="min-h-[60px] rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-                />
-              </div>
-
-              {isNew && (
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <Link
-                    to="/geometry"
-                    className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-                  >
-                    Cancel
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={handleCreate}
-                    disabled={!newBladeType || !newName.trim()}
-                    className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
-                  >
-                    Create
-                  </button>
-                </div>
-              )}
+          {activeTab === 'create' && !isNew && !hydrated && (detailQuery.isLoading || detailQuery.isFetching) && (
+            <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+              <p className="text-[14px] text-[#6b7280]">Loading geometry…</p>
             </div>
+          )}
+          {activeTab === 'create' && !isNew && detailQuery.isError && (
+            <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+              <p className="text-[14px] text-[#dc2626]">Failed to load this geometry from the server.</p>
+            </div>
+          )}
+          {activeTab === 'create' && (isNew || (hydrated && !detailQuery.isError)) && (
+            <GeometryCreatePanel
+              isNew={isNew}
+              name={newName}
+              onNameChange={setNewName}
+              date={newDate}
+              onDateChange={setNewDate}
+              description={newDescription}
+              onDescriptionChange={setNewDescription}
+              hasError={createMutation.isError || updateGeneralMutation.isError}
+              onCreate={handleCreate}
+              creating={createMutation.isPending}
+              onUpdate={handleUpdateGeneral}
+              updating={updateGeneralMutation.isPending}
+            />
           )}
 
           {activeTab === 'global-properties' && !isNew && (
-            <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
-              <FormField
-                label="Nominal radius (m)"
-                value={props.nominalRadius}
-                onChange={(v) => updateField('nominalRadius', v)}
-              />
-              <FormField
-                label="Root radius (%)"
-                value={props.rootRadius}
-                onChange={(v) => updateField('rootRadius', v)}
-              />
-              <FormField
-                label="Stacking reference"
-                value={props.stackingReference}
-                onChange={(v) => updateField('stackingReference', v)}
-              />
-              <p className="text-[14px] leading-5 text-[#6b7280]">
-                Defines the longitudinal position along the chord line where the blade sections are
-                aligned. A value of 0 represents the leading edge, while 1 represents the trailing
-                edge. This setting determines the structural balance and aerodynamic center of the
-                blade.
-              </p>
-            </div>
+            <GeometryGlobalPropertiesPanel
+              props={props}
+              onFieldChange={updateField}
+              airfoilOrientation={AIRFOIL_ORIENTATION}
+              airfoilDrawingPlane={AIRFOIL_DRAWING_PLANE}
+              onSave={handleSaveGlobalProperties}
+              saving={updateSettingsMutation.isPending}
+              saveError={updateSettingsMutation.isError}
+            />
           )}
           {activeTab === 'profile-distribution' && (
             <ProfileDistributionPanel
               folded={profileFolded}
               onFoldToggle={() => setProfileFolded((f) => !f)}
+              rootRadiusPercent={props.rootRadius}
+              initialParameters={savedProfileParams}
+              onSaveParameters={handleSaveProfileGeneratorParams}
+              onGenerate={handleGenerateProfiles}
+              onSaveAndNext={handleSaveAndNextDistribution}
+              saving={updateGeneratorMutation.isPending}
+              generating={runGeneratorMutation.isPending}
+              savingAndNext={runGeneratorMutation.isPending || updateProfilesMutation.isPending}
+              saveError={updateGeneratorMutation.isError}
+              generateError={runGeneratorMutation.isError}
+              saveAndNextError={runGeneratorMutation.isError || updateProfilesMutation.isError}
             />
           )}
-          {activeTab === 'profiles' && <ProfilesPanel />}
+          {activeTab === 'profiles' && (
+            <ProfilesPanel
+              geometryId={geometryId}
+              initialProfiles={hydratedProfiles ?? undefined}
+              onSave={handleSaveProfiles}
+              saving={updateProfilesMutation.isPending}
+              saveError={updateProfilesMutation.isError}
+            />
+          )}
           {activeTab === 'stacking' && (
-            <StackingPanel folded={stackingFolded} onFoldToggle={() => setStackingFolded((f) => !f)} />
+            <StackingPanel
+              folded={stackingFolded}
+              onFoldToggle={() => setStackingFolded((f) => !f)}
+              initialEdges={edgesQuery.data?.edges}
+              rootRadiusPercent={props.rootRadius}
+              nominalRadius={Number(props.nominalRadius) || 1}
+              onSave={handleSaveEdges}
+              saving={updateEdgesMutation.isPending}
+              saveError={updateEdgesMutation.isError}
+            />
+          )}
+          {activeTab === 'spars' && (
+            <div className="flex flex-col gap-4">
+              <SparsSection geometryId={geometryId} />
+              <GeometryResultPanel
+                onGenerate={handleGenerateResult}
+                requested={resultRequested}
+                status={resultStatus}
+                error={resultError}
+              />
+            </div>
           )}
           {activeTab !== 'create' &&
             activeTab !== 'global-properties' &&
             activeTab !== 'profile-distribution' &&
             activeTab !== 'profiles' &&
-            activeTab !== 'stacking' && (
+            activeTab !== 'stacking' &&
+            activeTab !== 'spars' && (
             <div className="flex flex-col items-center justify-center gap-2 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
               <p className="text-[14px] font-semibold text-[#0a0a0a]">
                 {activeTab.replace('-', ' ').replace(/^./, (c) => c.toUpperCase())}

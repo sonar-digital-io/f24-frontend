@@ -1,262 +1,235 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Check, Undo2, Redo2 } from 'lucide-react';
-import { MainNav } from '@/components/MainNav';
-import { PropertyFormTab } from '@/components/PropertyFormTab';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MECHANICAL_SECTIONS, FATIGUE_SECTIONS } from '@/data/materialFormFields';
-import { MATERIALS, createMaterial, updateMaterial } from '@/data/materials';
+import { useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { MainNav } from '@/components/common/layout/MainNav';
+import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
+import { PropertyFormTab } from '@/components/material/PropertyFormTab';
+import { MaterialGeneralTab } from '@/components/material/MaterialGeneralTab';
+import { MECHANICAL_SECTIONS } from '@/data/materialFormFields';
+import { FATIGUE_SECTIONS } from '@/data/materialFatigueFields';
+import {
+  useCreateMaterial,
+  useMaterialDetail,
+  useUpdateMaterial,
+  useUpdateMechanicalProperties,
+  useUpdateFatigueProperties,
+} from '@/hooks/api/useMaterials';
+import { useHydrateOnce } from '@/hooks/useHydrateOnce';
+import { MECH_PROP_TYPE_REFERENCE, toKeyValueList, toValueMap, keyValueSignature } from '@/lib/materialFormMapping';
+import type { MaterialPayload } from '@/api/types/materials';
+import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
-const MATERIAL_TYPES = [
-  'UD ply',
-  'Biaxial Ply (±45°)',
-  'Consolidated Ply',
-  'Hybrid Ply',
-  'Random Mat Ply',
-  'Surface Ply',
-  'Core (PET Foam)',
-  'Core (Balsa)',
+const TABS = [
+  { value: 'general', label: 'General' },
+  { value: 'mechanical', label: 'Mechanical properties' },
+  { value: 'fatigue', label: 'Fatigue properties' },
 ];
 
-interface SelectProps {
-  value: string;
-  onChange: (value: string) => void;
-  options: string[];
-  placeholder?: string;
-}
-
-function Select({ value, onChange, options, placeholder = 'Select…' }: SelectProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-[#e2e8f0] bg-white px-3 py-1 text-left text-[14px] font-normal text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#f9fafb] focus:outline-none focus:ring-2 focus:ring-[#006496] focus:ring-offset-1"
-      >
-        <span className={value ? 'text-[#0a0a0a]' : 'text-[#6b7280]'}>
-          {value || placeholder}
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 text-[#6b7280] transition-transform ${open ? 'rotate-180' : ''}`}
-          strokeWidth={2}
-        />
-      </button>
-      {open && (
-        <ul
-          role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-64 overflow-y-auto rounded-md border border-[#e5e7eb] bg-white py-1 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"
-        >
-          {options.map((opt) => {
-            const selected = opt === value;
-            return (
-              <li key={opt} role="option" aria-selected={selected}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange(opt);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-[14px] leading-5 ${
-                    selected ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <span>{opt}</span>
-                  {selected && <Check className="h-4 w-4" strokeWidth={2} />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
+interface Baseline {
+  name: string;
+  description: string;
+  date: string;
+  mechValues: Record<string, string>;
+  fatigueValues: Record<string, string>;
 }
 
 export function MaterialNew() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const existing = id ? MATERIALS.find((m) => m.id === id) : undefined;
+  const [searchParams] = useSearchParams();
+  const isEditing = Boolean(id);
+  const materialId = id ? Number(id) : NaN;
+  const duplicateFromRaw = !isEditing ? searchParams.get('duplicateFrom') : null;
+  const duplicateSourceId = duplicateFromRaw ? Number(duplicateFromRaw) : NaN;
 
-  const [name, setName] = useState(existing?.name ?? '');
-  const [type, setType] = useState(existing?.type ?? 'UD ply');
-  const [description, setDescription] = useState(existing?.description ?? '');
+  const detailQuery = useMaterialDetail(materialId);
+  const duplicateQuery = useMaterialDetail(duplicateSourceId);
+  const createMaterialMutation = useCreateMaterial();
+  const updateGeneralMutation = useUpdateMaterial(materialId);
+  const updateMechanicalMutation = useUpdateMechanicalProperties(materialId);
+  const updateFatigueMutation = useUpdateFatigueProperties(materialId);
+
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [date, setDate] = useState(todayISO());
   const [activeTab, setActiveTab] = useState('general');
-  const [mechValues, setMechValues] = useState<Record<string, string>>({});
+  const [mechValues, setMechValues] = useState<Record<string, string>>({
+    [MECH_PROP_TYPE_REFERENCE]: 'UD ply',
+  });
   const [fatigueValues, setFatigueValues] = useState<Record<string, string>>({});
+  const [baseline, setBaseline] = useState<Baseline | null>(null);
+
+  const type = mechValues[MECH_PROP_TYPE_REFERENCE] ?? 'UD ply';
+  function setType(value: string) {
+    setMechValues((prev) => ({ ...prev, [MECH_PROP_TYPE_REFERENCE]: value }));
+  }
+
+  // Populate the form once the (forced, never-cached) detail fetch settles, and record a
+  // baseline snapshot so saving can tell which of the 3 tabs actually changed. Waiting on
+  // `isFetching` — not just `data` — means we never hydrate from a stale cache hit that
+  // React Query may return synchronously before the real network refetch resolves.
+  const hydrated = useHydrateOnce(isEditing && !detailQuery.isFetching && !!detailQuery.data, () => {
+    const m = detailQuery.data!;
+    const hydratedDescription = m.description ?? '';
+    const hydratedDate = toDateInputValue(m.date);
+    const hydratedMech = toValueMap(m.mechanical_properties);
+    const hydratedFatigue = toValueMap(m.fatigue_properties);
+    setName(m.name);
+    setDescription(hydratedDescription);
+    setDate(hydratedDate);
+    setMechValues(hydratedMech);
+    setFatigueValues(hydratedFatigue);
+    setBaseline({
+      name: m.name,
+      description: hydratedDescription,
+      date: hydratedDate,
+      mechValues: hydratedMech,
+      fatigueValues: hydratedFatigue,
+    });
+  });
+
+  // Duplicate: prefill a NEW (create-mode) form from another material's data, with
+  // "_copy" appended to the name. No baseline needed — Save always does a plain POST here.
+  const duplicateHydrated = useHydrateOnce(
+    !isEditing && Number.isFinite(duplicateSourceId) && !duplicateQuery.isFetching && !!duplicateQuery.data,
+    () => {
+      const m = duplicateQuery.data!;
+      setName(`${m.name}_copy`);
+      setDescription(m.description ?? '');
+      setDate(toDateInputValue(m.date));
+      setMechValues(toValueMap(m.mechanical_properties));
+      setFatigueValues(toValueMap(m.fatigue_properties));
+    }
+  );
 
   // Title: editing shows the material name everywhere; creating shows "New material" on General.
-  const titleText = existing
-    ? name || existing.name
+  const titleText = isEditing
+    ? name || 'Loading…'
     : activeTab === 'general'
       ? 'New material'
       : name || 'New material';
 
-  function handleGeneralSubmit() {
-    if (existing) {
-      updateMaterial(existing.id, { name, type, description });
+  const savePending =
+    createMaterialMutation.isPending ||
+    updateGeneralMutation.isPending ||
+    updateMechanicalMutation.isPending ||
+    updateFatigueMutation.isPending;
+  const saveError =
+    createMaterialMutation.isError ||
+    updateGeneralMutation.isError ||
+    updateMechanicalMutation.isError ||
+    updateFatigueMutation.isError;
+
+  /**
+   * Creating sends one POST with everything. Editing calls only the endpoints whose
+   * tab actually changed: PUT /material/:id/ (general — name/date/description), PUT
+   * .../mechanical-properties/ (mechanical tab, including Type as the "mech_prop_type"
+   * entry), PUT .../fatigue-properties/ (fatigue tab).
+   */
+  async function handleSave() {
+    if (!isEditing) {
+      const payload: MaterialPayload = {
+        name,
+        date: toIsoDateTime(date),
+        description,
+        mechanical_properties: toKeyValueList(mechValues),
+        fatigue_properties: toKeyValueList(fatigueValues),
+      };
+      await createMaterialMutation.mutateAsync(payload);
       navigate('/material');
       return;
     }
-    // Mock stand-in for a POST: append to the list, then open the new material.
-    const material = createMaterial({ name, type, description });
-    navigate(`/material/${material.id}`);
-  }
 
-  /** Save (create or update) then go back to the list — called by Exit edit mode. */
-  function handleExit() {
-    if (existing) {
-      updateMaterial(existing.id, { name, type, description });
-    } else if (name.trim()) {
-      createMaterial({ name, type, description });
+    if (!baseline) return;
+
+    const generalChanged =
+      name !== baseline.name || date !== baseline.date || description !== baseline.description;
+    const mechanicalChanged = keyValueSignature(mechValues) !== keyValueSignature(baseline.mechValues);
+    const fatigueChanged = keyValueSignature(fatigueValues) !== keyValueSignature(baseline.fatigueValues);
+
+    const tasks: Promise<unknown>[] = [];
+    if (generalChanged) {
+      tasks.push(updateGeneralMutation.mutateAsync({ name, date: toIsoDateTime(date), description }));
+    }
+    if (mechanicalChanged) {
+      tasks.push(updateMechanicalMutation.mutateAsync({ mechanical_properties: toKeyValueList(mechValues) }));
+    }
+    if (fatigueChanged) {
+      tasks.push(updateFatigueMutation.mutateAsync({ fatigue_properties: toKeyValueList(fatigueValues) }));
+    }
+
+    if (tasks.length > 0) {
+      await Promise.all(tasks);
     }
     navigate('/material');
   }
+
+  function handleExit() {
+    navigate('/material');
+  }
+
+  const isDuplicating = !isEditing && Number.isFinite(duplicateSourceId);
+  const showLoadingState =
+    (isEditing && !hydrated && (detailQuery.isLoading || detailQuery.isFetching)) ||
+    (isDuplicating && !duplicateHydrated && (duplicateQuery.isLoading || duplicateQuery.isFetching));
+  const showLoadErrorState = (isEditing && detailQuery.isError) || (isDuplicating && duplicateQuery.isError);
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f8fafc]">
       <MainNav />
 
-      {/* Sub-toolbar row: tabs + title + actions */}
-      <div className="relative flex h-[52px] w-full shrink-0 items-center justify-between bg-[#f8fafc] px-4 py-2">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-9 shrink-0">
-          <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
-            <TabsTrigger
-              value="general"
-              className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
-            >
-              General
-            </TabsTrigger>
-            <TabsTrigger
-              value="mechanical"
-              className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
-            >
-              Mechanical properties
-            </TabsTrigger>
-            <TabsTrigger
-              value="fatigue"
-              className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)]"
-            >
-              Fatigue properties
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <h1 className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
-          {titleText}
-        </h1>
-
-        <div className="flex shrink-0 items-center gap-4">
-          <div className="flex items-center gap-[6px]">
-            <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-            <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
-          </div>
-          <div className="flex items-center gap-1">
+      <EditPageToolbar
+        tabs={TABS}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        title={titleText}
+        backLabel="Back to Materials"
+        onBack={handleExit}
+        actions={
+          activeTab === 'fatigue' &&
+          !showLoadingState &&
+          !showLoadErrorState && (
             <button
               type="button"
-              aria-label="Undo"
-              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9] text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
+              onClick={handleSave}
+              disabled={!name.trim() || !description.trim() || !date || savePending}
+              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Undo2 className="h-4 w-4" strokeWidth={2} />
+              {savePending ? 'Saving…' : isEditing ? 'Update material' : 'Create material'}
             </button>
-            <button
-              type="button"
-              aria-label="Redo"
-              className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9] text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-            >
-              <Redo2 className="h-4 w-4" strokeWidth={2} />
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={handleExit}
-            className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9] px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#e2e8f0]"
-          >
-            Back to Materials
-          </button>
-        </div>
-      </div>
+          )
+        }
+      />
+      {saveError && (
+        <p className="px-4 text-[13px] text-[#dc2626]">
+          Failed to {isEditing ? 'update' : 'create'} material. Please try again.
+        </p>
+      )}
 
       {/* Main content area */}
       <main className="flex-1 overflow-hidden px-4 pb-6 pt-4">
-        {activeTab === 'general' && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleGeneralSubmit();
-            }}
-            className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
-          >
-            <div className="flex w-full flex-col gap-2">
-              <Label
-                htmlFor="material-name"
-                className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-              >
-                Name<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Input
-                id="material-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="ST-UD-C600-EP"
-                required
-                className="h-9 rounded-md border-[#e2e8f0] bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-
-            <div className="flex w-full flex-col gap-2">
-              <Label className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-                Type<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Select value={type} onChange={setType} options={MATERIAL_TYPES} />
-            </div>
-
-            <div className="flex w-full flex-col gap-2">
-              <Label
-                htmlFor="material-description"
-                className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-              >
-                Description<span className="text-[#dc2626]">*</span>
-              </Label>
-              <Textarea
-                id="material-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Carbon/Epoxy UD lamina. Fiber: Toray T700 (600gsm). Matrix: ST-Epoxy-Standard."
-                required
-                rows={4}
-                className="min-h-[98px] rounded-md border-[#e2e8f0] bg-white px-3 py-2 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-              />
-            </div>
-          </form>
+        {showLoadingState && (
+          <p className="px-2 py-8 text-center text-[14px] text-[#6b7280]">Loading material…</p>
+        )}
+        {showLoadErrorState && (
+          <p className="px-2 py-8 text-center text-[14px] text-[#dc2626]">
+            Failed to load this material from the server.
+          </p>
         )}
 
-        {activeTab === 'mechanical' && (
+        {!showLoadingState && !showLoadErrorState && activeTab === 'general' && (
+          <MaterialGeneralTab
+            name={name}
+            onNameChange={setName}
+            type={type}
+            onTypeChange={setType}
+            date={date}
+            onDateChange={setDate}
+            description={description}
+            onDescriptionChange={setDescription}
+          />
+        )}
+
+        {!showLoadingState && !showLoadErrorState && activeTab === 'mechanical' && (
           <PropertyFormTab
             sections={MECHANICAL_SECTIONS}
             values={mechValues}
@@ -265,7 +238,7 @@ export function MaterialNew() {
           />
         )}
 
-        {activeTab === 'fatigue' && (
+        {!showLoadingState && !showLoadErrorState && activeTab === 'fatigue' && (
           <PropertyFormTab
             sections={FATIGUE_SECTIONS}
             values={fatigueValues}

@@ -1,0 +1,70 @@
+import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
+
+/** First page, a window around the current page, and the last page —
+ *  with ellipses where pages are skipped. */
+function pageWindow(page: number, totalPages: number): (number | 'ellipsis')[] {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  const pages: (number | 'ellipsis')[] = [1];
+  const start = Math.max(2, page - 1);
+  const end = Math.min(totalPages - 1, page + 1);
+  if (start > 2) pages.push('ellipsis');
+  for (let p = start; p <= end; p++) pages.push(p);
+  if (end < totalPages - 1) pages.push('ellipsis');
+  pages.push(totalPages);
+  return pages;
+}
+
+interface PaginationProps {
+  page: number;
+  totalPages: number;
+  onChange: (page: number) => void;
+}
+
+export function Pagination({ page, totalPages, onChange }: PaginationProps) {
+  return (
+    <nav aria-label="Pagination" className="flex h-9 items-center justify-end gap-1">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(1, page - 1))}
+        disabled={page === 1}
+        className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-[14px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:opacity-50"
+      >
+        <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+        Previous
+      </button>
+      {pageWindow(page, totalPages).map((p, idx) =>
+        p === 'ellipsis' ? (
+          <span
+            key={`ellipsis-${idx}`}
+            className="flex h-9 w-9 items-center justify-center text-[#6b7280]"
+          >
+            <MoreHorizontal className="h-4 w-4" strokeWidth={2} />
+          </span>
+        ) : (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(p)}
+            aria-current={p === page ? 'page' : undefined}
+            className={`flex h-9 w-9 items-center justify-center rounded-md text-[14px] font-medium ${
+              p === page
+                ? 'border border-[#e5e7eb] bg-white text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]'
+                : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
+            }`}
+          >
+            {p}
+          </button>
+        )
+      )}
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(totalPages, page + 1))}
+        disabled={page === totalPages}
+        className="inline-flex h-9 items-center gap-1 rounded-md px-3 text-[14px] font-medium text-[#0a0a0a] hover:bg-[#f1f5f9] disabled:opacity-50"
+      >
+        Next
+        <ChevronRight className="h-4 w-4" strokeWidth={2} />
+      </button>
+    </nav>
+  );
+}
