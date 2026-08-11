@@ -55,15 +55,52 @@ export function perimeterLabel(frac: number, leFrac: number): string {
   return frac < leFrac ? `Upper ${frac.toFixed(2)}` : `Lower ${(1 - frac).toFixed(2)}`;
 }
 
-/** Extract path points from pre-computed SVG-offset point array. */
-export function getSegPts(
+/** Point on the contour at an exact perimeter fraction, interpolated between
+ *  its two bracketing samples — used so a segment's endpoints land precisely
+ *  where the mapping says, instead of snapping to the nearest sampled point
+ *  (which is what `fracToIdx` alone gives, and where those segments used to
+ *  visibly cut a corner short of their real position). */
+export function interpolateAtFraction(
+  pts: [number, number][],
+  arcFracs: number[],
+  frac: number,
+): [number, number] {
+  const n = pts.length;
+  if (n === 0) return [0, 0];
+  if (frac <= arcFracs[0]) return pts[0];
+  if (frac >= arcFracs[n - 1]) return pts[n - 1];
+  const idx = fracToIdx(arcFracs, frac);
+  const prevIdx = Math.max(0, idx - 1);
+  const f0 = arcFracs[prevIdx];
+  const f1 = arcFracs[idx];
+  const t = f1 === f0 ? 0 : (frac - f0) / (f1 - f0);
+  const [x0, y0] = pts[prevIdx];
+  const [x1, y1] = pts[idx];
+  return [x0 + (x1 - x0) * t, y0 + (y1 - y0) * t];
+}
+
+/**
+ * Points tracing the arc between two perimeter fractions (0..1) along a
+ * closed contour — endpoints are the exact interpolated fraction, not the
+ * nearest sample; wraps through the 0/1 seam only when `endFrac < startFrac`.
+ */
+export function buildArcPoints(
   svgPts: [number, number][],
-  lo: number,
-  hi: number,
-  wrap: boolean,
+  arcFracs: number[],
+  startFrac: number,
+  endFrac: number,
 ): [number, number][] {
-  if (!wrap) return svgPts.slice(lo, hi + 1);
-  return [...svgPts.slice(hi), ...svgPts.slice(0, lo + 1)];
+  const wrap = endFrac < startFrac;
+  const lo = Math.min(startFrac, endFrac);
+  const hi = Math.max(startFrac, endFrac);
+  const loPt = interpolateAtFraction(svgPts, arcFracs, lo);
+  const hiPt = interpolateAtFraction(svgPts, arcFracs, hi);
+  const loIdx = fracToIdx(arcFracs, lo);
+  const hiIdx = fracToIdx(arcFracs, hi);
+  if (!wrap) {
+    return [loPt, ...svgPts.slice(loIdx, hiIdx), hiPt];
+  }
+  return [hiPt, ...svgPts.slice(hiIdx), ...svgPts.slice(0, loIdx), loPt];
 }
 
 export function segD(pts: [number, number][]): string {

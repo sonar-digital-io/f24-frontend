@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useDraggablePosition } from '@/hooks/useDraggablePosition';
 import {
   offsetSvgPts,
   computeArcFractions,
-  fracToIdx,
   perimeterLabel,
-  getSegPts,
+  buildArcPoints,
   segD,
   fitPointsToSvg,
 } from '@/lib/crossSectionGeometry';
@@ -23,12 +23,9 @@ interface CsRing {
   /** Value shown in the End position table column */
   displayEnd: number;
   endLockedTo: string;
-  /** First allPts index of the segment */
-  segLo: number;
-  /** Last allPts index of the segment */
-  segHi: number;
-  /** True when the segment wraps around the 0/1 perimeter-fraction seam */
-  wrapArc: boolean;
+  /** Perimeter fractions (0..1) the arc runs between. */
+  startFrac: number;
+  endFrac: number;
   color: string;
   /** Inward perpendicular offset in SVG-viewport units */
   svgOffset: number;
@@ -75,6 +72,10 @@ const RING_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#e11d48', '#8b5cf6', '#08
 
 export function CrossSectionDialog({ profileName, points, entries, onClose }: CrossSectionDialogProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const { pos, startDrag } = useDraggablePosition(() => ({
+    x: Math.max(0, (window.innerWidth - 900) / 2),
+    y: Math.max(0, window.innerHeight * 0.05),
+  }));
 
   useEscapeKey(onClose);
 
@@ -85,26 +86,19 @@ export function CrossSectionDialog({ profileName, points, entries, onClose }: Cr
   const halfN = Math.floor((svgBasePts.length - 1) / 2);
   const leFrac = arcFracs[halfN];
 
-  const rings: CsRing[] = entries.map((entry, i) => {
-    const idxA = fracToIdx(arcFracs, entry.startFrac);
-    const idxB = fracToIdx(arcFracs, entry.endFrac);
-    const lo = Math.min(idxA, idxB);
-    const hi = Math.max(idxA, idxB);
-    return {
-      id: entry.id,
-      badge: entry.name || `segment${i + 1}`,
-      layupName: entry.layupName,
-      displayStart: entry.startFrac,
-      startLockedTo: entry.startLockedToLabel ?? perimeterLabel(entry.startFrac, leFrac),
-      displayEnd: entry.endFrac,
-      endLockedTo: entry.endLockedToLabel ?? perimeterLabel(entry.endFrac, leFrac),
-      segLo: lo,
-      segHi: hi,
-      wrapArc: entry.endFrac < entry.startFrac,
-      color: RING_COLORS[i % RING_COLORS.length],
-      svgOffset: (i + 1) * RING_OFFSET,
-    };
-  });
+  const rings: CsRing[] = entries.map((entry, i) => ({
+    id: entry.id,
+    badge: entry.name || `segment${i + 1}`,
+    layupName: entry.layupName,
+    displayStart: entry.startFrac,
+    startLockedTo: entry.startLockedToLabel ?? perimeterLabel(entry.startFrac, leFrac),
+    displayEnd: entry.endFrac,
+    endLockedTo: entry.endLockedToLabel ?? perimeterLabel(entry.endFrac, leFrac),
+    startFrac: entry.startFrac,
+    endFrac: entry.endFrac,
+    color: RING_COLORS[i % RING_COLORS.length],
+    svgOffset: (i + 1) * RING_OFFSET,
+  }));
 
   // Render order: outermost ring first (underneath), innermost last (on top)
   const renderRings = [...rings].sort((a, b) => a.svgOffset - b.svgOffset);
@@ -121,10 +115,16 @@ export function CrossSectionDialog({ profileName, points, entries, onClose }: Cr
     'M ' + svgBasePts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' L ') + ' Z';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-      <div className="pointer-events-auto flex max-h-[90vh] w-[900px] max-w-[95vw] flex-col overflow-hidden rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.1),0px_8px_10px_-6px_rgba(0,0,0,0.1)]">
+    <div className="fixed z-50 pointer-events-none" style={{ left: pos.x, top: pos.y }}>
+      <div
+        className="pointer-events-auto flex max-h-[90vh] w-[900px] max-w-[95vw] select-none flex-col overflow-hidden rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.1),0px_8px_10px_-6px_rgba(0,0,0,0.1)]"
+        onMouseDown={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          startDrag(e);
+        }}
+      >
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#e5e7eb] px-6 py-4">
+        <div className="flex shrink-0 cursor-move items-center justify-between gap-2 border-b border-[#e5e7eb] px-6 py-4">
           <h2 className="text-[18px] font-semibold text-[#0a0a0a]">{profileName}</h2>
           <button
             type="button"
@@ -145,7 +145,7 @@ export function CrossSectionDialog({ profileName, points, entries, onClose }: Cr
           >
             {renderRings.map((entry) => {
               const svgPts = svgOffsetCache.get(entry.svgOffset)!;
-              const pts = getSegPts(svgPts, entry.segLo, entry.segHi, entry.wrapArc);
+              const pts = buildArcPoints(svgPts, arcFracs, entry.startFrac, entry.endFrac);
               if (pts.length < 2) return null;
               const isHovered = hoveredId === entry.id;
               const dimmed = hoveredId !== null && !isHovered;

@@ -539,10 +539,7 @@ export function CompositionNew() {
 
         {/* Always mounted — hidden instead of unmounted so internal state survives tab switches */}
         <div className={`pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto${activeTab !== 'transversal-mapping' ? ' hidden' : ''}`}>
-          <TransversalMappingSection
-            compositionId={compositionId}
-            useDefaultData={isEditing}
-          />
+          <TransversalMappingSection compositionId={compositionId} />
         </div>
 
         {activeTab === 'preview' && (

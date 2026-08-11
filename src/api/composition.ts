@@ -8,6 +8,7 @@ import type {
   CompositionCoreMaterialPayload,
   CompositionMappingLongitudinalPayload,
   CompositionMappingTransversalResponse,
+  CompositionMappingTransversalWritePayload,
   CompositionProfileIntersections,
   CompositionLayupSaveResponse,
 } from './types/composition';
@@ -56,8 +57,14 @@ export async function updateCompositionMappingLongitudinal(compositionId: number
   return data;
 }
 
-export async function updateCompositionMappingTransversal(compositionId: number, payload: unknown): Promise<unknown> {
-  const { data } = await apiClient.put(`/composition/${compositionId}/mapping/transversal/`, payload);
+export async function updateCompositionMappingTransversal(
+  compositionId: number,
+  payload: CompositionMappingTransversalWritePayload,
+): Promise<CompositionMappingTransversalResponse> {
+  const { data } = await apiClient.put<CompositionMappingTransversalResponse>(
+    `/composition/${compositionId}/mapping/transversal/`,
+    payload,
+  );
   return data;
 }
 

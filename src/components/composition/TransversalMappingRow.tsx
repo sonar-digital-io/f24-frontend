@@ -1,53 +1,64 @@
-import { ChevronRight, Spline, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { SelectField } from '@/components/composition/SelectField';
 
+/** One profile's own boundary spec — a mapping row carries one of these for
+ *  its start profile and one for its end profile (matching the backend's
+ *  per-profile `start_position`/`start_locked_to`/`end_position`/`end_locked_to`
+ *  shape exactly). `lockedTo` is a real intersection id on that profile, or
+ *  null ("Unlocked") to fall back to the nearest intersection by position. */
+export interface ProfileBoundary {
+  startPosition: number | null;
+  startLockedTo: number | null;
+  endPosition: number | null;
+  endLockedTo: number | null;
+}
+
+export const EMPTY_BOUNDARY: ProfileBoundary = {
+  startPosition: null,
+  startLockedTo: null,
+  endPosition: null,
+  endLockedTo: null,
+};
+
 export interface TransversalMapping {
   id: string;
+  /** Stable id sent as the backend's `group_id` — generated once, kept across edits. */
+  groupId: string;
   name: string;
   layupId: string | null;
-  startProfileId: string | null;
-  endProfileId: string | null;
-  chordStart: number;
-  chordEnd: number;
-  chordStartLock: string;
-  chordEndLock: string;
+  startProfileId: number | null;
+  endProfileId: number | null;
+  startProfileBoundary: ProfileBoundary;
+  endProfileBoundary: ProfileBoundary;
 }
 
 interface TransversalMappingRowProps {
   mapping: TransversalMapping;
-  layupLabel: string | undefined;
+  layupOptions: { value: string; label: string }[];
   profileOptions: { value: string; label: string }[];
   editingName: boolean;
   onStartEditingName: () => void;
   onStopEditingName: () => void;
   onUpdate: (next: Partial<TransversalMapping>) => void;
-  onPickLayup: () => void;
-  editingStart: boolean;
-  editingEnd: boolean;
-  onStartProfileChange: (profileId: string) => void;
-  onEndProfileChange: (profileId: string) => void;
-  onToggleEditStart: () => void;
-  onToggleEditEnd: () => void;
+  onEditStartProfile: () => void;
+  onEditEndProfile: () => void;
   onDelete: () => void;
 }
 
-/** One row of the transversal-mapping table. */
+/** One row of the transversal-mapping table — name/layup/start profile/end
+ *  profile pick inline; each profile's own boundary (position + locked-to,
+ *  drawn on its real cross-section) is edited in TransversalProfileBoundaryPopover. */
 export function TransversalMappingRow({
   mapping: m,
-  layupLabel,
+  layupOptions,
   profileOptions,
   editingName,
   onStartEditingName,
   onStopEditingName,
   onUpdate,
-  onPickLayup,
-  editingStart,
-  editingEnd,
-  onStartProfileChange,
-  onEndProfileChange,
-  onToggleEditStart,
-  onToggleEditEnd,
+  onEditStartProfile,
+  onEditEndProfile,
   onDelete,
 }: TransversalMappingRowProps) {
   return (
@@ -78,64 +89,43 @@ export function TransversalMappingRow({
         )}
       </td>
       <td className="px-2 py-2">
-        <button
-          type="button"
-          onClick={onPickLayup}
-          className={`flex h-8 w-full items-center justify-between gap-2 rounded-md border border-[#e2e8f0] bg-white px-2 py-1 text-left text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f9fafb] ${
-            layupLabel ? 'text-[#0a0a0a]' : 'text-[#6b7280]'
-          }`}
-        >
-          <span className="truncate">{layupLabel ?? 'Select'}</span>
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={1.5} />
-        </button>
+        <SelectField value={m.layupId ?? ''} onChange={(v) => onUpdate({ layupId: v })} options={layupOptions} placeholder="Select layup" />
       </td>
       <td className="px-2 py-2">
-        <div className="flex items-center gap-1">
-          <div className="min-w-0 flex-1">
-            <SelectField
-              value={m.startProfileId ?? ''}
-              onChange={onStartProfileChange}
-              options={profileOptions}
-              highlight={editingStart}
-            />
-          </div>
+        <div className="flex items-center gap-2">
+          <SelectField
+            value={m.startProfileId != null ? String(m.startProfileId) : ''}
+            onChange={(v) => onUpdate({ startProfileId: Number(v) })}
+            options={profileOptions}
+            placeholder="Select profile"
+          />
           <button
             type="button"
-            aria-label="Edit start profile"
-            disabled={!m.startProfileId}
-            onClick={onToggleEditStart}
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#e2e8f0] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:opacity-40 ${
-              editingStart
-                ? 'bg-[#006496] text-[#fafafa] hover:bg-[#005580]'
-                : 'bg-white text-[#6b7280] hover:bg-[#f1f5f9]'
-            }`}
+            onClick={onEditStartProfile}
+            disabled={m.startProfileId == null}
+            aria-label="Edit start profile boundary"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#eef9ff] text-[#006496] hover:bg-[#dcf1ff] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Spline className="h-3.5 w-3.5" strokeWidth={2} />
+            <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
         </div>
       </td>
       <td className="px-2 py-2">
-        <div className="flex items-center gap-1">
-          <div className="min-w-0 flex-1">
-            <SelectField
-              value={m.endProfileId ?? ''}
-              onChange={onEndProfileChange}
-              options={profileOptions}
-              highlight={editingEnd}
-            />
-          </div>
+        <div className="flex items-center gap-2">
+          <SelectField
+            value={m.endProfileId != null ? String(m.endProfileId) : ''}
+            onChange={(v) => onUpdate({ endProfileId: Number(v) })}
+            options={profileOptions}
+            placeholder="Select profile"
+          />
           <button
             type="button"
-            aria-label="Edit end profile"
-            disabled={!m.endProfileId}
-            onClick={onToggleEditEnd}
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#e2e8f0] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:opacity-40 ${
-              editingEnd
-                ? 'bg-[#006496] text-[#fafafa] hover:bg-[#005580]'
-                : 'bg-white text-[#6b7280] hover:bg-[#f1f5f9]'
-            }`}
+            onClick={onEditEndProfile}
+            disabled={m.endProfileId == null}
+            aria-label="Edit end profile boundary"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#eef9ff] text-[#006496] hover:bg-[#dcf1ff] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Spline className="h-3.5 w-3.5" strokeWidth={2} />
+            <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
         </div>
       </td>

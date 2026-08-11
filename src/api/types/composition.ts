@@ -137,3 +137,24 @@ export interface CompositionProfileIntersections {
   profile_id: number;
   intersections: CompositionIntersection[];
 }
+
+/** PUT /composition/:id/mapping/transversal/ — write payload. Unlike the GET
+ *  shape (grouped with `start_position`/`end_position`), the backend only
+ *  wants the resolved locked-to intersection ids per profile. */
+export interface TransversalMappingWriteEntry {
+  name: string;
+  group_id: string;
+  layup: number;
+  row_index: number;
+  start_locked_to: number;
+  end_locked_to: number;
+}
+
+export interface TransversalMappingWriteProfile {
+  profile_id: number;
+  mappings: TransversalMappingWriteEntry[];
+}
+
+export interface CompositionMappingTransversalWritePayload {
+  transversal_mapping: TransversalMappingWriteProfile[];
+}

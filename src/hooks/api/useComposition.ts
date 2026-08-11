@@ -8,6 +8,7 @@ import type {
   CompositionLayupPayload,
   CompositionCoreMaterialPayload,
   CompositionMappingLongitudinalPayload,
+  CompositionMappingTransversalWritePayload,
 } from '@/api/types/composition';
 
 export const compositionKeys = {
@@ -123,10 +124,16 @@ export function useUpdateCompositionMappingLongitudinal(compositionId: number) {
 }
 
 export function useUpdateCompositionMappingTransversal(compositionId: number) {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: unknown) => compositionApi.updateCompositionMappingTransversal(compositionId, payload),
-    // No follow-up invalidation — saving transversal mapping shouldn't
-    // trigger detail, intersections, or mapping-transversal refetches.
+    mutationFn: (payload: CompositionMappingTransversalWritePayload) =>
+      compositionApi.updateCompositionMappingTransversal(compositionId, payload),
+    // Write the response straight into the cache instead of invalidating —
+    // the mutation's response is the same shape as the GET, so this reflects
+    // the save immediately (e.g. new ring lines) without an extra refetch.
+    onSuccess: (data) => {
+      queryClient.setQueryData(compositionKeys.mappingTransversal(compositionId), data);
+    },
   });
 }
 
