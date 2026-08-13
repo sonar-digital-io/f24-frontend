@@ -75,7 +75,12 @@ export function useUpdateFatigueProperties(materialId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: MaterialFatiguePropertiesPayload) => materialsApi.updateFatigueProperties(materialId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) });
+      // Same reasoning as useUpdateMechanicalProperties above — fatigue values changing
+      // can change which fields sysconfig resolves as active/fixed for this material.
+      queryClient.invalidateQueries({ queryKey: materialSysconfigKeys.detail(materialId) });
+    },
   });
 }
 

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { isFieldInRange, type FormField, type FormSection } from '@/data/materialFormFields';
+import type { FormField, FormSection } from '@/data/materialFormFields';
+import { isFieldInRange } from '@/lib/materialFormValidation';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 
 interface PropertyFormTabProps {

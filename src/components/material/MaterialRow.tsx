@@ -10,27 +10,27 @@ import { type Material as MaterialItem } from '@/data/materials';
 import type { KeyValuePair } from '@/api/types/common';
 
 function nonEmpty(list?: KeyValuePair[]): KeyValuePair[] {
-  return (list ?? []).filter((kv) => String(kv.value).trim() !== '');
+  return (list ?? []).filter((kv) => kv.value != null && String(kv.value).trim() !== '');
 }
 
 interface MaterialDetailPanelProps {
   materialId: number;
-  expanded: boolean;
   mechanicalOpen: boolean;
   onToggleMechanical: () => void;
   fatigueOpen: boolean;
   onToggleFatigue: () => void;
 }
 
+// Only ever rendered inside `{expanded && (...)}` below, so it only exists while
+// expanded is true — no need to thread that through as a query enabled/disabled flag.
 function MaterialDetailPanel({
   materialId,
-  expanded,
   mechanicalOpen,
   onToggleMechanical,
   fatigueOpen,
   onToggleFatigue,
 }: MaterialDetailPanelProps) {
-  const { data, isLoading, isError } = useMaterialDetail(materialId, expanded);
+  const { data, isLoading, isError } = useMaterialDetail(materialId);
 
   if (isLoading) return <p className="px-1 py-2 text-[14px] text-[#6b7280]">Loading properties…</p>;
   if (isError) {
@@ -110,7 +110,6 @@ export function MaterialRow({
           <td colSpan={5} className="px-3 pb-5 pt-1">
             <MaterialDetailPanel
               materialId={Number(material.id)}
-              expanded={expanded}
               mechanicalOpen={mechanicalOpen}
               onToggleMechanical={() => setMechanicalOpen((o) => !o)}
               fatigueOpen={fatigueOpen}

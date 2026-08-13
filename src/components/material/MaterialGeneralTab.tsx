@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { DropdownSelect as Select } from '@/components/common/form/DropdownSelect';
+import { toTitleCase } from '@/lib/utils';
 
 /** Fallback shown before GET /sysconfig/?material=:id has loaded (or for a brand new,
  *  not-yet-created material) — the real options once loaded come from its
@@ -14,15 +16,6 @@ const FALLBACK_TYPES: { id: string; name: string }[] = [
   { id: 'ortho_core', name: 'orthotropic core' },
   { id: 'honey_core', name: 'honeycomb core' },
 ];
-
-/** "woven ply" -> "Woven Ply" — capitalizes each word without touching existing
- *  uppercase letters, so acronyms like "UD" stay intact. */
-function toTitleCase(value: string): string {
-  return value
-    .split(' ')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
 
 interface MaterialGeneralTabProps {
   name: string;
@@ -57,7 +50,13 @@ export function MaterialGeneralTab({
   onDescriptionChange,
   onBlur,
 }: MaterialGeneralTabProps) {
-  const types = typeOptions && typeOptions.length > 0 ? typeOptions : FALLBACK_TYPES;
+  // If the stored type isn't among the current options (stale/deprecated value, or an
+  // options-catalog mismatch), append it as a synthetic entry rather than silently
+  // falling back to an empty display — a real value should never look unset.
+  const types = useMemo(() => {
+    const base = typeOptions && typeOptions.length > 0 ? typeOptions : FALLBACK_TYPES;
+    return type && !base.some((t) => t.id === type) ? [...base, { id: type, name: type }] : base;
+  }, [typeOptions, type]);
   return (
     <form
       onSubmit={(e) => e.preventDefault()}
@@ -66,7 +65,7 @@ export function MaterialGeneralTab({
     >
       <div className="flex w-full flex-col gap-2">
         <Label htmlFor="material-name" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-          Name<span className="text-[#dc2626]">*</span>
+          Name<span className="text-[#0a0a0a]">*</span>
         </Label>
         <Input
           id="material-name"
@@ -80,7 +79,7 @@ export function MaterialGeneralTab({
 
       <div className="flex w-full flex-col gap-2">
         <Label htmlFor="material-type" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-          {typeLabel || 'Type'}<span className="text-[#dc2626]">*</span>
+          {typeLabel || 'Type'}<span className="text-[#0a0a0a]">*</span>
         </Label>
         <Select
           id="material-type"
@@ -93,7 +92,7 @@ export function MaterialGeneralTab({
 
       <div className="flex w-full flex-col gap-2">
         <Label htmlFor="material-date" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-          Date<span className="text-[#dc2626]">*</span>
+          Date<span className="text-[#0a0a0a]">*</span>
         </Label>
         <Input
           id="material-date"
@@ -107,7 +106,7 @@ export function MaterialGeneralTab({
 
       <div className="flex w-full flex-col gap-2">
         <Label htmlFor="material-description" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
-          Description<span className="text-[#dc2626]">*</span>
+          Description<span className="text-[#0a0a0a]">*</span>
         </Label>
         <Textarea
           id="material-description"

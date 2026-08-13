@@ -20,7 +20,7 @@ import {
   getMechPropTypeParameter,
   getMechPropTypeEntry,
 } from '@/lib/materialSysconfigMapping';
-import { isFormValid, isFormRangeValid } from '@/data/materialFormFields';
+import { isFormValid, isFormRangeValid } from '@/lib/materialFormValidation';
 import type { MaterialPayload } from '@/api/types/materials';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
@@ -148,6 +148,11 @@ export function MaterialNew() {
   const hydrated = useHydrateOnce(
     isEditing && !detailQuery.isFetching && !!detailQuery.data && !!sysconfigQuery.data,
     () => {
+      // If we just created this material in this same session, local state (set
+      // synchronously from the create payload, including whatever the user already typed
+      // into Mechanical/Fatigue before this forced refetch resolved) is already correct —
+      // re-hydrating from this response would clobber it with the pre-edit snapshot.
+      if (materialId === justCreatedId) return;
       const m = detailQuery.data!;
       const hydratedDescription = m.description ?? '';
       const hydratedDate = toDateInputValue(m.date);
@@ -189,11 +194,6 @@ export function MaterialNew() {
       ? 'New material'
       : name || 'New material';
 
-  const savePending =
-    createMaterialMutation.isPending ||
-    updateGeneralMutation.isPending ||
-    updateMechanicalMutation.isPending ||
-    updateFatigueMutation.isPending;
   const saveError =
     createMaterialMutation.isError ||
     updateGeneralMutation.isError ||
@@ -254,26 +254,37 @@ export function MaterialNew() {
       : 'not-saved';
 
   // Autosave the General tab once every required field is filled — fires when focus
-  // leaves a field (blur) or the form itself (click-out), not on every keystroke.
-  function handleGeneralBlur() {
-    if (!generalValid || !hasUnsavedGeneral || savePending) return;
-    saveGeneralFields();
+  // leaves a field (blur) or the form itself (click-out), not on every keystroke. Gates
+  // only on its own mutations (not the aggregate savePending) — otherwise a Mechanical/
+  // Fatigue save still in flight (e.g. from handleTypeChange) would silently swallow this.
+  async function handleGeneralBlur() {
+    if (!generalValid || !hasUnsavedGeneral || createMaterialMutation.isPending || updateGeneralMutation.isPending) {
+      return;
+    }
+    try {
+      await saveGeneralFields();
+    } catch {
+      // saveGeneralFields's onError (global mutation cache) already toasts.
+    }
   }
 
   // Type lives on the General tab but is actually a mechanical property. On an
-  // already-created material, persist it immediately: PUT general first (only if
-  // something there is actually unsaved), then PUT just the mech_prop_type entry —
-  // isolated from whatever else might be pending on the Mechanical tab. On a material
-  // that doesn't exist yet, just update local state; it rides along in the initial
-  // create POST once General gets saved.
+  // already-created material, persist it immediately: PUT general (only if something
+  // there is actually unsaved) and PUT just the mech_prop_type entry — isolated from
+  // whatever else might be pending on the Mechanical tab. The two PUTs target unrelated
+  // endpoints and neither depends on the other's result, so they run in parallel. On a
+  // material that doesn't exist yet, just update local state; it rides along in the
+  // initial create POST once General gets saved.
   async function handleTypeChange(newType: string) {
     setMechValues((prev) => ({ ...prev, [MECH_PROP_TYPE_REFERENCE]: newType }));
     if (!isEditing) return;
     try {
-      await saveGeneralFields();
-      await updateMechanicalMutation.mutateAsync({
-        mechanical_properties: [{ reference: MECH_PROP_TYPE_REFERENCE, value: newType }],
-      });
+      await Promise.all([
+        saveGeneralFields(),
+        updateMechanicalMutation.mutateAsync({
+          mechanical_properties: [{ reference: MECH_PROP_TYPE_REFERENCE, value: newType }],
+        }),
+      ]);
       setBaseline((prev) =>
         prev ? { ...prev, mechValues: { ...prev.mechValues, [MECH_PROP_TYPE_REFERENCE]: newType } } : prev
       );
@@ -346,7 +357,12 @@ export function MaterialNew() {
         sysconfigQuery.isLoading ||
         sysconfigQuery.isFetching)) ||
     (isDuplicating && !duplicateHydrated && (duplicateQuery.isLoading || duplicateQuery.isFetching));
-  const showLoadErrorState = (isEditing && detailQuery.isError) || (isDuplicating && duplicateQuery.isError);
+  // Scoped to !hydrated so a later background sysconfig refetch failure (e.g. after a
+  // blur-autosave PUT) doesn't blank out an already-loaded Mechanical/Fatigue tab — those
+  // handle that case inline via their own sysconfigQuery.isError check further down.
+  const showLoadErrorState =
+    (isEditing && !hydrated && (detailQuery.isError || sysconfigQuery.isError)) ||
+    (isDuplicating && duplicateQuery.isError);
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[#f8fafc]">

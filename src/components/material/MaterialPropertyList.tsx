@@ -1,14 +1,7 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { DetailRow } from '@/components/common/list/DetailRow';
+import { toTitleCase } from '@/lib/utils';
 import type { KeyValuePair } from '@/api/types/common';
-
-/** "coef_therm_exp_11" -> "Coef Therm Exp 11". */
-function humanizeReference(reference: string): string {
-  return reference
-    .split('_')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
 
 function PropertySection({
   title,
@@ -41,7 +34,7 @@ function PropertySection({
             <DetailRow
               key={kv.reference}
               labelWidthClassName="w-[220px]"
-              label={humanizeReference(kv.reference)}
+              label={toTitleCase(kv.reference)}
               value={String(kv.value)}
             />
           ))}
