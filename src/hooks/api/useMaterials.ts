@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as materialsApi from '@/api/materials';
+import { materialSysconfigKeys } from '@/hooks/api/useSysconfig';
 import type {
   MaterialPayload,
   MaterialGeneralPayload,
@@ -63,6 +64,9 @@ export function useUpdateMechanicalProperties(materialId: number) {
       queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) });
       // Also refresh the list — `type` lives on this endpoint and is shown there.
       queryClient.invalidateQueries({ queryKey: materialKeys.list() });
+      // Mechanical values changing can change which fields sysconfig resolves as
+      // active/fixed for this material — refetch it so the form stays in sync.
+      queryClient.invalidateQueries({ queryKey: materialSysconfigKeys.detail(materialId) });
     },
   });
 }

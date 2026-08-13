@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
@@ -15,8 +15,12 @@ import {
 import { useMaterialSysconfig } from '@/hooks/api/useSysconfig';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { MECH_PROP_TYPE_REFERENCE, toKeyValueList, toValueMap, keyValueSignature } from '@/lib/materialFormMapping';
-import { buildMaterialPropertySections, getMechPropTypeParameter } from '@/lib/materialSysconfigMapping';
-import { isFormValid } from '@/data/materialFormFields';
+import {
+  buildMaterialPropertySections,
+  getMechPropTypeParameter,
+  getMechPropTypeEntry,
+} from '@/lib/materialSysconfigMapping';
+import { isFormValid, isFormRangeValid } from '@/data/materialFormFields';
 import type { MaterialPayload } from '@/api/types/materials';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
@@ -68,6 +72,10 @@ export function MaterialNew() {
     () => (sysconfigQuery.data ? getMechPropTypeParameter(sysconfigQuery.data) : undefined),
     [sysconfigQuery.data]
   );
+  const typeEntry = useMemo(
+    () => (sysconfigQuery.data ? getMechPropTypeEntry(sysconfigQuery.data) : undefined),
+    [sysconfigQuery.data]
+  );
   const mechanicalSections = useMemo(
     () =>
       sysconfigQuery.data
@@ -83,29 +91,82 @@ export function MaterialNew() {
     [sysconfigQuery.data]
   );
 
-  // Populate the form once the (forced, never-cached) detail fetch settles, and record a
-  // baseline snapshot so saving can tell which of the 3 tabs actually changed. Waiting on
+  // Values (including Type) always come from GET /material/:id/ — the direct,
+  // authoritative source — not sysconfig, which only supplies structure (labels, units,
+  // required, min/max, active, fixed). This effect keeps fixed/computed fields and Type
+  // in sync every time the detail endpoint refetches (e.g. after a blur-autosave PUT).
+  // Non-fixed fields are left alone so this never clobbers an in-progress edit elsewhere.
+  useEffect(() => {
+    if (!detailQuery.data) return;
+
+    const freshMech = toValueMap(detailQuery.data.mechanical_properties);
+    const mechUpdates: Record<string, string> = {};
+    for (const field of mechanicalSections.flatMap((s) => s.fields)) {
+      if (field.fixed && freshMech[field.name] !== undefined && mechValues[field.name] !== freshMech[field.name]) {
+        mechUpdates[field.name] = freshMech[field.name];
+      }
+    }
+    if (freshMech[MECH_PROP_TYPE_REFERENCE] !== undefined && mechValues[MECH_PROP_TYPE_REFERENCE] !== freshMech[MECH_PROP_TYPE_REFERENCE]) {
+      mechUpdates[MECH_PROP_TYPE_REFERENCE] = freshMech[MECH_PROP_TYPE_REFERENCE];
+    }
+
+    const freshFatigue = toValueMap(detailQuery.data.fatigue_properties);
+    const fatigueUpdates: Record<string, string> = {};
+    for (const field of fatigueSections.flatMap((s) => s.fields)) {
+      if (
+        field.fixed &&
+        freshFatigue[field.name] !== undefined &&
+        fatigueValues[field.name] !== freshFatigue[field.name]
+      ) {
+        fatigueUpdates[field.name] = freshFatigue[field.name];
+      }
+    }
+
+    if (Object.keys(mechUpdates).length === 0 && Object.keys(fatigueUpdates).length === 0) return;
+    if (Object.keys(mechUpdates).length > 0) setMechValues((prev) => ({ ...prev, ...mechUpdates }));
+    if (Object.keys(fatigueUpdates).length > 0) setFatigueValues((prev) => ({ ...prev, ...fatigueUpdates }));
+    setBaseline((prev) =>
+      prev
+        ? {
+            ...prev,
+            mechValues: { ...prev.mechValues, ...mechUpdates },
+            fatigueValues: { ...prev.fatigueValues, ...fatigueUpdates },
+          }
+        : prev
+    );
+    // mechValues/fatigueValues intentionally excluded — this only needs to react to a new
+    // detail fetch, not every keystroke; the values read here are current as of that fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailQuery.data, mechanicalSections, fatigueSections]);
+
+  // Populate the form once the (forced, never-cached) detail fetch AND sysconfig have both
+  // settled, and record a baseline snapshot so saving can tell which of the 3 tabs actually
+  // changed. Sysconfig only supplies structure here — every field's value (Type included)
+  // comes straight from the detail endpoint, the direct, authoritative source. Waiting on
   // `isFetching` — not just `data` — means we never hydrate from a stale cache hit that
-  // React Query may return synchronously before the real network refetch resolves.
-  const hydrated = useHydrateOnce(isEditing && !detailQuery.isFetching && !!detailQuery.data, () => {
-    const m = detailQuery.data!;
-    const hydratedDescription = m.description ?? '';
-    const hydratedDate = toDateInputValue(m.date);
-    const hydratedMech = toValueMap(m.mechanical_properties);
-    const hydratedFatigue = toValueMap(m.fatigue_properties);
-    setName(m.name);
-    setDescription(hydratedDescription);
-    setDate(hydratedDate);
-    setMechValues(hydratedMech);
-    setFatigueValues(hydratedFatigue);
-    setBaseline({
-      name: m.name,
-      description: hydratedDescription,
-      date: hydratedDate,
-      mechValues: hydratedMech,
-      fatigueValues: hydratedFatigue,
-    });
-  });
+  // React Query may return before the real refetch resolves.
+  const hydrated = useHydrateOnce(
+    isEditing && !detailQuery.isFetching && !!detailQuery.data && !!sysconfigQuery.data,
+    () => {
+      const m = detailQuery.data!;
+      const hydratedDescription = m.description ?? '';
+      const hydratedDate = toDateInputValue(m.date);
+      const hydratedMech = toValueMap(m.mechanical_properties);
+      const hydratedFatigue = toValueMap(m.fatigue_properties);
+      setName(m.name);
+      setDescription(hydratedDescription);
+      setDate(hydratedDate);
+      setMechValues(hydratedMech);
+      setFatigueValues(hydratedFatigue);
+      setBaseline({
+        name: m.name,
+        description: hydratedDescription,
+        date: hydratedDate,
+        mechValues: hydratedMech,
+        fatigueValues: hydratedFatigue,
+      });
+    }
+  );
 
   // Duplicate: prefill a NEW (create-mode) form from another material's data, with
   // "_copy" appended to the name. No baseline needed — Save always does a plain POST here.
@@ -222,9 +283,11 @@ export function MaterialNew() {
   }
 
   // Whether every mandatory Mechanical-tab field is filled AND every filled field is
-  // within its min/max — the header's Saved/Not saved indicator and the blur-autosave
-  // below both gate on this, so an out-of-range value blocks saving.
+  // within its min/max — gates moving to the Fatigue tab and the header's status.
+  // Autosaving itself only needs the (looser) range check: partial/incomplete data is
+  // fine to save, out-of-range data isn't.
   const mechanicalValid = isFormValid(mechanicalSections, mechValues);
+  const mechanicalRangeValid = isFormRangeValid(mechanicalSections, mechValues);
   const mechanicalUnsaved = keyValueSignature(mechValues) !== keyValueSignature(baseline?.mechValues ?? {});
   const mechanicalSaved = mechanicalValid && !mechanicalUnsaved;
   const mechanicalStatus: SaveStatus = updateMechanicalMutation.isPending
@@ -233,10 +296,10 @@ export function MaterialNew() {
       ? 'saved'
       : 'not-saved';
 
-  // Autosave the Mechanical tab once every mandatory field is filled and valid — same
-  // PUT as the Fatigue tab's Save button, just fired on blur instead of a button click.
+  // Autosave the Mechanical tab on every blur, even before all mandatory fields are
+  // filled — same PUT as before, just no longer gated on completeness.
   async function handleMechanicalBlur() {
-    if (!mechanicalValid || !mechanicalUnsaved || updateMechanicalMutation.isPending) return;
+    if (!mechanicalRangeValid || !mechanicalUnsaved || updateMechanicalMutation.isPending) return;
     try {
       await updateMechanicalMutation.mutateAsync({ mechanical_properties: toKeyValueList(mechValues) });
       setBaseline((prev) => (prev ? { ...prev, mechValues } : prev));
@@ -248,6 +311,7 @@ export function MaterialNew() {
   // Whether every mandatory Fatigue-tab field is filled AND every filled field is
   // within its min/max — same structure as the Mechanical tab above.
   const fatigueValid = isFormValid(fatigueSections, fatigueValues);
+  const fatigueRangeValid = isFormRangeValid(fatigueSections, fatigueValues);
   const fatigueUnsaved = keyValueSignature(fatigueValues) !== keyValueSignature(baseline?.fatigueValues ?? {});
   const fatigueSaved = fatigueValid && !fatigueUnsaved;
   const fatigueStatus: SaveStatus = updateFatigueMutation.isPending
@@ -256,10 +320,10 @@ export function MaterialNew() {
       ? 'saved'
       : 'not-saved';
 
-  // Autosave the Fatigue tab once every mandatory field is filled and valid — same PUT
-  // as before, just fired on blur instead of a button click (same structure as Mechanical).
+  // Autosave the Fatigue tab on every blur, even before all mandatory fields are
+  // filled — same structure as Mechanical above.
   async function handleFatigueBlur() {
-    if (!fatigueValid || !fatigueUnsaved || updateFatigueMutation.isPending) return;
+    if (!fatigueRangeValid || !fatigueUnsaved || updateFatigueMutation.isPending) return;
     try {
       await updateFatigueMutation.mutateAsync({ fatigue_properties: toKeyValueList(fatigueValues) });
       setBaseline((prev) => (prev ? { ...prev, fatigueValues } : prev));
@@ -274,7 +338,13 @@ export function MaterialNew() {
 
   const isDuplicating = !isEditing && Number.isFinite(duplicateSourceId);
   const showLoadingState =
-    (isEditing && materialId !== justCreatedId && !hydrated && (detailQuery.isLoading || detailQuery.isFetching)) ||
+    (isEditing &&
+      materialId !== justCreatedId &&
+      !hydrated &&
+      (detailQuery.isLoading ||
+        detailQuery.isFetching ||
+        sysconfigQuery.isLoading ||
+        sysconfigQuery.isFetching)) ||
     (isDuplicating && !duplicateHydrated && (duplicateQuery.isLoading || duplicateQuery.isFetching));
   const showLoadErrorState = (isEditing && detailQuery.isError) || (isDuplicating && duplicateQuery.isError);
 
@@ -286,7 +356,7 @@ export function MaterialNew() {
         tabs={[
           { value: 'general', label: 'General' },
           { value: 'mechanical', label: 'Mechanical properties', disabled: !isSaved },
-          { value: 'fatigue', label: 'Fatigue properties', disabled: !isSaved },
+          { value: 'fatigue', label: 'Fatigue properties', disabled: !isSaved || !mechanicalSaved },
         ]}
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -327,6 +397,7 @@ export function MaterialNew() {
             onTypeChange={handleTypeChange}
             typeLabel={typeParameter?.name}
             typeOptions={typeParameter?.options}
+            typeDisabled={typeEntry?.fixed}
             date={date}
             onDateChange={setDate}
             description={description}

@@ -45,14 +45,16 @@ export interface SysconfigParamEntry {
 export interface SysconfigParamGroup {
   id: string;
   name: string;
-  parameters: SysconfigParamEntry[];
+  /** Omitted by the backend when the group has no parameters. */
+  parameters?: SysconfigParamEntry[];
 }
 
 /** Same shape as `project_settings` — reused for any top-level config section
- *  (project_settings, mechanical_properties, fatigue_properties, …). */
+ *  (project_settings, mechanical_properties, fatigue_properties, …). Either array
+ *  may be omitted by the backend when there's nothing in it. */
 export interface SysconfigProjectSettings {
-  parameters: SysconfigParamEntry[];
-  groups: SysconfigParamGroup[];
+  parameters?: SysconfigParamEntry[];
+  groups?: SysconfigParamGroup[];
 }
 
 export interface SysconfigConfiguration {

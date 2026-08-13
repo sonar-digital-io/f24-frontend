@@ -5,6 +5,11 @@ export interface FormField {
   helper?: string;
   min?: string;
   max?: string;
+  /** The backend parameter's type (e.g. "float", "integer", "selection") — "float"/
+   *  "integer" fields reject letters as they're typed. */
+  type?: string;
+  /** Backend-locked — the field renders read-only. */
+  fixed?: boolean;
 }
 
 export interface FormSection {
@@ -25,8 +30,17 @@ export function isFieldInRange(value: string, field: FormField): boolean {
   return true;
 }
 
-/** True when every required field across `sections` is filled and every filled
- *  field (required or not) is within its min/max — the gate for saving the form. */
+/** True when every filled field (required or not) is within its min/max — ignores
+ *  whether required fields are actually filled. Gates autosave: partial/incomplete
+ *  data is fine to save, out-of-range data isn't. */
+export function isFormRangeValid(sections: FormSection[], values: Record<string, string>): boolean {
+  return sections.every((section) =>
+    section.fields.every((field) => isFieldInRange(values[field.name] ?? '', field))
+  );
+}
+
+/** True when every required field across `sections` is filled AND every filled
+ *  field is within its min/max — the gate for moving on to the next tab. */
 export function isFormValid(sections: FormSection[], values: Record<string, string>): boolean {
   return sections.every((section) =>
     section.fields.every((field) => {
