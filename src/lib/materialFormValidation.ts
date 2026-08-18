@@ -21,14 +21,16 @@ export function isFormRangeValid(sections: FormSection[], values: Record<string,
   );
 }
 
+/** True when every required field across `sections` is filled — combine with
+ *  `isFormRangeValid` for the full gate used to move on to the next tab. */
+function isFormComplete(sections: FormSection[], values: Record<string, string>): boolean {
+  return sections.every((section) =>
+    section.fields.every((field) => !field.required || (values[field.name] ?? '').trim() !== '')
+  );
+}
+
 /** True when every required field across `sections` is filled AND every filled
  *  field is within its min/max — the gate for moving on to the next tab. */
 export function isFormValid(sections: FormSection[], values: Record<string, string>): boolean {
-  return sections.every((section) =>
-    section.fields.every((field) => {
-      const value = values[field.name] ?? '';
-      if (field.required && value.trim() === '') return false;
-      return isFieldInRange(value, field);
-    })
-  );
+  return isFormComplete(sections, values) && isFormRangeValid(sections, values);
 }

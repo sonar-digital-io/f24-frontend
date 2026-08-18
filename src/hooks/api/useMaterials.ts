@@ -17,11 +17,11 @@ export function useMaterialList() {
   return useQuery({ queryKey: materialKeys.list(), queryFn: () => materialsApi.getMaterialList() });
 }
 
-export function useMaterialDetail(materialId: number, enabled = true) {
+export function useMaterialDetail(materialId: number) {
   return useQuery({
     queryKey: materialKeys.detail(materialId),
     queryFn: () => materialsApi.getMaterial(materialId),
-    enabled: enabled && Number.isFinite(materialId),
+    enabled: Number.isFinite(materialId),
     // The edit form must never show a stale cached copy (e.g. reopening right after
     // a previous edit) — always hit the network on mount instead of trusting staleTime.
     staleTime: 0,
@@ -56,17 +56,25 @@ export function useDeleteMaterial() {
   });
 }
 
+interface UpdateMechanicalPropertiesVariables {
+  payload: MaterialMechanicalPropertiesPayload;
+  /** Only a mech_prop_type change can affect which fields sysconfig resolves as
+   *  active/fixed — set this for that call so plain value edits skip the refetch. */
+  typeChanged?: boolean;
+}
+
 export function useUpdateMechanicalProperties(materialId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: MaterialMechanicalPropertiesPayload) => materialsApi.updateMechanicalProperties(materialId, payload),
-    onSuccess: () => {
+    mutationFn: ({ payload }: UpdateMechanicalPropertiesVariables) =>
+      materialsApi.updateMechanicalProperties(materialId, payload),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) });
       // Also refresh the list — `type` lives on this endpoint and is shown there.
       queryClient.invalidateQueries({ queryKey: materialKeys.list() });
-      // Mechanical values changing can change which fields sysconfig resolves as
-      // active/fixed for this material — refetch it so the form stays in sync.
-      queryClient.invalidateQueries({ queryKey: materialSysconfigKeys.detail(materialId) });
+      if (variables.typeChanged) {
+        queryClient.invalidateQueries({ queryKey: materialSysconfigKeys.detail(materialId) });
+      }
     },
   });
 }

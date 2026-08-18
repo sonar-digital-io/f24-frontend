@@ -57,6 +57,23 @@ export function MaterialGeneralTab({
     const base = typeOptions && typeOptions.length > 0 ? typeOptions : FALLBACK_TYPES;
     return type && !base.some((t) => t.id === type) ? [...base, { id: type, name: type }] : base;
   }, [typeOptions, type]);
+
+  // The Select below round-trips through display labels — disambiguate any that collide
+  // after toTitleCase (e.g. "honey core" vs "Honey_Core") so a selection can't resolve
+  // back to the wrong option's id.
+  const labelById = useMemo(() => {
+    const counts = new Map<string, number>();
+    types.forEach((t) => {
+      const label = toTitleCase(t.name);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    });
+    const map = new Map<string, string>();
+    types.forEach((t) => {
+      const label = toTitleCase(t.name);
+      map.set(t.id, (counts.get(label) ?? 0) > 1 ? `${label} (${t.id})` : label);
+    });
+    return map;
+  }, [types]);
   return (
     <form
       onSubmit={(e) => e.preventDefault()}
@@ -83,9 +100,9 @@ export function MaterialGeneralTab({
         </Label>
         <Select
           id="material-type"
-          value={toTitleCase(types.find((t) => t.id === type)?.name ?? '')}
-          onChange={(name) => onTypeChange(types.find((t) => toTitleCase(t.name) === name)?.id ?? type)}
-          options={types.map((t) => toTitleCase(t.name))}
+          value={labelById.get(type) ?? ''}
+          onChange={(label) => onTypeChange(types.find((t) => labelById.get(t.id) === label)?.id ?? type)}
+          options={types.map((t) => labelById.get(t.id) ?? '')}
           disabled={typeDisabled}
         />
       </div>

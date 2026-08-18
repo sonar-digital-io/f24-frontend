@@ -125,7 +125,8 @@ function FieldRow({ field, value, onChange }: FieldRowProps) {
           value={value}
           onChange={(e) => {
             const withDot = e.target.value.replace(',', '.');
-            onChange(isNumeric ? withDot.replace(/[^0-9.\-]/g, '') : withDot);
+            // Allow scientific notation (e.g. "1e-6") — float fields like CTE need it.
+            onChange(isNumeric ? withDot.replace(/[^0-9.\-eE+]/g, '') : withDot);
           }}
           onBlur={() => setTouched(true)}
           inputMode={isNumeric ? 'decimal' : 'text'}
