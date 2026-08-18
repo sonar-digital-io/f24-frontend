@@ -10,6 +10,8 @@ export interface FormField {
   type?: string;
   /** Backend-locked — the field renders read-only. */
   fixed?: boolean;
+  /** Present when `type === 'selection'` — the field renders as a dropdown of these. */
+  options?: { id: string; name: string }[];
 }
 
 export interface FormSection {

@@ -1,10 +1,11 @@
 import type { FormField, FormSection } from '@/data/materialFormFields';
 
 /** Empty is fine here (required-ness is a separate check) — only a value that's
- *  actually entered gets checked against the field's min/max. */
+ *  actually entered gets checked against the field's min/max. Selection fields (and
+ *  any field without either bound) store non-numeric ids and have nothing to range-check. */
 export function isFieldInRange(value: string, field: FormField): boolean {
   const trimmed = value.trim();
-  if (trimmed === '') return true;
+  if (trimmed === '' || (field.min === undefined && field.max === undefined)) return true;
   const num = Number(trimmed);
   if (Number.isNaN(num)) return false;
   if (field.min !== undefined && num < Number(field.min)) return false;

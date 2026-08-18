@@ -61,6 +61,7 @@ export interface SysconfigConfiguration {
   project_settings: SysconfigProjectSettings;
   mechanical_properties?: SysconfigProjectSettings;
   fatigue_properties?: SysconfigProjectSettings;
+  geometry_settings?: SysconfigProjectSettings;
   /** engine_settings, etc. — other pages' sections, not modeled here. */
   [key: string]: unknown;
 }

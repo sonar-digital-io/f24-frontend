@@ -7,6 +7,7 @@ interface ProfileDistributionSectionBodyProps {
   folded: boolean;
   points: ControlPoint[];
   onChange: (next: ControlPoint[]) => void;
+  onCommit?: () => void;
   yMax: number;
   rootX: number;
   valueLabel: string;
@@ -27,6 +28,7 @@ export function ProfileDistributionSectionBody({
   folded,
   points,
   onChange,
+  onCommit,
   yMax,
   rootX,
   valueLabel,
@@ -57,7 +59,7 @@ export function ProfileDistributionSectionBody({
             label="Distribution view"
           />
           {showDistribution && (
-            <BezierEditor points={points} onChange={onChange} yMax={yMax} rootX={rootX} />
+            <BezierEditor points={points} onChange={onChange} onCommit={onCommit} yMax={yMax} rootX={rootX} />
           )}
         </div>
 

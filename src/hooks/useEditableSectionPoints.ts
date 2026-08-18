@@ -17,7 +17,10 @@ export function useEditableSectionPoints<K extends string>(
   getYBounds: (key: K) => { min: number; max: number },
   yDecimals = 2,
   /** Point 0's relative radius can't be typed past this (e.g. the start position). */
-  getRootX?: (key: K) => number | undefined
+  getRootX?: (key: K) => number | undefined,
+  /** Fires when a point is added (footer button) or a table x/y edit is committed
+   *  (blur) — not on every keystroke while typing. */
+  onCommit?: () => void
 ) {
   const [sectionPoints, setSectionPoints] = useState<Record<K, ControlPoint[]>>(initial);
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
@@ -44,6 +47,7 @@ export function useEditableSectionPoints<K extends string>(
       const next = [...pts.slice(0, pts.length - 1), { x: newX, y: newY }, last];
       return { ...current, [key]: next };
     });
+    onCommit?.();
   }
 
   function fieldKey(section: K, idx: number, field: Field) {
@@ -82,6 +86,7 @@ export function useEditableSectionPoints<K extends string>(
       delete next[k];
       return next;
     });
+    onCommit?.();
   }
 
   return {

@@ -46,7 +46,7 @@ export type CompositionSortKey = 'name' | 'lastUpdated' | 'nominalRadius';
 // ─── /geometry ────────────────────────────────────────────────────────────────
 
 /** Sortable columns on the /geometry list page. */
-export type GeometrySortKey = 'name' | 'nominalRadius' | 'lastUpdated';
+export type GeometrySortKey = 'name' | 'lastUpdated';
 
 // ─── /layup ───────────────────────────────────────────────────────────────────
 

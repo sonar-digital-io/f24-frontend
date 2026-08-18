@@ -43,6 +43,9 @@ import {
 export interface BezierEditorProps {
   points: ControlPoint[];
   onChange: (points: ControlPoint[]) => void;
+  /** Fires once per completed point drag (on release) — for callers that autosave
+   *  on "settled" edits rather than on every in-progress `onChange`. */
+  onCommit?: () => void;
   yMax?: number;
   yMin?: number;
   yStep?: number;
@@ -63,6 +66,7 @@ export interface BezierEditorProps {
 export function BezierEditor({
   points,
   onChange,
+  onCommit,
   yMax = 24,
   yMin = 0,
   yStep = 2,
@@ -104,6 +108,7 @@ export function BezierEditor({
   } = useBezierEditorInteractions({
     points,
     onChange,
+    onCommit,
     xMin,
     xMax,
     yMin,
