@@ -6,7 +6,8 @@ export type SaveStatus = 'saved' | 'saving' | 'not-saved';
 interface EditPageToolbarActionsProps {
   title: string;
   onBack: () => void;
-  /** Defaults to "saved" — most tabs don't track this yet and should keep that as before. */
+  /** Omit when the page doesn't track save state — the indicator is hidden rather than
+   *  falsely claiming "Saved". */
   status?: SaveStatus;
   /** Extra buttons rendered after the "Exit edit mode" button, e.g. CalculationNew's "Run calculation". */
   children?: ReactNode;
@@ -18,7 +19,7 @@ interface EditPageToolbarActionsProps {
  * Each caller renders its own tabs on the left, since those differ too much
  * (disabled states, tooltips) to share.
  */
-export function EditPageToolbarActions({ title, onBack, status = 'saved', children }: EditPageToolbarActionsProps) {
+export function EditPageToolbarActions({ title, onBack, status, children }: EditPageToolbarActionsProps) {
   return (
     <>
       <h1 className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
@@ -37,12 +38,12 @@ export function EditPageToolbarActions({ title, onBack, status = 'saved', childr
               <X className="h-4 w-4 text-[#dc2626]" strokeWidth={2} />
               <span className="text-[14px] leading-5 text-[#dc2626]">Not saved</span>
             </>
-          ) : (
+          ) : status === 'saved' ? (
             <>
               <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
               <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
             </>
-          )}
+          ) : null}
         </div>
         <button
           type="button"

@@ -280,9 +280,12 @@ export function MaterialNew() {
     if (!isEditing) return;
     try {
       await Promise.all([
-        saveGeneralFields(),
+        // Same guard as handleGeneralBlur — never PUT general fields while a required
+        // one (e.g. Name) is empty.
+        generalValid ? saveGeneralFields() : Promise.resolve(materialId),
         updateMechanicalMutation.mutateAsync({
-          mechanical_properties: [{ reference: MECH_PROP_TYPE_REFERENCE, value: newType }],
+          payload: { mechanical_properties: [{ reference: MECH_PROP_TYPE_REFERENCE, value: newType }] },
+          typeChanged: true,
         }),
       ]);
       setBaseline((prev) =>
@@ -312,7 +315,7 @@ export function MaterialNew() {
   async function handleMechanicalBlur() {
     if (!mechanicalRangeValid || !mechanicalUnsaved || updateMechanicalMutation.isPending) return;
     try {
-      await updateMechanicalMutation.mutateAsync({ mechanical_properties: toKeyValueList(mechValues) });
+      await updateMechanicalMutation.mutateAsync({ payload: { mechanical_properties: toKeyValueList(mechValues) } });
       setBaseline((prev) => (prev ? { ...prev, mechValues } : prev));
     } catch {
       // updateMechanicalMutation's onError (global mutation cache) already toasts.
@@ -344,6 +347,12 @@ export function MaterialNew() {
   }
 
   function handleExit() {
+    // `baseline` is only set once something has actually been persisted — before that,
+    // an incomplete/blank draft has nothing to lose. Once it exists, any of the three
+    // tabs' current values drifting from it (including an out-of-range edit that
+    // never autosaved) is a real unsaved change.
+    const hasUnsavedChanges = Boolean(baseline) && (hasUnsavedGeneral || mechanicalUnsaved || fatigueUnsaved);
+    if (hasUnsavedChanges && !window.confirm('You have unsaved changes. Exit without saving?')) return;
     navigate('/material');
   }
 
