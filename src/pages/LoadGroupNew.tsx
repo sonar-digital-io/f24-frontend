@@ -190,7 +190,6 @@ export function LoadGroupNew() {
         activeTab={activeTab}
         onTabChange={(v) => setActiveTab(v as LoadGroupTab)}
         title={titleText}
-        backLabel="Back to Load groups"
         onBack={handleExit}
         actions={
           tabAction && (

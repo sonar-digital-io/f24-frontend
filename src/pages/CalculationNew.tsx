@@ -111,7 +111,7 @@ export function CalculationNew() {
   // field/group/unit shown there, no hardcoded field state on this page anymore.
   const sysconfigQuery = useSysconfig(activeTab === 'configuration' ? effectiveProjectId ?? '' : '');
   const configSectionIds = useMemo(
-    () => sysconfigQuery.data?.configuration.project_settings.groups.map((g) => g.id) ?? [],
+    () => sysconfigQuery.data?.configuration.project_settings.groups?.map((g) => g.id) ?? [],
     [sysconfigQuery.data]
   );
   const {

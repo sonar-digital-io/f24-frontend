@@ -31,7 +31,7 @@ export function useColumnFilter(options: string[], onSelectionChange?: () => voi
 
   const visibleOptions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? options.filter((o) => o.toLowerCase().includes(q)) : options;
+    return q ? options.filter((o) => o?.toLowerCase().includes(q)) : options;
   }, [options, query]);
 
   function openDropdown() {

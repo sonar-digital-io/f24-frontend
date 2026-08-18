@@ -21,7 +21,7 @@ import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '
 import { toUiMaterial, formatDateLabel, parseLastUpdated } from '@/lib/materialListMapping';
 import type { SortState, MaterialSortKey } from '@/types';
 import { lastUpdatedSortKey, type Material } from '@/data/materials';
-import { useDeleteMaterial, useMaterialList } from '@/hooks/api/useMaterials';
+import { useDeleteMaterial, useExportMaterial, useMaterialList } from '@/hooks/api/useMaterials';
 
 const PAGE_SIZE = 10;
 
@@ -53,9 +53,24 @@ export function Material() {
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useDeleteMaterial();
+  const exportMutation = useExportMaterial();
 
   function handleDuplicate(material: Material) {
     navigate(`/material/new?duplicateFrom=${material.id}`);
+  }
+
+  async function handleExport(material: Material) {
+    try {
+      const { blob, filename } = await exportMutation.mutateAsync(Number(material.id));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // exportMutation's onError (via the global mutation cache) already surfaces a toast.
+    }
   }
 
   async function handleConfirmDelete() {
@@ -68,7 +83,10 @@ export function Material() {
     }
   }
 
-  const allTypes = useMemo(() => [...new Set(materials.map((m) => m.type))].sort(), [materials]);
+  const allTypes = useMemo(
+    () => [...new Set(materials.map((m) => m.type).filter(Boolean))].sort(),
+    [materials]
+  );
   const typeFilter = useColumnFilter(allTypes, () => setPage(1));
 
   const filtered = useMemo(() => {
@@ -120,7 +138,6 @@ export function Material() {
         />
       ),
     },
-    { label: 'Source', sortKey: 'source', className: 'w-[110px]' },
     { label: 'Description' },
     {
       label: 'Last updated',
@@ -205,7 +222,7 @@ export function Material() {
                   leadingWidthClassName="w-[52px]"
                 />
                 <ListTableBody
-                  colSpan={7}
+                  colSpan={6}
                   isLoading={isLoading}
                   isError={isError}
                   loadingLabel="Loading materials…"
@@ -218,6 +235,7 @@ export function Material() {
                       expanded={expandedIds.has(material.id)}
                       onToggle={() => toggleExpand(material.id)}
                       onOpen={() => navigate(`/material/${material.id}`)}
+                      onExport={() => handleExport(material)}
                       onDuplicate={() => handleDuplicate(material)}
                       onDelete={() => setPendingDelete({ id: material.id, name: material.name })}
                     />

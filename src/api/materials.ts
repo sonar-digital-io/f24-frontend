@@ -43,7 +43,19 @@ export async function updateFatigueProperties(materialId: number, payload: Mater
   return data;
 }
 
-export async function exportMaterial(materialId: number): Promise<Blob> {
-  const { data } = await apiClient.get(`/material/${materialId}/export/`, { responseType: 'blob' });
-  return data;
+export interface MaterialExport {
+  blob: Blob;
+  filename: string;
+}
+
+export async function exportMaterial(materialId: number): Promise<MaterialExport> {
+  const response = await apiClient.get(`/material/${materialId}/export/`, { responseType: 'blob' });
+  // Match a bare `filename=` segment only — not RFC 5987's `filename*=`, which has a
+  // different (encoded) value format and would otherwise get captured as garbage.
+  const match = response.headers['content-disposition']
+    ?.split(';')
+    .map((part: string) => part.trim())
+    .find((part: string) => /^filename=/.test(part));
+  const filename = match?.slice('filename='.length).replace(/^"|"$/g, '');
+  return { blob: response.data, filename: filename || `material-${materialId}.txt` };
 }

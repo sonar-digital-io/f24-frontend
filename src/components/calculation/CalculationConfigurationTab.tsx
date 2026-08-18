@@ -149,12 +149,12 @@ export function CalculationConfigurationTab({
   const sections = useMemo<Section[]>(() => {
     const projectSettings = sysconfig?.configuration.project_settings;
     if (!projectSettings) return [];
-    const groupSections = projectSettings.groups.map((g) => ({
+    const groupSections = (projectSettings.groups ?? []).map((g) => ({
       id: g.id,
       name: g.name,
-      entries: g.parameters.filter((entry) => entry.active && !OWNED_ELSEWHERE.has(entry.reference)),
+      entries: (g.parameters ?? []).filter((entry) => entry.active && !OWNED_ELSEWHERE.has(entry.reference)),
     }));
-    const ungrouped = projectSettings.parameters.filter(
+    const ungrouped = (projectSettings.parameters ?? []).filter(
       (entry) => entry.active && !OWNED_ELSEWHERE.has(entry.reference)
     );
     const withUngrouped = ungrouped.length

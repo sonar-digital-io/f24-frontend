@@ -80,7 +80,7 @@ export function CalculationSubToolbar({
         </TabsList>
       </Tabs>
 
-      <EditPageToolbarActions title={titleText} backLabel="Back to Calculations" onBack={onExit}>
+      <EditPageToolbarActions title={titleText} onBack={onExit}>
         <button
           type="button"
           onClick={onRunCalculation}
