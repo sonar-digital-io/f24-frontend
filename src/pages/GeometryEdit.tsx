@@ -135,8 +135,25 @@ export function GeometryEdit() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew]);
 
+  // Re-fetch GET /geometry/:id/ on every tab switch — Stacking/Spars' availability
+  // (see `profilesSaved` below) depends on its nested `profiles` array staying
+  // current, e.g. right after a profile-generator run persists profiles server-side.
+  useEffect(() => {
+    if (!isNew) detailQuery.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // Keep the Profiles tab's list in sync with the backend's nested `profiles` array
+  // on every GET /geometry/:id/ — not hydrate-once, since the effect above refetches
+  // repeatedly and profiles can also be created by other means (e.g. profile-generator).
+  useEffect(() => {
+    if (detailQuery.data?.profiles) {
+      setHydratedProfiles(detailQuery.data.profiles.map(toUiProfile));
+    }
+  }, [detailQuery.data]);
+
   // Load the existing geometry's name/date/description — plus, when present, the nested
-  // settings/profiles arrays — into the form when editing.
+  // settings array — into the form when editing.
   const hydrated = useHydrateOnce(!isNew && !detailQuery.isFetching && !!detailQuery.data, () => {
     const g = detailQuery.data!;
     const hydratedDate = toDateInputValue(g.created_at);
@@ -150,10 +167,6 @@ export function GeometryEdit() {
       const hydratedProps = Object.fromEntries(g.settings.map((kv) => [kv.reference, String(kv.value)]));
       setProps(hydratedProps);
       setPropsBaseline(hydratedProps);
-    }
-
-    if (g.profiles) {
-      setHydratedProfiles(g.profiles.map(toUiProfile));
     }
 
     if (g.profile_generator_parameters) {
@@ -235,7 +248,8 @@ export function GeometryEdit() {
       : 'not-saved';
 
   async function handleSaveProfiles(profiles: Profile[]) {
-    await updateProfilesMutation.mutateAsync({ profiles: profiles.map(toApiProfile) });
+    const result = await updateProfilesMutation.mutateAsync({ profiles: profiles.map(toApiProfile) });
+    setHydratedProfiles(result.profiles.map(toUiProfile));
   }
 
   // Autosaves the Profile distribution tab on every field blur and every bezier point
@@ -253,15 +267,25 @@ export function GeometryEdit() {
     }
     setSavedProfileParams(params);
     try {
-      await runGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
+      const generated = await runGeneratorMutation.mutateAsync({
+        geometryId,
+        payload: { profile_generator_parameters: params },
+      });
+      // Persist the generated profiles — same shape as the write payload (no id/file) —
+      // so they show up on the Profiles tab and unlock Stacking/Spars.
+      const saved = await updateProfilesMutation.mutateAsync({ profiles: generated.profiles });
+      setHydratedProfiles(saved.profiles.map(toUiProfile));
       setProfilesUpdated(true);
     } catch {
-      // runGeneratorMutation's onError (global mutation cache) already toasts.
+      // runGeneratorMutation's/updateProfilesMutation's onError (global mutation cache) already toasts.
     }
   }
 
   async function handleSaveEdges(edges: GeometryEdgeInput[]) {
     await updateEdgesMutation.mutateAsync({ edges });
+    // Spars' availability (see `edgesSaved` below) reads GET /geometry/:id/'s
+    // nested `edges` array, so re-fetch it right after saving.
+    await detailQuery.refetch();
   }
 
   // GET /geometry/:id/result/ returns binary mesh data, not JSON — in
@@ -325,6 +349,8 @@ export function GeometryEdit() {
           onTabChange={setActiveTab}
           isNew={isNew}
           globalPropertiesSaved={globalPropertiesSaved}
+          profilesSaved={(detailQuery.data?.profiles?.length ?? 0) > 0}
+          edgesSaved={(detailQuery.data?.edges?.length ?? 0) > 0}
           status={isNew ? undefined : globalPropertiesStatus}
           onExit={handleExit}
         />

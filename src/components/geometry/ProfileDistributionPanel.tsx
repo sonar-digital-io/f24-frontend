@@ -45,21 +45,15 @@ const DEFAULT_START_POSITION = 0.05;
 const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
   'maximum-camber': [
     { x: DEFAULT_START_POSITION, y: 0 },
-    { x: 0.4186, y: 23.7654 },
-    { x: 0.91, y: 22.13445 },
-    { x: 1, y: 5.7 },
+    { x: 1, y: 0 },
   ],
   'maximum-camber-position': [
     { x: DEFAULT_START_POSITION, y: 0 },
-    { x: 0.35, y: 12 },
-    { x: 0.7, y: 18 },
-    { x: 1, y: 8 },
+    { x: 1, y: 0 },
   ],
   thickness: [
     { x: DEFAULT_START_POSITION, y: 5 },
-    { x: 0.3, y: 22 },
-    { x: 0.7, y: 18 },
-    { x: 1, y: 3 },
+    { x: 1, y: 5 },
   ],
 };
 
@@ -146,6 +140,13 @@ export function ProfileDistributionPanel({
   function requestCommit() {
     setCommitTick((t) => t + 1);
   }
+
+  // This panel unmounts/remounts on tab switch, so mounting == opening the tab —
+  // save immediately rather than waiting for the first field blur/point edit.
+  useEffect(() => {
+    requestCommit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const {
     sectionPoints,
