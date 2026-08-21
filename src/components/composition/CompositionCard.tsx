@@ -1,28 +1,23 @@
-import { CardThumbnail } from '@/components/common/card/CardThumbnail';
-import { CardMenu } from '@/components/common/card/CardMenu';
+import { EntityCard } from '@/components/common/card/EntityCard';
 import type { Composition } from '@/data/compositions';
 
 interface CompositionCardProps {
   composition: Composition;
   onClick: () => void;
+  selected?: boolean;
+  showMenu?: boolean;
 }
 
-export function CompositionCard({ composition, onClick }: CompositionCardProps) {
+export function CompositionCard({ composition, onClick, selected, showMenu = true }: CompositionCardProps) {
   return (
-    <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] transition-colors hover:bg-[#f9fafb]">
-      <div className="flex items-center justify-between gap-1 px-[10px] pt-[10px]">
-        <button type="button" onClick={onClick} className="min-w-0 flex-1 text-left">
-          <h3 className="truncate text-[14px] font-semibold leading-5 text-[#0a0a0a]">{composition.name}</h3>
-        </button>
-        <CardMenu onEdit={onClick} />
-      </div>
-      <button type="button" onClick={onClick} className="text-left">
-        <CardThumbnail />
-        <div className="flex flex-col gap-[10px] px-[10px] pb-[10px]">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] leading-4 text-[#0a0a0a]">{composition.type}</span>
-            <span className="text-[12px] leading-4 text-[#0a0a0a]">{composition.nominalRadius} m</span>
-          </div>
+    <EntityCard
+      title={composition.name}
+      onClick={onClick}
+      selected={selected}
+      showMenu={showMenu}
+      geometryId={composition.geometryId}
+      footer={
+        <>
           <div className="group/desc relative">
             <p className="line-clamp-2 text-[12px] leading-4 text-[#737373]">
               {composition.description}
@@ -32,8 +27,8 @@ export function CompositionCard({ composition, onClick }: CompositionCardProps) 
             </span>
           </div>
           <span className="text-[12px] leading-4 text-[#737373]">{composition.lastUpdated}</span>
-        </div>
-      </button>
-    </div>
+        </>
+      }
+    />
   );
 }

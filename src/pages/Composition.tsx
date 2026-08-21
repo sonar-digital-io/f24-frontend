@@ -10,12 +10,8 @@ import { ListSearchInput } from '@/components/common/list/ListSearchInput';
 import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, ViewMode, CompositionSortKey } from '@/types';
-import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
-import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
-import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { ViewModeToggle } from '@/components/common/list/ViewModeToggle';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
-import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { formatDateTime } from '@/lib/utils';
 import { CompositionCard } from '@/components/composition/CompositionCard';
 import { type Composition as CompositionItem } from '@/data/compositions';
@@ -34,6 +30,7 @@ function toUiComposition(c: BackendComposition): CompositionItem {
     nominalRadius: 0,
     type: '—' as BladeType,
     lastUpdated: formatDateTime(c.last_modified),
+    geometryId: c.geometry ?? undefined,
   };
 }
 
@@ -60,23 +57,12 @@ export function Composition() {
     }
   }
 
-  const allTypes = useMemo(() => [...new Set(COMPOSITIONS.map((c) => c.type))].sort(), [COMPOSITIONS]);
-  const typeFilter = useColumnFilter(allTypes, () => setPage(1));
-
   const filtered = useMemo(
-    () =>
-      COMPOSITIONS.filter(
-        (c) =>
-          matchesQuery(query, [c.name, c.description]) &&
-          (typeFilter.selected.size === 0 || typeFilter.selected.has(c.type))
-      ),
-    [COMPOSITIONS, query, typeFilter.selected]
+    () => COMPOSITIONS.filter((c) => matchesQuery(query, [c.name, c.description])),
+    [COMPOSITIONS, query]
   );
 
-  const sorted = useMemo(
-    () => sortItems(filtered, sort, (c, key) => (key === 'nominalRadius' ? c.nominalRadius : c[key])),
-    [filtered, sort]
-  );
+  const sorted = useMemo(() => sortItems(filtered, sort, (c, key) => c[key]), [filtered, sort]);
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
 
@@ -87,19 +73,6 @@ export function Composition() {
   const COLUMNS: ListTableHeadColumn<CompositionSortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[240px]' },
     { label: 'Description' },
-    { label: 'Nominal radius', sortKey: 'nominalRadius', className: 'w-[140px]' },
-    {
-      label: 'Type',
-      className: 'w-[180px]',
-      action: (
-        <ColumnFilterButton
-          ariaLabel="Filter by type"
-          active={typeFilter.selected.size > 0}
-          onClick={typeFilter.openDropdown}
-          buttonRef={typeFilter.btnRef}
-        />
-      ),
-    },
     { label: 'Last updated', sortKey: 'lastUpdated', className: 'w-[160px] whitespace-nowrap' },
   ];
 
@@ -134,13 +107,6 @@ export function Composition() {
             <div className="mt-4 flex items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-3">
                 <ListSearchInput value={query} onChange={(v) => { setQuery(v); setPage(1); }} widthClassName="w-[384px]" />
-
-                {typeFilter.selected.size > 0 && (
-                  <>
-                    <span className="text-[13px] font-medium text-[#6b7280]">Filtered by</span>
-                    <ActiveFilterChip label="Type" selected={typeFilter.selected} onClear={typeFilter.clear} />
-                  </>
-                )}
               </div>
 
               <ViewModeToggle value={view} onChange={setView} />
@@ -152,7 +118,7 @@ export function Composition() {
                 <table className="w-full border-collapse">
                   <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
                   <ListTableBody
-                    colSpan={6}
+                    colSpan={4}
                     isLoading={isLoading}
                     isError={isError}
                     loadingLabel="Loading compositions…"
@@ -168,12 +134,6 @@ export function Composition() {
                         </td>
                         <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
                           {c.description}
-                        </td>
-                        <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-                          {c.nominalRadius} m
-                        </td>
-                        <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-                          {c.type}
                         </td>
                         <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
                           {c.lastUpdated}
@@ -236,18 +196,6 @@ export function Composition() {
       </main>
 
       <Footer />
-
-      <ColumnFilterPanel
-        open={typeFilter.open}
-        pos={typeFilter.pos}
-        dropRef={typeFilter.dropRef}
-        query={typeFilter.query}
-        onQueryChange={typeFilter.setQuery}
-        options={typeFilter.visibleOptions}
-        selected={typeFilter.selected}
-        onToggle={typeFilter.toggle}
-        onToggleAll={typeFilter.toggleSelectAll}
-      />
 
       <ConfirmDialog
         open={pendingDelete !== null}
