@@ -87,6 +87,7 @@ export interface GeometryDetail extends Geometry {
   settings?: KeyValuePair[];
   profiles?: GeometryProfile[];
   profile_generator_parameters?: ProfileGeneratorParameters;
+  edges?: GeometryEdge[];
 }
 
 export interface GeometryProfilePreviewPayload {

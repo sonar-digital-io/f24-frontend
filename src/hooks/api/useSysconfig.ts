@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getSysconfig, getMaterialSysconfig } from '@/api/sysconfig';
+import { getSysconfig, getMaterialSysconfig, getGeometrySysconfig } from '@/api/sysconfig';
 
 export const sysconfigKeys = {
   detail: (projectId: string) => ['sysconfig', projectId] as const,
@@ -32,6 +32,20 @@ export function useMaterialSysconfig(materialId: number) {
     // against the material's current saved values, so don't trust a cached response.
     // (gcTime deliberately left at its default — 0 would drop the cached data the instant
     // the component briefly unmounts, forcing isLoading:true instead of a quiet revalidate.)
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+}
+
+export const geometrySysconfigKeys = {
+  detail: () => ['sysconfig', 'geometry'] as const,
+};
+
+/** Same reasoning as useSysconfig above — no id param, since geometry_settings is the same for every geometry. */
+export function useGeometrySysconfig() {
+  return useQuery({
+    queryKey: geometrySysconfigKeys.detail(),
+    queryFn: getGeometrySysconfig,
     staleTime: 0,
     refetchOnMount: 'always',
   });

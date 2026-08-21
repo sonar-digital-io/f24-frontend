@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -28,22 +28,16 @@ import {
   useUpdateGeometryEdges,
   useGeometryEdges,
 } from '@/hooks/api/useGeometry';
+import { useGeometrySysconfig } from '@/hooks/api/useSysconfig';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { toUiProfile, toApiProfile } from '@/lib/geometryProfileMapping';
+import { buildSysconfigSections } from '@/lib/sysconfigMapping';
+import { isFormValid } from '@/lib/sysconfigFormValidation';
+import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
+import { toKeyValueList, keyValueSignature } from '@/lib/keyValueMapping';
 import type { Profile } from '@/data/profiles';
 import type { GeometryEdgeInput, ProfileGeneratorParameters } from '@/api/types/geometry';
-
-interface GlobalProperties {
-  nominalRadius: string;
-  rootRadius: string;
-  stackingLine: string;
-  bladeNumber: string;
-}
-
-/** Always sent as-is to PUT /geometry/:id/settings/ — shown in the form but not editable. */
-const AIRFOIL_ORIENTATION = 'normal';
-const AIRFOIL_DRAWING_PLANE = 'xy';
 
 const PANEL_WIDTH_NARROW = 'w-[516px] max-w-[calc(100vw-2rem)]';
 const PANEL_WIDTH_WIDE = 'w-[924px] max-w-[calc(100vw-2rem)]';
@@ -101,17 +95,46 @@ export function GeometryEdit() {
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
   const [profileFolded, setProfileFolded] = useState(false);
   const [stackingFolded, setStackingFolded] = useState(true);
-  // Global properties — sent via PUT /geometry/:id/settings/ as key/value pairs, and
+  // Global properties — field list/labels/constraints come from GET /sysconfig/'s
+  // configuration.geometry_settings; values are keyed by backend `reference` (e.g.
+  // "nominal_radius"), sent via PUT /geometry/:id/settings/ as key/value pairs, and
   // hydrated below from the `settings` array nested in GET /geometry/:id/ when present.
-  const [props, setProps] = useState<GlobalProperties>({
-    nominalRadius: '',
-    rootRadius: '',
-    stackingLine: '',
-    bladeNumber: '',
-  });
+  const sysconfigQuery = useGeometrySysconfig();
+  const globalPropertySections = useMemo(
+    () =>
+      sysconfigQuery.data
+        ? buildSysconfigSections(sysconfigQuery.data, sysconfigQuery.data.configuration.geometry_settings)
+        : [],
+    [sysconfigQuery.data]
+  );
+  const [props, setProps] = useState<Record<string, string>>({});
+  // Snapshot of `props` as last confirmed saved — null until the first hydrate/save,
+  // same role as `baseline` below but for the global properties fields.
+  const [propsBaseline, setPropsBaseline] = useState<Record<string, string> | null>(null);
+
+  // A `fixed` field (e.g. airfoil orientation/drawing plane) is backend-locked to a single
+  // constant value, exposed as sysconfig's own `entry.value` rather than anything per-geometry
+  // — seed it into `props` as soon as sections load, for a brand new geometry that has no
+  // `settings` of its own yet to hydrate it from. Already-hydrated/edited values are untouched.
+  useEffect(() => {
+    setProps((p) => {
+      const defaults: Record<string, string> = {};
+      globalPropertySections.forEach((section) =>
+        section.fields.forEach((field) => {
+          if (field.fixed && field.value !== undefined && p[field.name] === undefined) {
+            defaults[field.name] = field.value;
+          }
+        })
+      );
+      return Object.keys(defaults).length > 0 ? { ...defaults, ...p } : p;
+    });
+  }, [globalPropertySections]);
 
   // Profiles — hydrated from the `profiles` array nested in GET /geometry/:id/.
   const [hydratedProfiles, setHydratedProfiles] = useState<Profile[] | null>(null);
+  // Edges — same idea, tracked separately from `hydratedProfiles` since Stacking's own
+  // panel (unlike Profiles) keeps its own edges state rather than reading this directly.
+  const [edgesAvailable, setEdgesAvailable] = useState(false);
 
   // Project config state — name/date/description, sent to POST /geometry/ on create
   // or PUT /geometry/:id/ on edit. For edits, hydrated from GET /geometry/:id/.
@@ -133,8 +156,31 @@ export function GeometryEdit() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew]);
 
+  // Re-fetch GET /geometry/:id/ on every tab switch — Stacking/Spars' availability
+  // (see `profilesSaved` below) depends on its nested `profiles` array staying
+  // current, e.g. right after a profile-generator run persists profiles server-side.
+  useEffect(() => {
+    if (!isNew) detailQuery.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // Keep the Profiles tab's list (and Stacking/Spars' gating) in sync with the backend's
+  // nested `profiles`/`edges` arrays on every GET /geometry/:id/ — not hydrate-once, since
+  // the effect above refetches repeatedly and both can also be created by other means
+  // (e.g. profiles via the profile-generator — see handleProfileGeneratorCommit/
+  // handleSaveEdges below, which update this same state immediately from their own
+  // response instead of waiting for this effect's next refetch to catch up).
+  useEffect(() => {
+    if (detailQuery.data?.profiles) {
+      setHydratedProfiles(detailQuery.data.profiles.map(toUiProfile));
+    }
+    if (detailQuery.data?.edges) {
+      setEdgesAvailable(detailQuery.data.edges.length > 0);
+    }
+  }, [detailQuery.data]);
+
   // Load the existing geometry's name/date/description — plus, when present, the nested
-  // settings/profiles arrays — into the form when editing.
+  // settings array — into the form when editing.
   const hydrated = useHydrateOnce(!isNew && !detailQuery.isFetching && !!detailQuery.data, () => {
     const g = detailQuery.data!;
     const hydratedDate = toDateInputValue(g.created_at);
@@ -145,17 +191,9 @@ export function GeometryEdit() {
     setBaseline({ name: g.name, date: hydratedDate, description: hydratedDescription });
 
     if (g.settings) {
-      const settingsMap = new Map(g.settings.map((kv) => [kv.reference, String(kv.value)]));
-      setProps({
-        nominalRadius: settingsMap.get('nominal_radius') ?? '',
-        rootRadius: settingsMap.get('root_radius') ?? '',
-        stackingLine: settingsMap.get('stacking_line') ?? '',
-        bladeNumber: settingsMap.get('blade_number') ?? '',
-      });
-    }
-
-    if (g.profiles) {
-      setHydratedProfiles(g.profiles.map(toUiProfile));
+      const hydratedProps = Object.fromEntries(g.settings.map((kv) => [kv.reference, String(kv.value)]));
+      setProps(hydratedProps);
+      setPropsBaseline(hydratedProps);
     }
 
     if (g.profile_generator_parameters) {
@@ -173,7 +211,7 @@ export function GeometryEdit() {
     }
   );
 
-  function updateField(key: keyof GlobalProperties, value: string) {
+  function updateField(key: string, value: string) {
     setProps((p) => ({ ...p, [key]: value }));
   }
 
@@ -211,48 +249,76 @@ export function GeometryEdit() {
     setBaseline({ name: newName, date: newDate, description: newDescription });
   }
 
-  async function handleSaveGlobalProperties() {
-    await updateSettingsMutation.mutateAsync({
-      settings: [
-        { reference: 'nominal_radius', value: props.nominalRadius },
-        { reference: 'root_radius', value: props.rootRadius },
-        { reference: 'airfoil_orientation', value: AIRFOIL_ORIENTATION },
-        { reference: 'airfoil_drawing_plane', value: AIRFOIL_DRAWING_PLANE },
-        { reference: 'stacking_line', value: props.stackingLine },
-        { reference: 'blade_number', value: props.bladeNumber },
-      ],
-    });
+  // Every field here is mandatory, so — unlike Material's Mechanical/Fatigue tabs —
+  // autosave itself waits for full completeness, not just in-range values.
+  const globalPropertiesValid = isFormValid(globalPropertySections, props);
+  const globalPropertiesUnsaved = keyValueSignature(props) !== keyValueSignature(propsBaseline ?? {});
+
+  // Autosave the Global properties tab once every mandatory field is filled — fires
+  // when focus leaves a field (blur) or the panel itself (click-out).
+  async function handleGlobalPropertiesBlur() {
+    if (!globalPropertiesValid || !globalPropertiesUnsaved || updateSettingsMutation.isPending) return;
+    try {
+      await updateSettingsMutation.mutateAsync({ settings: toKeyValueList(props) });
+      setPropsBaseline(props);
+    } catch {
+      // updateSettingsMutation's onError (global mutation cache) already toasts.
+    }
   }
+
+  // Gates the other tabs, and drives the toolbar's Saved/Saving/Not saved indicator.
+  // Both queries' data must have actually arrived first — otherwise `globalPropertySections`
+  // is `[]` and `props`/`propsBaseline` are both still `{}`, which reads as trivially valid
+  // and saved before there's any real data behind it.
+  const globalPropertiesLoaded = hydrated && !sysconfigQuery.isLoading && !!sysconfigQuery.data;
+  const globalPropertiesSaved = globalPropertiesLoaded && globalPropertiesValid && !globalPropertiesUnsaved;
+  const globalPropertiesStatus: SaveStatus = updateSettingsMutation.isPending
+    ? 'saving'
+    : globalPropertiesSaved
+      ? 'saved'
+      : 'not-saved';
 
   async function handleSaveProfiles(profiles: Profile[]) {
-    await updateProfilesMutation.mutateAsync({ profiles: profiles.map(toApiProfile) });
+    const result = await updateProfilesMutation.mutateAsync({ profiles: profiles.map(toApiProfile) });
+    setHydratedProfiles(result.profiles.map(toUiProfile));
   }
 
-  async function handleSaveProfileGeneratorParams(params: ProfileGeneratorParameters) {
-    await updateGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
-    setSavedProfileParams(params);
-  }
+  // Autosaves the Profile distribution tab on every field blur and every bezier point
+  // move — PUT the parameters first, then (only once that succeeds) POST to regenerate
+  // the profiles from them. Both mutations already toast on failure via the global
+  // mutation cache, so there's nothing more to surface here beyond `profilesUpdated`.
+  const [profilesUpdated, setProfilesUpdated] = useState(false);
 
-  async function handleGenerateProfiles(params: ProfileGeneratorParameters) {
-    await runGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
+  async function handleProfileGeneratorCommit(params: ProfileGeneratorParameters) {
+    setProfilesUpdated(false);
+    try {
+      await updateGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
+    } catch {
+      return;
+    }
     setSavedProfileParams(params);
-  }
-
-  // Generate profiles from the distribution curves, persist them via
-  // PUT /geometry/:id/profiles/, then move on to the Profiles tab.
-  async function handleSaveAndNextDistribution(params: ProfileGeneratorParameters) {
-    const { profiles } = await runGeneratorMutation.mutateAsync({
-      geometryId,
-      payload: { profile_generator_parameters: params },
-    });
-    await updateProfilesMutation.mutateAsync({ profiles });
-    setSavedProfileParams(params);
-    setHydratedProfiles(profiles.map((p, i) => toUiProfile({ ...p, id: i, file: null })));
-    setActiveTab('profiles');
+    try {
+      const generated = await runGeneratorMutation.mutateAsync({
+        geometryId,
+        payload: { profile_generator_parameters: params },
+      });
+      // Persist the generated profiles — same shape as the write payload (no id/file) —
+      // so they show up on the Profiles tab and unlock Stacking/Spars.
+      const saved = await updateProfilesMutation.mutateAsync({ profiles: generated.profiles });
+      setHydratedProfiles(saved.profiles.map(toUiProfile));
+      setProfilesUpdated(true);
+    } catch {
+      // runGeneratorMutation's/updateProfilesMutation's onError (global mutation cache) already toasts.
+    }
   }
 
   async function handleSaveEdges(edges: GeometryEdgeInput[]) {
-    await updateEdgesMutation.mutateAsync({ edges });
+    const result = await updateEdgesMutation.mutateAsync({ edges });
+    // Set immediately from the PUT's own response — don't wait for the next tab-switch's
+    // GET /geometry/:id/ refetch to catch up, which would leave Spars gated for one extra
+    // tab switch after a successful save. Still refetched below for the endpoint itself.
+    setEdgesAvailable(result.edges.length > 0);
+    await detailQuery.refetch();
   }
 
   // GET /geometry/:id/result/ returns binary mesh data, not JSON — in
@@ -270,7 +336,7 @@ export function GeometryEdit() {
         responseType: 'arraybuffer',
         timeout: 120_000,
       });
-      setResultScale(Number(props.nominalRadius) || 1);
+      setResultScale(Number(props.nominal_radius) || 1);
       setResultStl(data);
     } catch (err) {
       // responseType: 'arraybuffer' means even a JSON error body decodes to raw
@@ -311,7 +377,16 @@ export function GeometryEdit() {
           onStatusChange={setResultStatus}
         />
 
-        <GeometryEditToolbar activeTab={activeTab} onTabChange={setActiveTab} isNew={isNew} onExit={handleExit} />
+        <GeometryEditToolbar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          isNew={isNew}
+          globalPropertiesSaved={globalPropertiesSaved}
+          profilesSaved={(hydratedProfiles?.length ?? 0) > 0}
+          edgesSaved={edgesAvailable}
+          status={isNew ? undefined : globalPropertiesStatus}
+          onExit={handleExit}
+        />
 
         {/* Floating properties panel (top-left, gap below toolbar matches gap above tab pill = 8px).
             Width depends on the active tab. z-30 so it sits above the render toggle (z-20). */}
@@ -347,30 +422,23 @@ export function GeometryEdit() {
 
           {activeTab === 'global-properties' && !isNew && (
             <GeometryGlobalPropertiesPanel
-              props={props}
+              sections={globalPropertySections}
+              values={props}
               onFieldChange={updateField}
-              airfoilOrientation={AIRFOIL_ORIENTATION}
-              airfoilDrawingPlane={AIRFOIL_DRAWING_PLANE}
-              onSave={handleSaveGlobalProperties}
-              saving={updateSettingsMutation.isPending}
-              saveError={updateSettingsMutation.isError}
+              onBlur={handleGlobalPropertiesBlur}
+              loading={sysconfigQuery.isLoading}
+              loadError={sysconfigQuery.isError}
             />
           )}
           {activeTab === 'profile-distribution' && (
             <ProfileDistributionPanel
               folded={profileFolded}
               onFoldToggle={() => setProfileFolded((f) => !f)}
-              rootRadiusPercent={props.rootRadius}
+              rootRadiusPercent={props.root_radius}
               initialParameters={savedProfileParams}
-              onSaveParameters={handleSaveProfileGeneratorParams}
-              onGenerate={handleGenerateProfiles}
-              onSaveAndNext={handleSaveAndNextDistribution}
-              saving={updateGeneratorMutation.isPending}
-              generating={runGeneratorMutation.isPending}
-              savingAndNext={runGeneratorMutation.isPending || updateProfilesMutation.isPending}
-              saveError={updateGeneratorMutation.isError}
-              generateError={runGeneratorMutation.isError}
-              saveAndNextError={runGeneratorMutation.isError || updateProfilesMutation.isError}
+              onCommit={handleProfileGeneratorCommit}
+              committing={updateGeneratorMutation.isPending || runGeneratorMutation.isPending}
+              profilesUpdated={profilesUpdated}
             />
           )}
           {activeTab === 'profiles' && (
@@ -387,8 +455,8 @@ export function GeometryEdit() {
               folded={stackingFolded}
               onFoldToggle={() => setStackingFolded((f) => !f)}
               initialEdges={edgesQuery.data?.edges}
-              rootRadiusPercent={props.rootRadius}
-              nominalRadius={Number(props.nominalRadius) || 1}
+              rootRadiusPercent={props.root_radius}
+              nominalRadius={Number(props.nominal_radius) || 1}
               onSave={handleSaveEdges}
               saving={updateEdgesMutation.isPending}
               saveError={updateEdgesMutation.isError}

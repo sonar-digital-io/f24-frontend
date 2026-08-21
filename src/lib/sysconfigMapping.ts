@@ -20,13 +20,13 @@ function unitSuffix(sysconfig: SysconfigResponse, unitId: string | undefined): s
 }
 
 /**
- * Builds PropertyFormTab sections from a sysconfig property section (mechanical or
- * fatigue properties). Labels/units/required come straight from the backend's parameter
- * catalog — no more hand-maintained, easily-mismatched labels. `active` is already
- * resolved server-side against the material's current values, so it alone decides which
- * fields show at all (e.g. elastic_modulus_33 only for isotropic types).
+ * Builds PropertyFormTab sections from a sysconfig property section (mechanical/fatigue
+ * properties, geometry settings, …). Labels/units/required come straight from the backend's
+ * parameter catalog — no more hand-maintained, easily-mismatched labels. `active` is already
+ * resolved server-side against the entity's current values, so it alone decides which
+ * fields show at all (e.g. elastic_modulus_33 only for isotropic material types).
  */
-export function buildMaterialPropertySections(
+export function buildSysconfigSections(
   sysconfig: SysconfigResponse,
   section: SysconfigProjectSettings | undefined
 ): FormSection[] {
@@ -53,6 +53,8 @@ export function buildMaterialPropertySections(
             max: entry.maximum,
             type: paramDef?.type,
             fixed: entry.fixed,
+            value: entry.value,
+            options: paramDef?.options,
           };
         }),
     }))

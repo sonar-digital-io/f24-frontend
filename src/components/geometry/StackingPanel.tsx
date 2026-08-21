@@ -54,27 +54,19 @@ const DEFAULT_ROOT_X = 0.05;
 const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
   sweep: [
     { x: 0, y: 0 },
-    { x: 0.2, y: 0.1 },
-    { x: 0.6278, y: 0.24688 },
-    { x: 1, y: -0.13466 },
+    { x: 1, y: 0 },
   ],
   dihedral: [
     { x: 0, y: 0 },
-    { x: 0.3, y: 0.05 },
-    { x: 0.7, y: 0.18 },
-    { x: 1, y: 0.05 },
+    { x: 1, y: 0 },
   ],
   twist: [
-    { x: 0, y: 14.0 },
-    { x: 0.25, y: 10.5 },
-    { x: 0.65, y: 3.2 },
-    { x: 1, y: 0.0 },
+    { x: 0, y: 10 },
+    { x: 1, y: 10 },
   ],
   chord: [
-    { x: 0, y: 1.8 },
-    { x: 0.28, y: 4.6 },
-    { x: 0.65, y: 2.8 },
-    { x: 1, y: 0.9 },
+    { x: 0.1, y: 3 },
+    { x: 1, y: 3 },
   ],
 };
 

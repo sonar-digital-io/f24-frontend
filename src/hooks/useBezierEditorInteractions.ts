@@ -5,6 +5,9 @@ import { clamp, pxToData } from '@/lib/bezierMath';
 interface UseBezierEditorInteractionsOptions {
   points: ControlPoint[];
   onChange: (points: ControlPoint[]) => void;
+  /** Fires once a drag actually completes (pointer up/cancel after a real move) —
+   *  distinct from `onChange`, which fires continuously while dragging. */
+  onCommit?: () => void;
   xMin: number;
   xMax: number;
   yMin: number;
@@ -27,6 +30,7 @@ interface UseBezierEditorInteractionsOptions {
 export function useBezierEditorInteractions({
   points,
   onChange,
+  onCommit,
   xMin,
   xMax,
   yMin,
@@ -96,6 +100,7 @@ export function useBezierEditorInteractions({
       e.preventDefault();
       if (points.length <= minPoints) return;
       onChange(points.filter((_, i) => i !== idx));
+      onCommit?.();
       return;
     }
     const point = points[idx];
@@ -112,6 +117,7 @@ export function useBezierEditorInteractions({
     y = clamp(y, yMin, yMax);
     x = clampPointX(idx, x);
     onChange(points.map((p, i) => (i === idx ? { x, y } : p)));
+    onCommit?.();
   }
 
   function handlePointerUp(idx: number, e: React.PointerEvent<SVGCircleElement>) {
@@ -122,6 +128,7 @@ export function useBezierEditorInteractions({
     // Setting draggingIndex → null causes the ghost to disappear on next render
     setDraggingIndex(null);
     setBlockedAtRoot(false);
+    onCommit?.();
   }
 
   // Double-click any anchor (including endpoints) to remove it — blocked
@@ -130,6 +137,7 @@ export function useBezierEditorInteractions({
     e.stopPropagation();
     if (points.length <= minPoints) return;
     onChange(points.filter((_, i) => i !== idx));
+    onCommit?.();
   }
 
   /** Click on background → insert a new anchor at that data position. */
@@ -162,6 +170,7 @@ export function useBezierEditorInteractions({
               return insertIdx === -1 ? points.length - 1 : insertIdx;
             })();
     onChange([...points.slice(0, idx), { x, y }, ...points.slice(idx)]);
+    onCommit?.();
   }
 
   return {

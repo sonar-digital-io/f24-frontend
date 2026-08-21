@@ -14,6 +14,9 @@ interface ProfileGeneratorTopRowProps {
   onStartPosChange: (v: string) => void;
   endPos: string;
   onEndPosChange: (v: string) => void;
+  /** Fires on blur of Profile count / Start position / End position (not Type, which
+   *  is a disabled dropdown) — used to autosave. */
+  onFieldBlur?: () => void;
 }
 
 /** Type / Profile count / Start position / End position field row. */
@@ -28,6 +31,7 @@ export function ProfileGeneratorTopRow({
   onStartPosChange,
   endPos,
   onEndPosChange,
+  onFieldBlur,
 }: ProfileGeneratorTopRowProps) {
   return (
     <div className={gridClassName}>
@@ -49,6 +53,7 @@ export function ProfileGeneratorTopRow({
           id="profile-count"
           value={profileCount}
           onChange={(e) => onProfileCountChange(e.target.value)}
+          onBlur={onFieldBlur}
           className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
         />
       </div>
@@ -60,6 +65,7 @@ export function ProfileGeneratorTopRow({
           id="profile-start-pos"
           value={startPos}
           onChange={(e) => onStartPosChange(e.target.value)}
+          onBlur={onFieldBlur}
           className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
         />
       </div>
@@ -71,6 +77,7 @@ export function ProfileGeneratorTopRow({
           id="profile-end-pos"
           value={endPos}
           onChange={(e) => onEndPosChange(e.target.value)}
+          onBlur={onFieldBlur}
           className="h-9 rounded-md border-[#e2e8f0] px-3 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
         />
       </div>

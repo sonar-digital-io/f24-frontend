@@ -14,3 +14,9 @@ export async function getMaterialSysconfig(materialId?: number): Promise<Sysconf
   });
   return data;
 }
+
+/** No id param — `configuration.geometry_settings` is the same for every geometry. */
+export async function getGeometrySysconfig(): Promise<SysconfigResponse> {
+  const { data } = await apiClient.get<SysconfigResponse>('/sysconfig/');
+  return data;
+}

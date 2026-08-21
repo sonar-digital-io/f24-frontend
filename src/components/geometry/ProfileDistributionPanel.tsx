@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { FoldHorizontal } from 'lucide-react';
+import { FoldHorizontal, Info, Loader2, Check } from 'lucide-react';
 import type { ControlPoint } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldableSectionList } from '@/components/geometry/FoldableSectionList';
 import { ProfileGeneratorTopRow } from '@/components/geometry/ProfileGeneratorTopRow';
-import { ProfileGeneratorActions } from '@/components/geometry/ProfileGeneratorActions';
 import { ProfileDistributionSectionBody } from '@/components/geometry/ProfileDistributionSectionBody';
+import { Tip } from '@/components/common/list/Tip';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
 import type { ProfileGeneratorParameters } from '@/api/types/geometry';
 
@@ -45,21 +45,15 @@ const DEFAULT_START_POSITION = 0.05;
 const INITIAL_SECTION_POINTS: Record<SectionKey, ControlPoint[]> = {
   'maximum-camber': [
     { x: DEFAULT_START_POSITION, y: 0 },
-    { x: 0.4186, y: 23.7654 },
-    { x: 0.91, y: 22.13445 },
-    { x: 1, y: 5.7 },
+    { x: 1, y: 0 },
   ],
   'maximum-camber-position': [
     { x: DEFAULT_START_POSITION, y: 0 },
-    { x: 0.35, y: 12 },
-    { x: 0.7, y: 18 },
-    { x: 1, y: 8 },
+    { x: 1, y: 0 },
   ],
   thickness: [
     { x: DEFAULT_START_POSITION, y: 5 },
-    { x: 0.3, y: 22 },
-    { x: 0.7, y: 18 },
-    { x: 1, y: 3 },
+    { x: 1, y: 5 },
   ],
 };
 
@@ -79,18 +73,14 @@ interface ProfileDistributionPanelProps {
    *  /geometry/:id/tools/profile-generator/ — hydrated into profile count,
    *  end position and the three curves. */
   initialParameters?: ProfileGeneratorParameters;
-  /** PUT /geometry/:id/tools/profile-generator/ — persist the current parameters. */
-  onSaveParameters?: (params: ProfileGeneratorParameters) => void;
-  /** POST /geometry/:id/tools/profile-generator/ — run the generator. */
-  onGenerate?: (params: ProfileGeneratorParameters) => void;
-  /** Generate profiles then persist them via PUT /geometry/:id/profiles/, and move to the next tab. */
-  onSaveAndNext?: (params: ProfileGeneratorParameters) => void;
-  saving?: boolean;
-  generating?: boolean;
-  savingAndNext?: boolean;
-  saveError?: boolean;
-  generateError?: boolean;
-  saveAndNextError?: boolean;
+  /** Autosaves on every field blur and every completed bezier point move: PUTs the
+   *  parameters (same as the old "Save parameters" button), then — only once that
+   *  succeeds — POSTs to regenerate the profiles (same as the old "Generate" button). */
+  onCommit: (params: ProfileGeneratorParameters) => void;
+  /** Either half of the commit (save or generate) is in flight. */
+  committing?: boolean;
+  /** The last commit's generate step succeeded, and nothing has been edited since. */
+  profilesUpdated?: boolean;
 }
 
 export function ProfileDistributionPanel({
@@ -98,15 +88,9 @@ export function ProfileDistributionPanel({
   onFoldToggle,
   rootRadiusPercent,
   initialParameters,
-  onSaveParameters,
-  onGenerate,
-  onSaveAndNext,
-  saving,
-  generating,
-  savingAndNext,
-  saveError,
-  generateError,
-  saveAndNextError,
+  onCommit,
+  committing,
+  profilesUpdated,
 }: ProfileDistributionPanelProps) {
   const [type, setType] = useState('NACA 4 digit');
   const [startPos, setStartPos] = useState(String(DEFAULT_START_POSITION));
@@ -148,6 +132,22 @@ export function ProfileDistributionPanel({
 
   const rootX = Number.isFinite(parseFloat(startPos)) ? parseFloat(startPos) : DEFAULT_START_POSITION;
 
+  // Points are edited (dragged, deleted, typed, added) well before a commit is due —
+  // `requestCommit` just marks one pending; the effect below reads the settled state
+  // once React has actually applied it, so a commit requested mid-update (e.g. from
+  // the same handler that just added a point) never reads a stale pre-update value.
+  const [commitTick, setCommitTick] = useState(0);
+  function requestCommit() {
+    setCommitTick((t) => t + 1);
+  }
+
+  // This panel unmounts/remounts on tab switch, so mounting == opening the tab —
+  // save immediately rather than waiting for the first field blur/point edit.
+  useEffect(() => {
+    requestCommit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const {
     sectionPoints,
     setPointsForSection,
@@ -166,7 +166,8 @@ export function ProfileDistributionPanel({
     })(),
     () => ({ min: 0, max: Y_MAX }),
     2,
-    () => rootX
+    () => rootX,
+    requestCommit
   );
 
   // The three curves' first point stays in sync with each other.
@@ -217,9 +218,18 @@ export function ProfileDistributionPanel({
     };
   }
 
-  // Points can be deleted down to 0 in the chart — block saving/generating
-  // until every curve has at least the 2 points a bezier curve needs.
+  // Points can be deleted down to 0 in the chart — block autosaving until every
+  // curve has at least the 2 points a bezier curve needs.
   const hasEnoughPoints = SECTION_KEYS.every((key) => sectionPoints[key].length >= 2);
+
+  // Fires once per requested commit, after the triggering state change (a moved/
+  // deleted/added point, or a field's new value) has actually been applied — never
+  // on every keystroke/drag-step in between.
+  useEffect(() => {
+    if (commitTick === 0) return;
+    if (hasEnoughPoints) onCommit(buildParams());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commitTick]);
 
   // A single section's chart + table BODY (no heading). Heading is rendered
   // by the accordion item in folded mode, and is hidden in expanded mode
@@ -236,6 +246,7 @@ export function ProfileDistributionPanel({
         folded={folded}
         points={sectionPoints[key]}
         onChange={(next) => handleCurveChange(key, next)}
+        onCommit={requestCommit}
         yMax={Y_MAX}
         rootX={rootX}
         valueLabel={valueLabel}
@@ -291,20 +302,26 @@ export function ProfileDistributionPanel({
           onStartPosChange={handleStartPosChange}
           endPos={endPos}
           onEndPosChange={setEndPos}
+          onFieldBlur={requestCommit}
         />
 
-        <ProfileGeneratorActions
-          onSaveParameters={onSaveParameters ? () => onSaveParameters(buildParams()) : undefined}
-          onGenerate={onGenerate ? () => onGenerate(buildParams()) : undefined}
-          onSaveAndNext={onSaveAndNext ? () => onSaveAndNext(buildParams()) : undefined}
-          saving={saving}
-          generating={generating}
-          savingAndNext={savingAndNext}
-          hasEnoughPoints={hasEnoughPoints}
-          saveError={saveError}
-          generateError={generateError}
-          saveAndNextError={saveAndNextError}
-        />
+        <div className="flex items-center gap-[6px]">
+          {committing ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
+              <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
+            </>
+          ) : profilesUpdated ? (
+            <>
+              <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
+              <span className="text-[14px] leading-5 text-[#737373]">Profiles updated</span>
+              <Tip label="Profiles were regenerated from the current settings and distribution curves.">
+                <Info className="h-3.5 w-3.5 text-[#6b7280]" strokeWidth={2} />
+              </Tip>
+            </>
+          ) : null}
+          {!hasEnoughPoints && <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>}
+        </div>
 
         <p className="pt-2 text-[16px] font-semibold leading-none text-[#0a0a0a]">
           Distribution curves

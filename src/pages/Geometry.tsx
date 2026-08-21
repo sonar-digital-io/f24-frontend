@@ -10,12 +10,8 @@ import { ListSearchInput } from '@/components/common/list/ListSearchInput';
 import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { matchesQuery, paginate, rowInteractionProps, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, ViewMode, GeometrySortKey } from '@/types';
-import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
-import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
-import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { ViewModeToggle } from '@/components/common/list/ViewModeToggle';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
-import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { formatDateTime } from '@/lib/utils';
 import { GeometryCard } from '@/components/common/card/GeometryCard';
 import { type Geometry as GeometryItem, type BladeType } from '@/data/geometries';
@@ -68,23 +64,12 @@ export function Geometry() {
     }
   }, [location.search, navigate]);
 
-  const allTypes = useMemo(() => [...new Set(GEOMETRIES.map((g) => g.type))].sort(), [GEOMETRIES]);
-  const typeFilter = useColumnFilter(allTypes, () => setPage(1));
-
   const filtered = useMemo(
-    () =>
-      GEOMETRIES.filter(
-        (g) =>
-          matchesQuery(query, [g.name, g.description]) &&
-          (typeFilter.selected.size === 0 || typeFilter.selected.has(g.type))
-      ),
-    [GEOMETRIES, query, typeFilter.selected]
+    () => GEOMETRIES.filter((g) => matchesQuery(query, [g.name, g.description])),
+    [GEOMETRIES, query]
   );
 
-  const sorted = useMemo(
-    () => sortItems(filtered, sort, (g, key) => (key === 'nominalRadius' ? g.nominalRadius : g[key])),
-    [filtered, sort]
-  );
+  const sorted = useMemo(() => sortItems(filtered, sort, (g, key) => g[key]), [filtered, sort]);
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
 
@@ -95,19 +80,6 @@ export function Geometry() {
   const COLUMNS: ListTableHeadColumn<GeometrySortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[240px]' },
     { label: 'Description' },
-    { label: 'Nominal radius', sortKey: 'nominalRadius', className: 'w-[160px] whitespace-nowrap' },
-    {
-      label: 'Type',
-      className: 'w-[180px]',
-      action: (
-        <ColumnFilterButton
-          ariaLabel="Filter by type"
-          active={typeFilter.selected.size > 0}
-          onClick={typeFilter.openDropdown}
-          buttonRef={typeFilter.btnRef}
-        />
-      ),
-    },
     { label: 'Last updated', sortKey: 'lastUpdated', className: 'w-[160px] whitespace-nowrap' },
   ];
 
@@ -121,24 +93,15 @@ export function Geometry() {
             <ListPageHeader
               title="Geometries"
               actions={
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-4 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#f1f5f9]"
-                  >
-                    Import
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/geometry/new')}
-                    className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
-                  >
-                    New geometry
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/geometry/new')}
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
+                >
+                  New geometry
+                </button>
               }
             />
-
             {/* Search + view toggle */}
             <div className="mt-4 flex items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-3">
@@ -148,13 +111,6 @@ export function Geometry() {
                   placeholder="Search for geometry"
                   widthClassName="w-[384px]"
                 />
-
-                {typeFilter.selected.size > 0 && (
-                  <>
-                    <span className="text-[13px] font-medium text-[#6b7280]">Filtered by</span>
-                    <ActiveFilterChip label="Type" selected={typeFilter.selected} onClear={typeFilter.clear} />
-                  </>
-                )}
               </div>
 
               <ViewModeToggle value={view} onChange={setView} />
@@ -166,7 +122,7 @@ export function Geometry() {
                 <table className="w-full border-collapse">
                   <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
                   <ListTableBody
-                    colSpan={6}
+                    colSpan={4}
                     isLoading={isLoading}
                     isError={isError}
                     loadingLabel="Loading geometries…"
@@ -183,12 +139,6 @@ export function Geometry() {
                         </td>
                         <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
                           {g.description}
-                        </td>
-                        <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-                          {g.nominalRadius} m
-                        </td>
-                        <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-                          {g.type}
                         </td>
                         <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
                           {g.lastUpdated}
@@ -249,18 +199,6 @@ export function Geometry() {
       </main>
 
       <Footer />
-
-      <ColumnFilterPanel
-        open={typeFilter.open}
-        pos={typeFilter.pos}
-        dropRef={typeFilter.dropRef}
-        query={typeFilter.query}
-        onQueryChange={typeFilter.setQuery}
-        options={typeFilter.visibleOptions}
-        selected={typeFilter.selected}
-        onToggle={typeFilter.toggle}
-        onToggleAll={typeFilter.toggleSelectAll}
-      />
 
       <ConfirmDialog
         open={pendingDelete !== null}

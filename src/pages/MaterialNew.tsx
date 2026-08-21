@@ -14,13 +14,13 @@ import {
 } from '@/hooks/api/useMaterials';
 import { useMaterialSysconfig } from '@/hooks/api/useSysconfig';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
-import { MECH_PROP_TYPE_REFERENCE, toKeyValueList, toValueMap, keyValueSignature } from '@/lib/materialFormMapping';
+import { MECH_PROP_TYPE_REFERENCE, toKeyValueList, toValueMap, keyValueSignature } from '@/lib/keyValueMapping';
 import {
-  buildMaterialPropertySections,
+  buildSysconfigSections,
   getMechPropTypeParameter,
   getMechPropTypeEntry,
-} from '@/lib/materialSysconfigMapping';
-import { isFormValid, isFormRangeValid } from '@/lib/materialFormValidation';
+} from '@/lib/sysconfigMapping';
+import { isFormValid, isFormRangeValid } from '@/lib/sysconfigFormValidation';
 import type { MaterialPayload } from '@/api/types/materials';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
@@ -79,14 +79,14 @@ export function MaterialNew() {
   const mechanicalSections = useMemo(
     () =>
       sysconfigQuery.data
-        ? buildMaterialPropertySections(sysconfigQuery.data, sysconfigQuery.data.configuration.mechanical_properties)
+        ? buildSysconfigSections(sysconfigQuery.data, sysconfigQuery.data.configuration.mechanical_properties)
         : [],
     [sysconfigQuery.data]
   );
   const fatigueSections = useMemo(
     () =>
       sysconfigQuery.data
-        ? buildMaterialPropertySections(sysconfigQuery.data, sysconfigQuery.data.configuration.fatigue_properties)
+        ? buildSysconfigSections(sysconfigQuery.data, sysconfigQuery.data.configuration.fatigue_properties)
         : [],
     [sysconfigQuery.data]
   );
