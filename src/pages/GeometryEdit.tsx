@@ -112,8 +112,29 @@ export function GeometryEdit() {
   // same role as `baseline` below but for the global properties fields.
   const [propsBaseline, setPropsBaseline] = useState<Record<string, string> | null>(null);
 
+  // A `fixed` field (e.g. airfoil orientation/drawing plane) is backend-locked to a single
+  // constant value, exposed as sysconfig's own `entry.value` rather than anything per-geometry
+  // — seed it into `props` as soon as sections load, for a brand new geometry that has no
+  // `settings` of its own yet to hydrate it from. Already-hydrated/edited values are untouched.
+  useEffect(() => {
+    setProps((p) => {
+      const defaults: Record<string, string> = {};
+      globalPropertySections.forEach((section) =>
+        section.fields.forEach((field) => {
+          if (field.fixed && field.value !== undefined && p[field.name] === undefined) {
+            defaults[field.name] = field.value;
+          }
+        })
+      );
+      return Object.keys(defaults).length > 0 ? { ...defaults, ...p } : p;
+    });
+  }, [globalPropertySections]);
+
   // Profiles — hydrated from the `profiles` array nested in GET /geometry/:id/.
   const [hydratedProfiles, setHydratedProfiles] = useState<Profile[] | null>(null);
+  // Edges — same idea, tracked separately from `hydratedProfiles` since Stacking's own
+  // panel (unlike Profiles) keeps its own edges state rather than reading this directly.
+  const [edgesAvailable, setEdgesAvailable] = useState(false);
 
   // Project config state — name/date/description, sent to POST /geometry/ on create
   // or PUT /geometry/:id/ on edit. For edits, hydrated from GET /geometry/:id/.
@@ -143,12 +164,18 @@ export function GeometryEdit() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  // Keep the Profiles tab's list in sync with the backend's nested `profiles` array
-  // on every GET /geometry/:id/ — not hydrate-once, since the effect above refetches
-  // repeatedly and profiles can also be created by other means (e.g. profile-generator).
+  // Keep the Profiles tab's list (and Stacking/Spars' gating) in sync with the backend's
+  // nested `profiles`/`edges` arrays on every GET /geometry/:id/ — not hydrate-once, since
+  // the effect above refetches repeatedly and both can also be created by other means
+  // (e.g. profiles via the profile-generator — see handleProfileGeneratorCommit/
+  // handleSaveEdges below, which update this same state immediately from their own
+  // response instead of waiting for this effect's next refetch to catch up).
   useEffect(() => {
     if (detailQuery.data?.profiles) {
       setHydratedProfiles(detailQuery.data.profiles.map(toUiProfile));
+    }
+    if (detailQuery.data?.edges) {
+      setEdgesAvailable(detailQuery.data.edges.length > 0);
     }
   }, [detailQuery.data]);
 
@@ -240,7 +267,11 @@ export function GeometryEdit() {
   }
 
   // Gates the other tabs, and drives the toolbar's Saved/Saving/Not saved indicator.
-  const globalPropertiesSaved = globalPropertiesValid && !globalPropertiesUnsaved;
+  // Both queries' data must have actually arrived first — otherwise `globalPropertySections`
+  // is `[]` and `props`/`propsBaseline` are both still `{}`, which reads as trivially valid
+  // and saved before there's any real data behind it.
+  const globalPropertiesLoaded = hydrated && !sysconfigQuery.isLoading && !!sysconfigQuery.data;
+  const globalPropertiesSaved = globalPropertiesLoaded && globalPropertiesValid && !globalPropertiesUnsaved;
   const globalPropertiesStatus: SaveStatus = updateSettingsMutation.isPending
     ? 'saving'
     : globalPropertiesSaved
@@ -282,9 +313,11 @@ export function GeometryEdit() {
   }
 
   async function handleSaveEdges(edges: GeometryEdgeInput[]) {
-    await updateEdgesMutation.mutateAsync({ edges });
-    // Spars' availability (see `edgesSaved` below) reads GET /geometry/:id/'s
-    // nested `edges` array, so re-fetch it right after saving.
+    const result = await updateEdgesMutation.mutateAsync({ edges });
+    // Set immediately from the PUT's own response — don't wait for the next tab-switch's
+    // GET /geometry/:id/ refetch to catch up, which would leave Spars gated for one extra
+    // tab switch after a successful save. Still refetched below for the endpoint itself.
+    setEdgesAvailable(result.edges.length > 0);
     await detailQuery.refetch();
   }
 
@@ -349,8 +382,8 @@ export function GeometryEdit() {
           onTabChange={setActiveTab}
           isNew={isNew}
           globalPropertiesSaved={globalPropertiesSaved}
-          profilesSaved={(detailQuery.data?.profiles?.length ?? 0) > 0}
-          edgesSaved={(detailQuery.data?.edges?.length ?? 0) > 0}
+          profilesSaved={(hydratedProfiles?.length ?? 0) > 0}
+          edgesSaved={edgesAvailable}
           status={isNew ? undefined : globalPropertiesStatus}
           onExit={handleExit}
         />

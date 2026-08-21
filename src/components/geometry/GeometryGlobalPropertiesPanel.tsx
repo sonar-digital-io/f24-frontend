@@ -1,5 +1,5 @@
 import type { FormSection } from '@/data/materialFormFields';
-import { SysconfigFieldRow } from '@/components/common/SysconfigFieldRow';
+import { SysconfigFieldRow } from '@/components/common/form/SysconfigFieldRow';
 
 interface GeometryGlobalPropertiesPanelProps {
   sections: FormSection[];

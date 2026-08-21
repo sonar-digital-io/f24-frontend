@@ -53,6 +53,7 @@ export function buildSysconfigSections(
             max: entry.maximum,
             type: paramDef?.type,
             fixed: entry.fixed,
+            value: entry.value,
             options: paramDef?.options,
           };
         }),

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { FormSection } from '@/data/materialFormFields';
-import { SysconfigFieldRow } from '@/components/common/SysconfigFieldRow';
+import { SysconfigFieldRow } from '@/components/common/form/SysconfigFieldRow';
 import { useScrollSpy } from '@/hooks/useScrollSpy';
 
 interface PropertyFormTabProps {

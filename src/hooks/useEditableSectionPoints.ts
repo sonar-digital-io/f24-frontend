@@ -79,9 +79,9 @@ export function useEditableSectionPoints<K extends string>(
   }
 
   function handleInputBlur(section: K, idx: number, field: Field) {
+    const k = fieldKey(section, idx, field);
+    if (editingValues[k] === undefined) return;
     setEditingValues((v) => {
-      const k = fieldKey(section, idx, field);
-      if (v[k] === undefined) return v;
       const next = { ...v };
       delete next[k];
       return next;
