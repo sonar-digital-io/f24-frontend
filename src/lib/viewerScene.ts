@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 /**
  * Static base scene shared by every full-bleed Three.js viewer (OccViewer):
- * gradient background, camera, lights, ground grid + shadow plane, and the
+ * gradient background, camera, lights, a shadow-receiving ground plane, and the
  * spinning "loading" ring placeholder. Pure Three.js object construction —
  * no React lifecycle here, so callers own mounting the renderer's canvas and
  * disposing everything on unmount.
@@ -32,9 +32,16 @@ export function createViewerScene(width: number, height: number) {
   renderer.toneMapping       = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  // Hemisphere (sky/ground) ambient instead of a flat AmbientLight — gives every
+  // surface a subtle top-vs-bottom gradient even where no direct light reaches it,
+  // which reads as "real" shading rather than a flat silhouette.
+  scene.add(new THREE.HemisphereLight(0xf3f7fb, 0x8891a0, 0.65));
 
-  const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+  // Three-point rig so a double-sided shell (e.g. a thin blade) shows visible
+  // shading on whichever face you're looking at, not just the one the single old
+  // key light happened to hit — key (casts the shadow), fill (softer, opposite
+  // side), and a low rim/back light so the far side isn't left flat and unlit.
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.15);
   keyLight.position.set(12, 18, 10);
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(2048, 2048);
@@ -44,15 +51,13 @@ export function createViewerScene(width: number, height: number) {
   keyLight.shadow.camera.bottom = -50;
   scene.add(keyLight);
 
-  const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.35);
-  fillLight.position.set(-8, 4, -8);
+  const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.55);
+  fillLight.position.set(-10, 6, -6);
   scene.add(fillLight);
 
-  const grid = new THREE.GridHelper(200, 40, 0xc0ccd8, 0xd4dde6);
-  grid.position.y = -2;
-  (grid.material as THREE.Material).opacity = 0.5;
-  (grid.material as THREE.Material).transparent = true;
-  scene.add(grid);
+  const rimLight = new THREE.DirectionalLight(0xe6edf5, 0.4);
+  rimLight.position.set(-6, -10, 8);
+  scene.add(rimLight);
 
   const groundGeo = new THREE.PlaneGeometry(500, 500);
   const groundMat = new THREE.ShadowMaterial({ opacity: 0.08 });
@@ -67,21 +72,21 @@ export function createViewerScene(width: number, height: number) {
   const ring = new THREE.Mesh(ringGeo, ringMat);
   scene.add(ring);
 
-  return { scene, camera, renderer, grid, ground, groundGeo, groundMat, ring, ringGeo, ringMat };
+  return { scene, camera, renderer, ground, groundGeo, groundMat, ring, ringGeo, ringMat };
 }
 
-/** Fits `camera`/`controls`/`grid`/`ground` to the bounding box of `roots`. */
+/** Fits `camera`/`controls`/`ground` to the bounding box of `roots`.
+ *  Returns the geometry's `maxDim`, needed by `updateGroundFade` below. */
 export function fitViewerSceneToBounds(
   roots: THREE.Object3D[],
   camera: THREE.PerspectiveCamera,
   controls: { target: THREE.Vector3; minDistance: number; maxDistance: number; update: () => void },
-  grid: THREE.GridHelper,
   ground: THREE.Mesh,
-) {
-  if (roots.length === 0) return;
+): number | null {
+  if (roots.length === 0) return null;
   const box = new THREE.Box3();
   roots.forEach((r) => box.expandByObject(r));
-  if (box.isEmpty()) return;
+  if (box.isEmpty()) return null;
 
   const center  = box.getCenter(new THREE.Vector3());
   const size    = box.getSize(new THREE.Vector3());
@@ -103,8 +108,31 @@ export function fitViewerSceneToBounds(
   controls.update();
 
   const groundY = box.min.y - maxDim * 0.015;
-  grid.position.y   = groundY;
   ground.position.y = groundY;
-  const footprint = Math.max(size.x, size.z) * 3;
-  grid.scale.setScalar(footprint / 200);
+
+  return maxDim;
+}
+
+/**
+ * The shadow-receiving ground plane sits very close beneath the loaded geometry (see
+ * `groundY` above) — a thin, mostly-flat result (e.g. a blade shell) viewed close up
+ * from underneath or behind lets the camera look straight through the open space below
+ * it, right at that nearby floor. Fading it out as the camera zooms in past the object's
+ * own size keeps it from reading as part of the object, while leaving the shadow visible
+ * at the normal fitted-overview distance.
+ */
+export function updateGroundFade(
+  camera: THREE.Camera,
+  target: THREE.Vector3,
+  ground: THREE.Mesh,
+  groundMat: THREE.ShadowMaterial,
+  maxDim: number,
+  baseGroundOpacity: number,
+) {
+  const dist = camera.position.distanceTo(target);
+  const fadeInEnd = maxDim * 0.6;
+  const fadeInStart = maxDim * 0.3;
+  const t = Math.max(0, Math.min(1, (dist - fadeInStart) / (fadeInEnd - fadeInStart)));
+  groundMat.opacity = baseGroundOpacity * t;
+  ground.visible = t > 0.001;
 }

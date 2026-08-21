@@ -24,7 +24,7 @@
  * Scene: IGES geometry with auto-fit camera + OrbitControls.
  * OrbitControls: left-drag = rotate, right-drag / middle = pan, scroll = zoom.
  *
- * Camera, grid, and shadow ground auto-fit to the loaded geometry's bounding box.
+ * Camera and shadow ground auto-fit to the loaded geometry's bounding box.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -34,7 +34,7 @@ import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { getOcc } from '@/lib/occ-init';
 import { loadIgesShapes, tessellate } from '@/lib/occGeometry';
 import { looksLikeAsciiStl, looksLikeZip, hexDump, parseAsciiStl, parseBinaryStl } from '@/lib/stlParsing';
-import { createViewerScene, fitViewerSceneToBounds } from '@/lib/viewerScene';
+import { createViewerScene, fitViewerSceneToBounds, updateGroundFade } from '@/lib/viewerScene';
 
 export interface OccViewerProps {
   wireframe?: boolean;
@@ -54,6 +54,11 @@ export interface OccViewerProps {
   showBlade?: boolean;
   /** Show/hide every other named 3MF object (layups). Composition preview only. Defaults to true. */
   showLayups?: boolean;
+  /** Overlay the mesh's true wireframe (every triangle edge of the actual geometry,
+   *  via THREE.WireframeGeometry — the same object, just with no face fill) on top of
+   *  the solid object — unlike `wireframe`, this doesn't hide the solid fill underneath
+   *  it. Defaults to false. */
+  showWebView?: boolean;
 }
 
 export function OccViewer({
@@ -65,11 +70,14 @@ export function OccViewer({
   onStatusChange,
   showBlade = true,
   showLayups = true,
+  showWebView = false,
 }: OccViewerProps) {
   const containerRef  = useRef<HTMLDivElement>(null);
   const meshesRef     = useRef<THREE.Mesh[]>([]);
   const wireLineRef   = useRef<THREE.LineSegments[]>([]);
+  const webLineRef    = useRef<THREE.LineSegments[]>([]);
   const wireframeRef  = useRef(wireframe);
+  const showWebViewRef = useRef(showWebView);
   const bladeObjectsRef  = useRef<THREE.Object3D[]>([]);
   const layupObjectsRef  = useRef<THREE.Object3D[]>([]);
   const showBladeRef  = useRef(showBlade);
@@ -103,6 +111,14 @@ export function OccViewer({
     wireLineRef.current.forEach((l) => { l.visible = wireframe; });
   }, [wireframe]);
 
+  // Web view toggle — the structural wireframe overlay on top of the still-solid
+  // object. Independent of `wireframe` above (which hides the solid fill instead);
+  // never touches mesh opacity.
+  useEffect(() => {
+    showWebViewRef.current = showWebView;
+    webLineRef.current.forEach((l) => { l.visible = showWebView; });
+  }, [showWebView]);
+
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
@@ -110,10 +126,14 @@ export function OccViewer({
     const w = container.clientWidth  || 800;
     const h = container.clientHeight || 600;
 
-    // ── Scene / camera / renderer / lights / grid / loading ring ────────────
-    const { scene, camera, renderer, grid, ground, ring, ringGeo, ringMat } =
+    // ── Scene / camera / renderer / lights / ground / loading ring ──────────
+    const { scene, camera, renderer, ground, groundMat, ring, ringGeo, ringMat } =
       createViewerScene(w, h);
     container.appendChild(renderer.domElement);
+    const baseGroundOpacity = groundMat.opacity;
+    // Set by fitViewerSceneToBounds once the mesh loads — null until then, so the
+    // fade has nothing to size itself against yet (see updateGroundFade).
+    let fitMaxDim: number | null = null;
 
     // ── OrbitControls ──────────────────────────────────────────────────────
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -129,6 +149,9 @@ export function OccViewer({
       animId = requestAnimationFrame(animate);
       controls.update();
       ring.rotation.y += 0.008;
+      if (fitMaxDim !== null) {
+        updateGroundFade(camera, controls.target, ground, groundMat, fitMaxDim, baseGroundOpacity);
+      }
       renderer.render(scene, camera);
     };
     animate();
@@ -161,7 +184,7 @@ export function OccViewer({
     // an object whose own world matrix it can (re)compute — calling it on a
     // deeply-nested child directly would use its parent's possibly-stale
     // matrixWorld instead of freshly computing it top-down.
-    async function loadStl(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+    async function loadStl(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
       let positions: Float32Array;
       if (typeof stlData === 'string') {
         positions = parseAsciiStl(stlData);
@@ -200,10 +223,17 @@ export function OccViewer({
       lines.visible = wireframeRef.current;
       scene.add(lines);
 
-      return { newMeshes: [mesh], newLines: [lines], roots: [mesh] };
+      const webGeo = new THREE.WireframeGeometry(geo);
+      const webMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
+      const webLines = new THREE.LineSegments(webGeo, webMat);
+      webLines.scale.setScalar(stlScale);
+      webLines.visible = showWebViewRef.current;
+      scene.add(webLines);
+
+      return { newMeshes: [mesh], newLines: [lines], newWebLines: [webLines], roots: [mesh] };
     }
 
-    async function loadIges(url: string): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+    async function loadIges(url: string): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
       const oc = await getOcc();
 
       // Load IGES file
@@ -212,6 +242,7 @@ export function OccViewer({
       // Tessellate shapes
       const newMeshes: THREE.Mesh[]         = [];
       const newLines:  THREE.LineSegments[] = [];
+      const newWebLines: THREE.LineSegments[] = [];
 
       for (const { shape, color, opacity } of occShapes) {
         try {
@@ -234,6 +265,13 @@ export function OccViewer({
           lines.visible = wireframeRef.current;
           scene.add(lines);
           newLines.push(lines);
+
+          const webGeo = new THREE.WireframeGeometry(mesh.geometry);
+          const webMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
+          const webLines = new THREE.LineSegments(webGeo, webMat);
+          webLines.visible = showWebViewRef.current;
+          scene.add(webLines);
+          newWebLines.push(webLines);
         } catch (err) {
           console.warn('[OccViewer] tessellation failed for one shape:', err);
         } finally {
@@ -242,10 +280,10 @@ export function OccViewer({
         }
       }
 
-      return { newMeshes, newLines, roots: newMeshes };
+      return { newMeshes, newLines, newWebLines, roots: newMeshes };
     }
 
-    async function load3mf(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+    async function load3mf(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
       const loader = new ThreeMFLoader();
       const group = loader.parse(stlData as ArrayBuffer);
       group.scale.setScalar(stlScale);
@@ -253,12 +291,27 @@ export function OccViewer({
 
       const newMeshes: THREE.Mesh[] = [];
       const newLines:  THREE.LineSegments[] = [];
+      const newWebLines: THREE.LineSegments[] = [];
 
       group.traverse((obj) => {
         if (!(obj instanceof THREE.Mesh)) return;
 
+        // The 3MF file doesn't carry its own vertex normals, and ThreeMFLoader
+        // doesn't compute them — leaving each triangle lit by its own flat face
+        // normal. On a coarse structural mesh that shows up as a visible facet
+        // grid under directional/specular lighting, even though the surface
+        // itself is one continuous, fully-filled shell. Smooth normals across
+        // the shared vertices instead so the shading reads as a real curved solid.
+        obj.geometry.computeVertexNormals();
+
+        // Composition preview 3MF packages name each object (e.g. "Blade",
+        // per-layup names) — group by that so callers can toggle visibility,
+        // and so layups render in a visibly different color from the blade
+        // shell they're mapped onto instead of blending into it.
+        const isBlade = /blade/i.test(obj.name);
+
         const mat = new THREE.MeshPhysicalMaterial({
-          color: 0x94a3b8,
+          color: isBlade ? 0x94a3b8 : 0xf59e0b,
           metalness: 0.3,
           roughness: 0.4,
           side: THREE.DoubleSide,
@@ -279,9 +332,6 @@ export function OccViewer({
         obj.receiveShadow = true;
         newMeshes.push(obj);
 
-        // Composition preview 3MF packages name each object (e.g. "Blade",
-        // per-layup names) — group by that so callers can toggle visibility.
-        const isBlade = /blade/i.test(obj.name);
         (isBlade ? bladeObjectsRef : layupObjectsRef).current.push(obj);
         obj.visible = isBlade ? showBladeRef.current : showLayupsRef.current;
 
@@ -293,9 +343,22 @@ export function OccViewer({
         lines.visible = wireframeRef.current;
         obj.add(lines);
         newLines.push(lines);
+
+        // Sibling of `obj`, not a child of it — a child would inherit `obj.visible`
+        // (see the showBlade/showLayups line above) and disappear along with the
+        // solid mesh, even though the wireframe should stay visible on its own.
+        const webGeo = new THREE.WireframeGeometry(obj.geometry);
+        const webMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
+        const webLines = new THREE.LineSegments(webGeo, webMat);
+        webLines.visible = showWebViewRef.current;
+        webLines.position.copy(obj.position);
+        webLines.quaternion.copy(obj.quaternion);
+        webLines.scale.copy(obj.scale);
+        (obj.parent ?? group).add(webLines);
+        newWebLines.push(webLines);
       });
 
-      return { newMeshes, newLines, roots: [group] };
+      return { newMeshes, newLines, newWebLines, roots: [group] };
     }
 
     // No backend result yet — keep the loading ring spinning instead of
@@ -311,14 +374,15 @@ export function OccViewer({
 
     if (loadPromise) {
       loadPromise
-        .then(({ newMeshes, newLines, roots }) => {
+        .then(({ newMeshes, newLines, newWebLines, roots }) => {
           if (disposed) return;
 
-          // ── Auto-fit camera + grid to loaded geometry ───────────────────────
-          fitViewerSceneToBounds(roots, camera, controls, grid, ground);
+          // ── Auto-fit camera + ground to loaded geometry ─────────────────────
+          fitMaxDim = fitViewerSceneToBounds(roots, camera, controls, ground);
 
           meshesRef.current   = newMeshes;
           wireLineRef.current = newLines;
+          webLineRef.current  = newWebLines;
 
           scene.remove(ring);
           ringGeo.dispose();
@@ -343,7 +407,7 @@ export function OccViewer({
       controls.dispose();
       // scene.clear() alone does not free GPU resources — dispose every
       // geometry/material/texture still in the scene (IGES meshes, edge lines,
-      // grid, shadow ground, loading ring)
+      // shadow ground, loading ring)
       scene.traverse((obj) => {
         if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
           obj.geometry.dispose();
@@ -364,6 +428,7 @@ export function OccViewer({
       }
       meshesRef.current   = [];
       wireLineRef.current = [];
+      webLineRef.current  = [];
     };
 
   }, [igesUrl, stlData, stlScale]);
