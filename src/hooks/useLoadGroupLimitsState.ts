@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useUpdateLoadGroupLimits } from '@/hooks/api/useLoadGroups';
 import { INITIAL_LOAD_LIMITS, type LimitsSubTab } from '@/data/loadGroupForm';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
@@ -68,22 +68,45 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
 
   const hasEnoughPoints = (['thrust', 'torque', 'power'] as const).every((sub) => limits[sub].curve.length >= 2);
 
+  // Mirrors the latest `limits`/`dirty` so a save that lands while another is
+  // still in flight retries with fresh data afterwards, instead of firing a
+  // second concurrent PUT (whichever response arrives last then wins,
+  // possibly overwriting a newer edit with a stale one).
+  const limitsRef = useRef(limits);
+  limitsRef.current = limits;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const retrySaveRef = useRef(false);
+
+  async function commitLimits() {
+    if (updateLimitsMutation.isPending) {
+      retrySaveRef.current = true;
+      return;
+    }
+    if (isNew || !dirtyRef.current || !hasEnoughPoints) return;
+    setStatus('saving');
+    try {
+      const { thrust, torque, power } = limitsRef.current;
+      await updateLimitsMutation.mutateAsync({
+        rpm_thrust_limit: thrust,
+        rpm_torque_limit: torque,
+        rpm_power_limit: power,
+      });
+      setDirty(false);
+      setStatus('saved');
+    } catch {
+      setStatus('not-saved');
+    } finally {
+      if (retrySaveRef.current) {
+        retrySaveRef.current = false;
+        commitLimits();
+      }
+    }
+  }
+
   useEffect(() => {
     if (isNew || !dirty || !hasEnoughPoints) return;
-    const timer = setTimeout(async () => {
-      setStatus('saving');
-      try {
-        await updateLimitsMutation.mutateAsync({
-          rpm_thrust_limit: limits.thrust,
-          rpm_torque_limit: limits.torque,
-          rpm_power_limit: limits.power,
-        });
-        setDirty(false);
-        setStatus('saved');
-      } catch {
-        setStatus('not-saved');
-      }
-    }, 600);
+    const timer = setTimeout(commitLimits, 600);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [limits, dirty, isNew, hasEnoughPoints]);

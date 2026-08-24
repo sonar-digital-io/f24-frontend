@@ -3,7 +3,7 @@ import { Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DropdownSelect } from '@/components/common/form/DropdownSelect';
-import { TagSelect } from '@/components/calculation/TagSelect';
+import { TagSelect } from '@/components/common/form/TagSelect';
 import { Tip } from '@/components/common/list/Tip';
 import type { FormField } from '@/data/materialFormFields';
 import { isFieldInRange } from '@/lib/sysconfigFormValidation';

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFatigueProfiles, useUpdateFatigueProfiles } from '@/hooks/api/useLoadGroups';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { fatigueProfilesHaveErrors } from '@/lib/fatigueValidation';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import type { FatigueCase, FatigueProfile } from '@/api/types/loadGroups';
+import { matchSavedRows } from '@/lib/mergeSavedRows';
 
 /**
  * Fatigue profiles tab state: 0 by default until the user adds one, hydrated
@@ -25,6 +26,10 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
   } | null>(null);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<SaveStatus | undefined>(undefined);
+  // A save requested while one is already in flight (e.g. a drag-reorder
+  // firing mid-autosave) is queued here instead of dropped — flushed once
+  // the in-flight save settles.
+  const queuedSaveRef = useRef<FatigueProfile[] | null>(null);
 
   useHydrateOnce(!isNew && !fatigueProfilesQuery.isFetching && !!fatigueProfilesQuery.data, () => {
     const hydratedProfiles = fatigueProfilesQuery.data!.map((p) => ({
@@ -149,7 +154,11 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
   }
 
   async function saveFatigueProfiles(profiles: FatigueProfile[]) {
-    if (isNew || fatigueProfilesHaveErrors(profiles) || updateFatigueProfilesMutation.isPending) return;
+    if (isNew || fatigueProfilesHaveErrors(profiles)) return;
+    if (updateFatigueProfilesMutation.isPending) {
+      queuedSaveRef.current = profiles;
+      return;
+    }
     setStatus('saving');
     try {
       const saved = await updateFatigueProfilesMutation.mutateAsync(profiles);
@@ -157,19 +166,27 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
       // profiles/cases — merge them back in, keeping each row's client-side
       // __KEY__ for React identity.
       setFatigueProfiles((prev) =>
-        saved.map((p, i) => ({
-          ...p,
-          __KEY__: prev[i]?.__KEY__ || crypto.randomUUID(),
-          fatigue_cases: p.fatigue_cases.map((c, j) => ({
-            ...c,
-            __KEY__: prev[i]?.fatigue_cases[j]?.__KEY__ || crypto.randomUUID(),
-          })),
+        matchSavedRows(saved, prev).map(({ row, matchedPrev }) => ({
+          ...row,
+          __KEY__: matchedPrev?.__KEY__ || crypto.randomUUID(),
+          fatigue_cases: matchSavedRows(row.fatigue_cases, matchedPrev?.fatigue_cases ?? []).map(
+            ({ row: c, matchedPrev: matchedCase }) => ({
+              ...c,
+              __KEY__: matchedCase?.__KEY__ || crypto.randomUUID(),
+            })
+          ),
         }))
       );
       setDirty(false);
       setStatus('saved');
     } catch {
       setStatus('not-saved');
+    } finally {
+      if (queuedSaveRef.current) {
+        const next = queuedSaveRef.current;
+        queuedSaveRef.current = null;
+        saveFatigueProfiles(next);
+      }
     }
   }
 

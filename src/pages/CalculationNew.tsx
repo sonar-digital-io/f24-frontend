@@ -171,6 +171,8 @@ export function CalculationNew() {
   }
 
   async function handleAnalysisMethodChange(value: string) {
+    // Flush any unsaved Configuration field before it gets wiped below.
+    await handleConfigFieldBlur();
     setAnalysisMethod(value);
     const settings = buildAnalysisSettingsPayload(value);
     const pid = await ensureProjectId();

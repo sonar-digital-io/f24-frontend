@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
@@ -135,6 +135,40 @@ export function LoadGroupNew() {
 
   // ── General tab autosave ─────────────────────────────────────────────────
   const [generalStatus, setGeneralStatus] = useState<SaveStatus | undefined>(undefined);
+  // Mirrors the latest field values/isNew so a save requested while one is
+  // already in flight retries with fresh data afterwards, instead of firing
+  // a second concurrent create/update.
+  const generalRef = useRef({ name, description, date, isNew });
+  generalRef.current = { name, description, date, isNew };
+  const retryGeneralRef = useRef(false);
+
+  async function commitGeneral() {
+    if (createMutation.isPending || updateMutation.isPending) {
+      retryGeneralRef.current = true;
+      return;
+    }
+    const { name, description, date, isNew } = generalRef.current;
+    setGeneralStatus('saving');
+    try {
+      if (isNew) {
+        const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+        // /load-group/new and /load-group/:id share a route, so this navigate does
+        // NOT remount the component — switching the URL just flips isNew to false.
+        navigate(`/load-group/${created.id}`, { replace: true });
+      } else {
+        await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+        setBaseline({ name, description, date });
+      }
+      setGeneralStatus('saved');
+    } catch {
+      setGeneralStatus('not-saved');
+    } finally {
+      if (retryGeneralRef.current) {
+        retryGeneralRef.current = false;
+        commitGeneral();
+      }
+    }
+  }
 
   useEffect(() => {
     if (isNew) {
@@ -147,23 +181,7 @@ export function LoadGroupNew() {
       }
     }
     setGeneralStatus('not-saved');
-    const timer = setTimeout(async () => {
-      setGeneralStatus('saving');
-      try {
-        if (isNew) {
-          const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
-          // /load-group/new and /load-group/:id share a route, so this navigate does
-          // NOT remount the component — switching the URL just flips isNew to false.
-          navigate(`/load-group/${created.id}`, { replace: true });
-        } else {
-          await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
-          setBaseline({ name, description, date });
-        }
-        setGeneralStatus('saved');
-      } catch {
-        setGeneralStatus('not-saved');
-      }
-    }, 800);
+    const timer = setTimeout(commitGeneral, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, description, date, isNew, baseline]);

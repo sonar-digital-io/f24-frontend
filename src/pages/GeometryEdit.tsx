@@ -515,7 +515,7 @@ export function GeometryEdit() {
                 </button>
               </div>
               <div className="flex flex-col gap-4 px-6 pb-6">
-                <SparsSection geometryId={geometryId} />
+                <SparsSection geometryId={geometryId} folded={sparsFolded} />
                 <GeometryResultPanel
                   onGenerate={handleGenerateResult}
                   requested={resultRequested}
