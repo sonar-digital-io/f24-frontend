@@ -11,6 +11,7 @@ import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
 import { matchesQuery, paginate, rowInteractionProps, sortItems, toggleSort } from '@/lib/listTable';
+import { formatDateTime } from '@/lib/utils';
 import type { SortState, LoadGroupSortKey } from '@/types';
 import { type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
 import { useDeleteLoadGroup, useLoadGroupList } from '@/hooks/api/useLoadGroups';
@@ -23,7 +24,7 @@ function toUiLoadGroup(g: BackendLoadGroup): LoadGroupItem {
     id: String(g.id),
     name: g.name,
     description: g.description ?? '',
-    lastUpdated: '—',
+    lastUpdated: formatDateTime(g.last_modified),
     profiles: [],
   };
 }
@@ -109,21 +110,13 @@ export function LoadGroup() {
             <ListPageHeader
               title="Load groups"
               actions={
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-4 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#f1f5f9]"
-                  >
-                    Import
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/load-group/new')}
-                    className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
-                  >
-                    New load group
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/load-group/new')}
+                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
+                >
+                  New load group
+                </button>
               }
             />
 
@@ -138,7 +131,7 @@ export function LoadGroup() {
 
             {/* Table */}
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full border-collapse">
+              <table className="w-full border-collapse [&_tbody_tr:last-child]:border-b-0">
                 <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
                 <ListTableBody
                   colSpan={4}

@@ -1,5 +1,5 @@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { SaveStatusIndicator, type SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
+import { SaveStatusAndExit, type SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 
 export type CompositionTab =
   | 'general'
@@ -80,25 +80,19 @@ export function CompositionEditToolbar({
         {titleText}
       </h1>
 
-      <div className="absolute inset-y-0 right-4 flex items-center gap-4">
-        <SaveStatusIndicator status={saveStatus} />
-        <button
-          type="button"
-          onClick={onExit}
-          className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
-        >
-          Exit edit mode
-        </button>
-        {activeTab === 'layup-mapping' && (
-          <button
-            type="button"
-            onClick={onSaveLayupMapping}
-            disabled={layupMappingSavePending}
-            className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {layupMappingSavePending ? 'Saving…' : 'Save'}
-          </button>
-        )}
+      <div className="absolute inset-y-0 right-4 flex items-center">
+        <SaveStatusAndExit status={saveStatus} onExit={onExit} floating>
+          {activeTab === 'layup-mapping' && (
+            <button
+              type="button"
+              onClick={onSaveLayupMapping}
+              disabled={layupMappingSavePending}
+              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {layupMappingSavePending ? 'Saving…' : 'Save'}
+            </button>
+          )}
+        </SaveStatusAndExit>
       </div>
     </div>
   );

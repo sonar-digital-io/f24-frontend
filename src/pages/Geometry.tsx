@@ -119,7 +119,7 @@ export function Geometry() {
             {/* List view */}
             {view === 'list' && (
               <div className="mt-4 overflow-x-auto">
-                <table className="w-full border-collapse">
+                <table className="w-full border-collapse [&_tbody_tr:last-child]:border-b-0">
                   <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
                   <ListTableBody
                     colSpan={4}

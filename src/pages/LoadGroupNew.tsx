@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
+import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import { LoadGroupGeneralTab } from '@/components/load-group/LoadGroupGeneralTab';
 import { LoadGroupLoadCasesTab } from '@/components/load-group/LoadGroupLoadCasesTab';
 import { LoadGroupLimitsTab } from '@/components/load-group/LoadGroupLimitsTab';
@@ -130,36 +131,49 @@ export function LoadGroupNew() {
 
   const titleText = isNew ? name.trim() || 'New load group' : name.trim() || 'Loading…';
 
-  const savePending = createMutation.isPending || updateMutation.isPending;
   const saveError = createMutation.isError || updateMutation.isError;
 
-  // ── Exit / save ──────────────────────────────────────────────────────────
-  async function handleSaveGeneral() {
+  // ── General tab autosave ─────────────────────────────────────────────────
+  const [generalStatus, setGeneralStatus] = useState<SaveStatus | undefined>(undefined);
+
+  useEffect(() => {
     if (isNew) {
-      const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
-      // /load-group/new and /load-group/:id share a route, so this navigate does
-      // NOT remount the component — switching the URL just flips isNew to false.
-      setActiveTab('load-cases');
-      navigate(`/load-group/${created.id}`, { replace: true });
-      return;
+      if (!name.trim() || !date) return;
+    } else {
+      if (!baseline) return;
+      if (name === baseline.name && description === baseline.description && date === baseline.date) {
+        setGeneralStatus('saved');
+        return;
+      }
     }
-    if (!baseline || name !== baseline.name || description !== baseline.description || date !== baseline.date) {
-      await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
-    }
-    navigate('/load-group');
-  }
+    setGeneralStatus('not-saved');
+    const timer = setTimeout(async () => {
+      setGeneralStatus('saving');
+      try {
+        if (isNew) {
+          const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+          // /load-group/new and /load-group/:id share a route, so this navigate does
+          // NOT remount the component — switching the URL just flips isNew to false.
+          navigate(`/load-group/${created.id}`, { replace: true });
+        } else {
+          await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+          setBaseline({ name, description, date });
+        }
+        setGeneralStatus('saved');
+      } catch {
+        setGeneralStatus('not-saved');
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, description, date, isNew, baseline]);
 
   function handleExit() {
     navigate('/load-group');
   }
 
   // ── Toolbar save action, per tab ─────────────────────────────────────────
-  const tabAction: { onClick: () => void; disabled: boolean; label: string } | undefined = {
-    general: {
-      onClick: handleSaveGeneral,
-      disabled: !name.trim() || !date || savePending,
-      label: savePending ? 'Saving…' : isNew ? 'Create load group' : 'Update load group',
-    },
+  const tabAction: Partial<Record<LoadGroupTab, { onClick: () => void; disabled: boolean; label: string }>> = {
     'load-cases': {
       onClick: handleSaveLoadCases,
       disabled: updateLoadCasesMutation.isPending || loadCasesHaveErrors,
@@ -175,7 +189,8 @@ export function LoadGroupNew() {
       disabled: updateFatigueProfilesMutation.isPending || fatigueProfilesInvalid,
       label: updateFatigueProfilesMutation.isPending ? 'Saving…' : 'Save fatigue profiles',
     },
-  }[activeTab];
+  };
+  const activeTabAction = tabAction[activeTab];
 
   // ── Tab trigger class ─────────────────────────────────────────────────────
   const triggerCls =
@@ -191,15 +206,16 @@ export function LoadGroupNew() {
         onTabChange={(v) => setActiveTab(v as LoadGroupTab)}
         title={titleText}
         onBack={handleExit}
+        status={activeTab === 'general' ? generalStatus : undefined}
         actions={
-          tabAction && (
+          activeTabAction && (
             <button
               type="button"
-              onClick={tabAction.onClick}
-              disabled={tabAction.disabled}
+              onClick={activeTabAction.onClick}
+              disabled={activeTabAction.disabled}
               className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {tabAction.label}
+              {activeTabAction.label}
             </button>
           )
         }

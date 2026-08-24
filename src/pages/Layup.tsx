@@ -71,7 +71,7 @@ export function Layup() {
 
             {/* Table */}
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full table-fixed border-collapse">
+              <table className="w-full table-fixed border-collapse [&_tbody_tr:last-child]:border-b-0">
                 <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
                 <ListTableBody
                   colSpan={4}
