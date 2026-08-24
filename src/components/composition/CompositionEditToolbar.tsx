@@ -1,5 +1,5 @@
-import { Check, Circle, Loader2, Redo2, Undo2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SaveStatusIndicator, type SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 
 export type CompositionTab =
   | 'general'
@@ -8,8 +8,6 @@ export type CompositionTab =
   | 'layup-mapping'
   | 'transversal-mapping'
   | 'preview';
-
-export type CompositionSaveStatus = 'unsaved' | 'saving' | 'saved';
 
 const TABS: { value: CompositionTab; label: string }[] = [
   { value: 'general', label: 'General' },
@@ -20,25 +18,29 @@ const TABS: { value: CompositionTab; label: string }[] = [
   { value: 'preview', label: 'Preview' },
 ];
 
-const SAVE_STATUS_DISPLAY: Record<CompositionSaveStatus, { icon: typeof Check; label: string; spin?: boolean }> = {
-  unsaved: { icon: Circle, label: 'Not saved yet' },
-  saving: { icon: Loader2, label: 'Saving…', spin: true },
-  saved: { icon: Check, label: 'Saved' },
-};
+/** These tabs map a layup onto the blade, so they stay unreachable until at
+ *  least one layup has been saved. */
+const GATED_UNTIL_LAYUP_SAVED: CompositionTab[] = ['layup-mapping', 'transversal-mapping'];
+
+/** Preview needs a geometry to render against. */
+const GATED_UNTIL_GEOMETRY_SELECTED: CompositionTab[] = ['preview'];
 
 interface CompositionEditToolbarProps {
   activeTab: CompositionTab;
   onTabChange: (tab: CompositionTab) => void;
   titleText: string;
   onExit: () => void;
-  saveStatus: CompositionSaveStatus;
+  saveStatus: SaveStatus;
   /** Only 'general' is available until the composition has been saved at least once. */
   isSaved: boolean;
+  layupsSaved: boolean;
+  geometrySelected: boolean;
   onSaveLayupMapping: () => void;
   layupMappingSavePending: boolean;
 }
 
-/** Floating sub-toolbar shared by every CompositionNew tab. */
+/** Floating sub-toolbar shared by every CompositionNew tab — same tab-pill/title/
+ *  Saved-indicator/Exit layout as GeometryEditToolbar. */
 export function CompositionEditToolbar({
   activeTab,
   onTabChange,
@@ -46,10 +48,11 @@ export function CompositionEditToolbar({
   onExit,
   saveStatus,
   isSaved,
+  layupsSaved,
+  geometrySelected,
   onSaveLayupMapping,
   layupMappingSavePending,
 }: CompositionEditToolbarProps) {
-  const { icon: StatusIcon, label: statusLabel, spin } = SAVE_STATUS_DISPLAY[saveStatus];
   return (
     <div className="absolute inset-x-0 top-0 z-40 h-[52px] border-b border-[#e5e7eb]/70">
       <div className="absolute inset-y-0 left-4 flex items-center">
@@ -59,7 +62,11 @@ export function CompositionEditToolbar({
               <TabsTrigger
                 key={t.value}
                 value={t.value}
-                disabled={!isSaved && t.value !== 'general'}
+                disabled={
+                  (!isSaved && t.value !== 'general') ||
+                  (!layupsSaved && GATED_UNTIL_LAYUP_SAVED.includes(t.value)) ||
+                  (!geometrySelected && GATED_UNTIL_GEOMETRY_SELECTED.includes(t.value))
+                }
                 className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] disabled:pointer-events-none disabled:opacity-40"
               >
                 {t.label}
@@ -74,32 +81,13 @@ export function CompositionEditToolbar({
       </h1>
 
       <div className="absolute inset-y-0 right-4 flex items-center gap-4">
-        <div className="flex items-center gap-[6px]">
-          <StatusIcon className={`h-4 w-4 text-[#737373] ${spin ? 'animate-spin' : ''}`} strokeWidth={2} />
-          <span className="text-[14px] leading-5 text-[#737373]">{statusLabel}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            aria-label="Undo"
-            className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-          >
-            <Undo2 className="h-4 w-4" strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            aria-label="Redo"
-            className="flex h-7 w-7 items-center justify-center rounded bg-[#f1f5f9]/95 text-[#6b7280] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0] hover:text-[#0a0a0a]"
-          >
-            <Redo2 className="h-4 w-4" strokeWidth={2} />
-          </button>
-        </div>
+        <SaveStatusIndicator status={saveStatus} />
         <button
           type="button"
           onClick={onExit}
           className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
         >
-          Back to Compositions
+          Exit edit mode
         </button>
         {activeTab === 'layup-mapping' && (
           <button

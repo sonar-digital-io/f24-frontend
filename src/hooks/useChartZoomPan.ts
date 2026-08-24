@@ -118,5 +118,12 @@ export function useChartZoomPan(svgRef: RefObject<SVGSVGElement>) {
       onPointerUp: handleBgPointerUp,
       onPointerCancel: handleBgPointerUp,
     },
+    /** Wiring for `<BezierZoomControls {...zoomControlProps} />` — identical at every call site. */
+    zoomControlProps: {
+      onZoomIn: () => zoomBy(CHART_ZOOM_STEP),
+      onZoomOut: () => zoomBy(1 / CHART_ZOOM_STEP),
+      canZoomIn: zoom < CHART_ZOOM_MAX,
+      canZoomOut: zoom > CHART_ZOOM_MIN,
+    },
   };
 }

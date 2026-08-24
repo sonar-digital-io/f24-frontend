@@ -2,6 +2,15 @@ import * as THREE from 'three';
 import { NURBSSurface } from 'three/examples/jsm/curves/NURBSSurface.js';
 import type { NurbsGeometryType } from '@/types';
 
+/** Flat-array vertex indices of quad (i, j)'s four corners, for a `(segU+1) x (segV+1)` grid. */
+function quadCorners(i: number, j: number, segV: number) {
+  const a = i * (segV + 1) + j;
+  const b = a + 1;
+  const c = (i + 1) * (segV + 1) + j;
+  const d = c + 1;
+  return { a, b, c, d };
+}
+
 export function generateControlPoints(type: NurbsGeometryType): THREE.Vector4[][] {
   const controlPoints: THREE.Vector4[][] = [];
   const cpRows = 5;
@@ -114,10 +123,7 @@ export function buildNurbsSurfaceObjects(
   const triIndices: number[] = [];
   for (let i = 0; i < segU; i++) {
     for (let j = 0; j < segV; j++) {
-      const a = i * (segV + 1) + j;
-      const b = a + 1;
-      const c = (i + 1) * (segV + 1) + j;
-      const d = c + 1;
+      const { a, b, c, d } = quadCorners(i, j, segV);
       triIndices.push(a, c, b);
       triIndices.push(b, c, d);
     }
@@ -146,10 +152,7 @@ export function buildNurbsSurfaceObjects(
   const edgeVertices: number[] = [];
   for (let i = 0; i < segU; i++) {
     for (let j = 0; j < segV; j++) {
-      const a = i * (segV + 1) + j;
-      const b = a + 1;
-      const c = (i + 1) * (segV + 1) + j;
-      const d = c + 1;
+      const { a, b, c, d } = quadCorners(i, j, segV);
 
       edgeVertices.push(
         vertices[a * 3], vertices[a * 3 + 1], vertices[a * 3 + 2],

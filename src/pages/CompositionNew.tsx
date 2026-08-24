@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { CompositionEditToolbar, type CompositionTab } from '@/components/composition/CompositionEditToolbar';
+import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import { CompositionLayupMappingPanel } from '@/components/composition/CompositionLayupMappingPanel';
 import { LayupPickerDialog } from '@/components/composition/LayupPickerDialog';
 import { LayupMappingBezierDialog } from '@/components/composition/LayupMappingBezierDialog';
@@ -54,7 +55,7 @@ export function CompositionNew() {
 
   // Geometry pick
   const [geomQuery, setGeomQuery] = useState('');
-  const [geomView, setGeomView] = useState<'list' | 'grid'>('grid');
+  const [geomView, setGeomView] = useState<'list' | 'grid'>('list');
   const [selectedGeometryId, setSelectedGeometryId] = useState<string | null>(null);
 
   // The top-view data (blade planform, used by the layup mapping charts) has
@@ -121,6 +122,10 @@ export function CompositionNew() {
   // Layup — locally-created layups for this composition, separate from the
   // per-side layup mapping below (which maps the shared LAYUPS catalog).
   const [layups, setLayups] = useState<CompositionLayup[]>([]);
+  // Layup mapping/Transversal mapping build on a persisted layup — gates those
+  // tabs (see CompositionEditToolbar) until one exists, either hydrated from the
+  // backend or just saved via CompositionLayupTab's "Save" button.
+  const [layupsSaved, setLayupsSaved] = useState(false);
   function addLayup(name: string) {
     setLayups((arr) => [...arr, { id: nextLocalId('layup'), name, plies: [] }]);
   }
@@ -136,6 +141,7 @@ export function CompositionNew() {
     () => {
       const materials = materialsQuery.data ?? [];
       const savedLayups = detailQuery.data!.layups ?? [];
+      setLayupsSaved(savedLayups.length > 0);
       setLayups(
         savedLayups.map((l) => ({
           id: String(l.id),
@@ -288,11 +294,11 @@ export function CompositionNew() {
 
   const generalSavePending = createMutation.isPending || updateMutation.isPending || settingsSaving;
   const saveError = createMutation.isError || updateMutation.isError || settingsError;
-  const saveStatus: 'unsaved' | 'saving' | 'saved' = generalSavePending
+  const saveStatus: SaveStatus = generalSavePending
     ? 'saving'
     : generalValid && !hasUnsavedGeneralFields && !hasUnsavedTargetWeight
       ? 'saved'
-      : 'unsaved';
+      : 'not-saved';
 
   async function saveTargetWeightSetting(id: number) {
     setSettingsSaving(true);
@@ -459,6 +465,8 @@ export function CompositionNew() {
         onExit={handleExit}
         saveStatus={saveStatus}
         isSaved={isEditing}
+        layupsSaved={layupsSaved}
+        geometrySelected={Number.isFinite(geometryId)}
         onSaveLayupMapping={handleSaveLayupMapping}
         layupMappingSavePending={layupMappingSavePending}
       />
@@ -511,7 +519,7 @@ export function CompositionNew() {
             layups={layups}
             onAddLayup={addLayup}
             onUpdateLayupPlies={updateLayupPlies}
-            onSaved={() => setActiveTab('layup-mapping')}
+            onSaved={() => { setLayupsSaved(true); setActiveTab('layup-mapping'); }}
           />
         )}
 

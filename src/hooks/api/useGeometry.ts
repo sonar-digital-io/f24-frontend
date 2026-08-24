@@ -4,6 +4,7 @@ import type {
   GeometryPayload,
   GeometrySettingsPayload,
   GeometryEdgesWritePayload,
+  GeometryProfile,
   GeometryProfilesWritePayload,
   GeometryProfilePreviewPayload,
   GeometryProfileQuery,
@@ -19,6 +20,8 @@ export const geometryKeys = {
   profiles: (geometryId: number) => ['geometry', 'profiles', geometryId] as const,
   profile: (geometryId: number, profileId: number, query?: GeometryProfileQuery) =>
     ['geometry', 'profile', geometryId, profileId, query] as const,
+  profilePreview: (geometryId: number, profile?: GeometryProfile) =>
+    ['geometry', 'profile-preview', geometryId, profile?.id, profile?.position, profile?.type, JSON.stringify(profile?.parameters)] as const,
   spars: (geometryId: number) => ['geometry', 'spars', geometryId] as const,
   sparsPreview: (geometryId: number) => ['geometry', 'spars-preview', geometryId] as const,
   topView: (geometryId: number) => ['geometry', 'top-view', geometryId] as const,
@@ -127,6 +130,38 @@ export function usePreviewGeometryProfile() {
   return useMutation({
     mutationFn: ({ geometryId, payload }: { geometryId: number; payload: GeometryProfilePreviewPayload }) =>
       geometryApi.previewGeometryProfile(geometryId, payload),
+  });
+}
+
+/**
+ * Same underlying request as `useGeometryDetail`, but without its edit-page
+ * tuning (staleTime 0 / refetchOnMount 'always') — used by grid-card
+ * thumbnails so switching list/grid view doesn't re-fetch every remount.
+ */
+export function useGeometryDetailCached(geometryId: number) {
+  return useQuery({
+    queryKey: geometryKeys.detail(geometryId),
+    queryFn: () => geometryApi.getGeometry(geometryId),
+    enabled: Number.isFinite(geometryId),
+  });
+}
+
+/**
+ * Cached counterpart to `usePreviewGeometryProfile` — the profile-preview
+ * outline for a fixed (geometryId, profile) pair never changes, so this is
+ * safe to cache indefinitely instead of re-POSTing on every remount.
+ */
+export function useGeometryProfilePreview(geometryId: number, profile?: GeometryProfile) {
+  return useQuery({
+    queryKey: geometryKeys.profilePreview(geometryId, profile),
+    queryFn: () =>
+      geometryApi.previewGeometryProfile(geometryId, {
+        position: profile!.position,
+        type: profile!.type,
+        parameters: profile!.parameters,
+      }),
+    enabled: Number.isFinite(geometryId) && !!profile,
+    staleTime: Infinity,
   });
 }
 

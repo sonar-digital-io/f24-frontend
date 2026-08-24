@@ -2,10 +2,20 @@ import { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ControlPoint } from '@/types';
 import { BezierZoomControls } from '@/components/common/viewer/BezierZoomControls';
+import { ChartBackgroundRect } from '@/components/common/viewer/ChartBackgroundRect';
 import { ChartGrid } from '@/components/common/viewer/ChartGrid';
-import { ChartAnchorPoint } from '@/components/common/viewer/ChartAnchorPoint';
-import { useChartZoomPan, CHART_ZOOM_MIN, CHART_ZOOM_MAX, CHART_ZOOM_STEP } from '@/hooks/useChartZoomPan';
-import { dataToPx, pxToData, clamp, computeTicks, decimalsForStep } from '@/lib/bezierMath';
+import { ChartAnchorPointsLayer } from '@/components/common/viewer/ChartAnchorPointsLayer';
+import { useChartZoomPan } from '@/hooks/useChartZoomPan';
+import {
+  dataToPx,
+  pxToData,
+  clamp,
+  computeTicks,
+  decimalsForStep,
+  isConvexPolygon,
+  pointsToPolygonString,
+  MIN_LAYUP_POLYGON_POINTS,
+} from '@/lib/bezierMath';
 
 /**
  * Layup mapping chart — closed straight-line polygon over the blade's real
@@ -45,8 +55,28 @@ export function LayupMappingChart({
   const svgRef = useRef<SVGSVGElement>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
-  const { zoom, viewX, viewY, viewW, viewH, panningPointerId, zoomBy, screenToViewBox, resetView, bgPointerHandlers } =
-    useChartZoomPan(svgRef);
+  const {
+    zoom,
+    viewX,
+    viewY,
+    viewW,
+    viewH,
+    panningPointerId,
+    screenToViewBox,
+    resetView,
+    bgPointerHandlers,
+    zoomControlProps,
+  } = useChartZoomPan(svgRef);
+
+  // Dragging past the point where the polygon would fold in on itself just
+  // stops moving it there — the drag/nudge itself isn't cancelled. If the
+  // polygon was already concave (e.g. legacy data), don't lock all further
+  // edits — only block moves that turn an already-convex polygon concave.
+  function commitIfConvex(idx: number, x: number, y: number) {
+    const next = points.map((p, i) => (i === idx ? { x, y } : p));
+    if (isConvexPolygon(points) && !isConvexPolygon(next)) return;
+    onChange(next);
+  }
 
   // ── Control-point drag ───────────────────────────────────────────────────
   function handlePointerDown(idx: number, e: React.PointerEvent<SVGCircleElement>) {
@@ -61,9 +91,7 @@ export function LayupMappingChart({
     const local = screenToViewBox(e.clientX, e.clientY);
     if (!local) return;
     const raw = pxToData(local.x, local.y, xMin, xMax, yMin, yMax);
-    const x = clamp(raw.x, xMin, xMax);
-    const y = clamp(raw.y, yMin, yMax);
-    onChange(points.map((p, i) => (i === idx ? { x, y } : p)));
+    commitIfConvex(idx, clamp(raw.x, xMin, xMax), clamp(raw.y, yMin, yMax));
   }
 
   function handlePointerUp(idx: number, e: React.PointerEvent<SVGCircleElement>) {
@@ -75,10 +103,10 @@ export function LayupMappingChart({
   }
 
   // Double-click any point to remove it, same as the other bezier canvases —
-  // but the polygon always needs at least 3 points to stay a closed shape.
+  // but the polygon always needs at least MIN_LAYUP_POLYGON_POINTS points to stay a closed shape.
   function handlePointDoubleClick(idx: number, e: React.MouseEvent) {
     e.stopPropagation();
-    if (points.length <= 3) return;
+    if (points.length <= MIN_LAYUP_POLYGON_POINTS) return;
     onChange(points.filter((_, i) => i !== idx));
   }
 
@@ -88,7 +116,7 @@ export function LayupMappingChart({
   function handleKeyDown(idx: number, e: React.KeyboardEvent<SVGCircleElement>) {
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
-      if (points.length <= 3) return;
+      if (points.length <= MIN_LAYUP_POLYGON_POINTS) return;
       onChange(points.filter((_, i) => i !== idx));
       return;
     }
@@ -103,9 +131,7 @@ export function LayupMappingChart({
       default: return;
     }
     e.preventDefault();
-    x = clamp(x, xMin, xMax);
-    y = clamp(y, yMin, yMax);
-    onChange(points.map((p, i) => (i === idx ? { x, y } : p)));
+    commitIfConvex(idx, clamp(x, xMin, xMax), clamp(y, yMin, yMax));
   }
 
   const yTicks = computeTicks(yMin, yMax, yStep);
@@ -114,30 +140,21 @@ export function LayupMappingChart({
   const xDecimals = decimalsForStep(xStep);
 
   // Closed polygon points string
-  const polygonPoints = points
-    .map((p) => {
-      const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
-      return `${cx.toFixed(1)},${cy.toFixed(1)}`;
-    })
-    .join(' ');
+  const polygonPoints = pointsToPolygonString(points, xMin, xMax, yMin, yMax);
 
   // Blade planform background: leading edge forward, trailing edge back, closed.
-  const bladeOutlinePoints = [...leadingEdge, ...trailingEdge.slice().reverse()]
-    .map((p) => {
-      const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
-      return `${cx.toFixed(1)},${cy.toFixed(1)}`;
-    })
-    .join(' ');
+  const bladeOutlinePoints = pointsToPolygonString(
+    [...leadingEdge, ...trailingEdge.slice().reverse()],
+    xMin,
+    xMax,
+    yMin,
+    yMax,
+  );
 
   return (
     <div className={cn('relative h-[260px] w-full rounded-md bg-white', className)}>
       {/* Zoom controls */}
-      <BezierZoomControls
-        onZoomIn={() => zoomBy(CHART_ZOOM_STEP)}
-        onZoomOut={() => zoomBy(1 / CHART_ZOOM_STEP)}
-        canZoomIn={zoom < CHART_ZOOM_MAX}
-        canZoomOut={zoom > CHART_ZOOM_MIN}
-      />
+      <BezierZoomControls {...zoomControlProps} />
 
       <svg
         ref={svgRef}
@@ -147,21 +164,14 @@ export function LayupMappingChart({
         style={{ touchAction: 'none' }}
       >
         {/* Background hit area for pan */}
-        <rect
-          x={viewX}
-          y={viewY}
-          width={viewW}
-          height={viewH}
-          fill="transparent"
-          style={{
-            cursor:
-              zoom > 1
-                ? panningPointerId !== null
-                  ? 'grabbing'
-                  : 'grab'
-                : 'default',
-          }}
-          {...bgPointerHandlers}
+        <ChartBackgroundRect
+          viewX={viewX}
+          viewY={viewY}
+          viewW={viewW}
+          viewH={viewH}
+          zoom={zoom}
+          panningPointerId={panningPointerId}
+          bgPointerHandlers={bgPointerHandlers}
           onDoubleClick={resetView}
         />
 
@@ -197,24 +207,17 @@ export function LayupMappingChart({
         />
 
         {/* Draggable control points */}
-        {points.map((p, idx) => {
-          const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
-          return (
-            <ChartAnchorPoint
-              key={idx}
-              cx={cx}
-              cy={cy}
-              isDragging={draggingIndex === idx}
-              onPointerDown={(e) => handlePointerDown(idx, e)}
-              onPointerMove={(e) => handlePointerMove(idx, e)}
-              onPointerUp={(e) => handlePointerUp(idx, e)}
-              onPointerCancel={(e) => handlePointerUp(idx, e)}
-              onDoubleClick={(e) => handlePointDoubleClick(idx, e)}
-              onKeyDown={(e) => handleKeyDown(idx, e)}
-              tooltip={points.length > 3 ? 'Drag to move · Double-click to remove' : 'Drag to move'}
-            />
-          );
-        })}
+        <ChartAnchorPointsLayer
+          points={points}
+          project={(p) => dataToPx(p, xMin, xMax, yMin, yMax)}
+          draggingIndex={draggingIndex}
+          minPoints={MIN_LAYUP_POLYGON_POINTS}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onDoubleClick={handlePointDoubleClick}
+          onKeyDown={handleKeyDown}
+        />
       </svg>
     </div>
   );

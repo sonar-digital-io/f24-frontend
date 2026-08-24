@@ -11,7 +11,7 @@ export interface CompositionPreviewTabProps {
 
 export function CompositionPreviewTab({ compositionId, geometryId }: CompositionPreviewTabProps) {
   const [showBlade, setShowBlade] = useState(true);
-  const [showLayups, setShowLayups] = useState(true);
+  const [showWireframe, setShowWireframe] = useState(false);
 
   const previewQuery = useCompositionPreview(compositionId, true);
   const geometryQuery = useGeometryDetail(geometryId);
@@ -23,7 +23,8 @@ export function CompositionPreviewTab({ compositionId, geometryId }: Composition
         stlData={previewQuery.data}
         stlScale={nominalRadius}
         showBlade={showBlade}
-        showLayups={showLayups}
+        showLayups={false}
+        showWebView={showWireframe}
         className="absolute inset-0 h-full w-full"
       />
 
@@ -33,8 +34,8 @@ export function CompositionPreviewTab({ compositionId, geometryId }: Composition
           Blade
         </label>
         <label className="flex items-center gap-2 text-[13px] text-[#0a0a0a]">
-          <Checkbox checked={showLayups} onCheckedChange={setShowLayups} />
-          Layups
+          <Checkbox checked={showWireframe} onCheckedChange={setShowWireframe} />
+          Wireframe
         </label>
       </div>
 

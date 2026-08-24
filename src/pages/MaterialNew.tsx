@@ -24,6 +24,21 @@ import { isFormValid, isFormRangeValid } from '@/lib/sysconfigFormValidation';
 import type { MaterialPayload } from '@/api/types/materials';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
+/** Loading/error placeholder shared by the Mechanical and Fatigue tabs while
+ *  `useMaterialSysconfig` resolves — both tabs' fields come from that one config. */
+function SysconfigLoadStatus({ isLoading, isError }: { isLoading: boolean; isError: boolean }) {
+  return (
+    <>
+      {isLoading && <p className="px-2 py-8 text-center text-[14px] text-[#6b7280]">Loading configuration…</p>}
+      {isError && (
+        <p className="px-2 py-8 text-center text-[14px] text-[#dc2626]">
+          Failed to load configuration from the server.
+        </p>
+      )}
+    </>
+  );
+}
+
 interface Baseline {
   name: string;
   description: string;
@@ -433,14 +448,7 @@ export function MaterialNew() {
 
         {!showLoadingState && !showLoadErrorState && activeTab === 'mechanical' && (
           <>
-            {sysconfigQuery.isLoading && (
-              <p className="px-2 py-8 text-center text-[14px] text-[#6b7280]">Loading configuration…</p>
-            )}
-            {sysconfigQuery.isError && (
-              <p className="px-2 py-8 text-center text-[14px] text-[#dc2626]">
-                Failed to load configuration from the server.
-              </p>
-            )}
+            <SysconfigLoadStatus isLoading={sysconfigQuery.isLoading} isError={sysconfigQuery.isError} />
             {sysconfigQuery.data && (
               <PropertyFormTab
                 sections={mechanicalSections}
@@ -454,14 +462,7 @@ export function MaterialNew() {
 
         {!showLoadingState && !showLoadErrorState && activeTab === 'fatigue' && (
           <>
-            {sysconfigQuery.isLoading && (
-              <p className="px-2 py-8 text-center text-[14px] text-[#6b7280]">Loading configuration…</p>
-            )}
-            {sysconfigQuery.isError && (
-              <p className="px-2 py-8 text-center text-[14px] text-[#dc2626]">
-                Failed to load configuration from the server.
-              </p>
-            )}
+            <SysconfigLoadStatus isLoading={sysconfigQuery.isLoading} isError={sysconfigQuery.isError} />
             {sysconfigQuery.data && (
               <PropertyFormTab
                 sections={fatigueSections}

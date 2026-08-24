@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
-interface FoldableSectionListProps<K extends string> {
+export interface FoldableSectionListProps<K extends string> {
   folded: boolean;
   sectionKeys: K[];
   sectionLabels: Record<K, string>;

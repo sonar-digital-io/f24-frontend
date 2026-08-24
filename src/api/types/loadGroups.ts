@@ -92,3 +92,18 @@ export interface FatigueProfile {
 
 /** PUT /load/:id/fatigue-profiles/ — sent as a raw array, not wrapped. */
 export type FatigueProfilesPayload = FatigueProfile[];
+
+/** Fatigue-case edit callbacks passed down through `LoadGroupFatigueProfilesTab` →
+ *  `FatigueProfileAccordionItem` → `FatigueCaseTable` unchanged — shared here so
+ *  each layer doesn't redeclare the same signatures. */
+export interface FatigueCaseCallbacks {
+  onAddFatigueCase: (profileKey: string) => void;
+  onDeleteFatigueCase: (profileKey: string, caseKey: string) => void;
+  onUpdateFatigueCase: <K extends keyof FatigueCase>(
+    profileKey: string,
+    caseKey: string,
+    field: K,
+    val: FatigueCase[K]
+  ) => void;
+  onPickLoadCase: (profileKey: string, caseKey: string) => void;
+}

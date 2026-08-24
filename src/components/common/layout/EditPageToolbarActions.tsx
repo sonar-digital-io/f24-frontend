@@ -3,6 +3,30 @@ import { Check, Loader2, X } from 'lucide-react';
 
 export type SaveStatus = 'saved' | 'saving' | 'not-saved';
 
+/** Saving…/Not saved/Saved indicator shared by every edit-page toolbar. */
+export function SaveStatusIndicator({ status }: { status?: SaveStatus }) {
+  return (
+    <div className="flex items-center gap-[6px]">
+      {status === 'saving' ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
+          <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
+        </>
+      ) : status === 'not-saved' ? (
+        <>
+          <X className="h-4 w-4 text-[#dc2626]" strokeWidth={2} />
+          <span className="text-[14px] leading-5 text-[#dc2626]">Not saved</span>
+        </>
+      ) : status === 'saved' ? (
+        <>
+          <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
+          <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 interface EditPageToolbarActionsProps {
   title: string;
   onBack: () => void;
@@ -27,24 +51,7 @@ export function EditPageToolbarActions({ title, onBack, status, children }: Edit
       </h1>
 
       <div className="flex shrink-0 items-center gap-4">
-        <div className="flex items-center gap-[6px]">
-          {status === 'saving' ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
-              <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
-            </>
-          ) : status === 'not-saved' ? (
-            <>
-              <X className="h-4 w-4 text-[#dc2626]" strokeWidth={2} />
-              <span className="text-[14px] leading-5 text-[#dc2626]">Not saved</span>
-            </>
-          ) : status === 'saved' ? (
-            <>
-              <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-              <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
-            </>
-          ) : null}
-        </div>
+        <SaveStatusIndicator status={status} />
         <button
           type="button"
           onClick={onBack}

@@ -2,9 +2,10 @@ import { useRef } from 'react';
 import { cn } from '@/lib/utils';
 import type { ControlPoint } from '@/types';
 import { BezierZoomControls } from '@/components/common/viewer/BezierZoomControls';
+import { ChartBackgroundRect } from '@/components/common/viewer/ChartBackgroundRect';
 import { ChartGrid } from '@/components/common/viewer/ChartGrid';
-import { ChartAnchorPoint } from '@/components/common/viewer/ChartAnchorPoint';
-import { useChartZoomPan, CHART_ZOOM_MIN, CHART_ZOOM_MAX, CHART_ZOOM_STEP } from '@/hooks/useChartZoomPan';
+import { ChartAnchorPointsLayer } from '@/components/common/viewer/ChartAnchorPointsLayer';
+import { useChartZoomPan } from '@/hooks/useChartZoomPan';
 import { useBezierEditorInteractions } from '@/hooks/useBezierEditorInteractions';
 import {
   VB_WIDTH,
@@ -89,10 +90,10 @@ export function BezierEditor({
     viewH,
     panningPointerId,
     hasPannedRef,
-    zoomBy,
     screenToViewBox,
     resetView,
     bgPointerHandlers,
+    zoomControlProps,
   } = useChartZoomPan(svgRef);
 
   const {
@@ -141,12 +142,7 @@ export function BezierEditor({
   return (
     <div className={cn('relative h-[260px] w-full rounded-md bg-white', className)}>
       {/* Zoom controls */}
-      <BezierZoomControls
-        onZoomIn={() => zoomBy(CHART_ZOOM_STEP)}
-        onZoomOut={() => zoomBy(1 / CHART_ZOOM_STEP)}
-        canZoomIn={zoom < CHART_ZOOM_MAX}
-        canZoomOut={zoom > CHART_ZOOM_MIN}
-      />
+      <BezierZoomControls {...zoomControlProps} />
 
       <svg
         ref={svgRef}
@@ -157,21 +153,15 @@ export function BezierEditor({
         /* No onWheel — scroll zoom deliberately disabled */
       >
         {/* Background: catches pan + click-to-add-point + dbl-click zoom reset */}
-        <rect
-          x={viewX}
-          y={viewY}
-          width={viewW}
-          height={viewH}
-          fill="transparent"
-          style={{
-            cursor:
-              zoom > 1
-                ? panningPointerId !== null
-                  ? 'grabbing'
-                  : 'grab'
-                : 'crosshair',
-          }}
-          {...bgPointerHandlers}
+        <ChartBackgroundRect
+          viewX={viewX}
+          viewY={viewY}
+          viewW={viewW}
+          viewH={viewH}
+          zoom={zoom}
+          panningPointerId={panningPointerId}
+          idleCursor="crosshair"
+          bgPointerHandlers={bgPointerHandlers}
           onClick={handleBgClick}
           onDoubleClick={resetView}
         />
@@ -230,28 +220,17 @@ export function BezierEditor({
         />
 
         {/* Draggable anchors */}
-        {points.map((p, idx) => {
-          const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
-          return (
-            <ChartAnchorPoint
-              key={idx}
-              cx={cx}
-              cy={cy}
-              isDragging={draggingIndex === idx}
-              onPointerDown={(e) => handlePointerDown(idx, e)}
-              onPointerMove={(e) => handlePointerMove(idx, e)}
-              onPointerUp={(e) => handlePointerUp(idx, e)}
-              onPointerCancel={(e) => handlePointerUp(idx, e)}
-              onDoubleClick={(e) => handlePointDoubleClick(idx, e)}
-              onKeyDown={(e) => handleKeyDown(idx, e)}
-              tooltip={
-                points.length > minPoints
-                  ? 'Drag to move · Double-click to remove'
-                  : 'Drag to move'
-              }
-            />
-          );
-        })}
+        <ChartAnchorPointsLayer
+          points={points}
+          project={(p) => dataToPx(p, xMin, xMax, yMin, yMax)}
+          draggingIndex={draggingIndex}
+          minPoints={minPoints}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onDoubleClick={handlePointDoubleClick}
+          onKeyDown={handleKeyDown}
+        />
 
         {/* Blocked-drag label — point 0 can't be dragged past the start position */}
         {draggingIndex === 0 && blockedAtRoot && (() => {

@@ -41,7 +41,7 @@ export type CalcLoadGroupSortKey = 'name' | 'last_modified';
 // ─── /composition ─────────────────────────────────────────────────────────────
 
 /** Sortable columns on the /composition list page. */
-export type CompositionSortKey = 'name' | 'lastUpdated' | 'nominalRadius';
+export type CompositionSortKey = 'name' | 'lastUpdated';
 
 // ─── /geometry ────────────────────────────────────────────────────────────────
 

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { sampleClosedBezier, buildLoftMesh, interpolateProfileAtY } from '@/lib/loftGeometry';
+import { createViewerRenderer, createDampedOrbitControls, disposeSceneObjects } from '@/lib/threeViewerSetup';
 
 export interface PlaneProfile {
   id: string;
@@ -80,17 +81,9 @@ export function LoftViewer({
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
     camera.position.set(8, 6, 8);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
-    container.appendChild(renderer.domElement);
+    const renderer = createViewerRenderer(container, width, height);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+    const controls = createDampedOrbitControls(camera, renderer);
     controls.target.set(0, 3, 0);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.4));
@@ -246,13 +239,7 @@ export function LoftViewer({
       controls.dispose();
       // Dispose every geometry/material still in the scene (loft, plane
       // previews, edge-placement preview, grid, axes)
-      scene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
-          obj.geometry.dispose();
-          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-          mats.forEach((m) => m.dispose());
-        }
-      });
+      disposeSceneObjects(scene);
       (scene.background as THREE.Texture).dispose();
       renderer.dispose();
       if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);

@@ -1,6 +1,5 @@
-import { Check, Loader2, X } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
+import { SaveStatusIndicator, type SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 
 const TABS = [
   { value: 'create', label: 'Project configuration' },
@@ -73,24 +72,7 @@ export function GeometryEditToolbar({
       </div>
 
       <div className="absolute inset-y-0 right-4 flex items-center gap-4">
-        <div className="flex items-center gap-[6px]">
-          {status === 'saving' ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
-              <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
-            </>
-          ) : status === 'not-saved' ? (
-            <>
-              <X className="h-4 w-4 text-[#dc2626]" strokeWidth={2} />
-              <span className="text-[14px] leading-5 text-[#dc2626]">Not saved</span>
-            </>
-          ) : status === 'saved' ? (
-            <>
-              <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-              <span className="text-[14px] leading-5 text-[#737373]">Saved</span>
-            </>
-          ) : null}
-        </div>
+        <SaveStatusIndicator status={status} />
         <button
           type="button"
           onClick={onExit}

@@ -1,9 +1,9 @@
 import { BezierEditor } from '@/components/common/viewer/BezierEditor';
-import { BezierPointsTable } from '@/components/common/viewer/BezierPointsTable';
+import { BezierPointsTable, type PointsTableEditCallbacks } from '@/components/common/viewer/BezierPointsTable';
 import { ProfileDistributionSwitch } from '@/components/geometry/ProfileDistributionSwitch';
 import type { ControlPoint } from '@/types';
 
-interface ProfileDistributionSectionBodyProps {
+interface ProfileDistributionSectionBodyProps extends PointsTableEditCallbacks {
   folded: boolean;
   points: ControlPoint[];
   onChange: (next: ControlPoint[]) => void;
@@ -16,10 +16,6 @@ interface ProfileDistributionSectionBodyProps {
   onShowDistributionChange: (v: boolean) => void;
   showTable: boolean;
   onShowTableChange: (v: boolean) => void;
-  getInputValue: (idx: number, field: 'x' | 'y') => string;
-  onInputChange: (idx: number, field: 'x' | 'y', raw: string) => void;
-  onInputBlur: (idx: number, field: 'x' | 'y') => void;
-  onAddPoint: () => void;
 }
 
 /** A single distribution-curve section's chart + table body (no heading — the
@@ -44,13 +40,7 @@ export function ProfileDistributionSectionBody({
 }: ProfileDistributionSectionBodyProps) {
   return (
     <div className="flex flex-col gap-4">
-      <div
-        className={
-          folded
-            ? 'flex flex-col gap-4'
-            : 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]'
-        }
-      >
+      <div className={folded ? 'flex flex-col gap-4' : 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]'}>
         {/* Distribution view */}
         <div className="flex flex-col gap-3">
           <ProfileDistributionSwitch

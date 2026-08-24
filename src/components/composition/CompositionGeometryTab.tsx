@@ -120,6 +120,7 @@ export function CompositionGeometryTab({
               onClick={() => onSelectGeometry(g.id)}
               selected={selectedGeometryId === g.id}
               showMenu={false}
+              hoverActionLabel="Select"
             />
           ))}
         </div>
