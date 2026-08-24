@@ -28,7 +28,10 @@ function toUiGeometry(g: BackendGeometry): GeometryItem {
     description: g.description ?? '',
     nominalRadius: 0,
     type: '—' as BladeType,
-    lastUpdated: formatDateTime(g.last_modified),
+    // Keep the raw ISO value so sorting stays chronological — an "M/D/YYYY"
+    // display string (e.g. from formatDateTime) sorts lexicographically wrong
+    // (month "10" sorts before "9"). Formatted for display below.
+    lastUpdated: g.last_modified ?? '',
   };
 }
 
@@ -141,7 +144,7 @@ export function Geometry() {
                           {g.description}
                         </td>
                         <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-                          {g.lastUpdated}
+                          {formatDateTime(g.lastUpdated)}
                         </td>
                         <td className="px-3 py-4">
                           <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">

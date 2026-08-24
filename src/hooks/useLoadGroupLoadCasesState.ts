@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLoadCases, useUpdateLoadCases } from '@/hooks/api/useLoadGroups';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { loadCaseHasErrors } from '@/lib/loadCaseValidation';
@@ -8,7 +8,7 @@ import type { LoadCase } from '@/api/types/loadGroups';
 /**
  * Load cases tab state: 0 by default until the user adds one, hydrated from
  * the backend for edit/duplicate, autosaved via a dedicated PUT
- * /load/:id/load-cases/ shortly after an edit settles (only while every row
+ * /load/:id/load-cases/ once focus leaves a field (only while every row
  * validates — an invalid row just leaves the status at "not saved"). Extracted
  * from LoadGroupNew — the fatigue profiles tab also needs the resulting
  * `pickableLoadCases`/`loadCaseNamesById`.
@@ -90,27 +90,25 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
 
   const loadCasesHaveErrors = loadCases.some(loadCaseHasErrors);
 
-  useEffect(() => {
-    if (isNew || !dirty || loadCasesHaveErrors) return;
-    const timer = setTimeout(async () => {
-      setStatus('saving');
-      try {
-        const saved = await updateLoadCasesMutation.mutateAsync({ load_cases: loadCases });
-        // The PUT response carries backend-assigned ids for newly-added rows
-        // (needed by the fatigue profiles tab's load-case picker) — merge them
-        // back in, keeping each row's client-side __KEY__ for React identity.
-        setLoadCases((prev) =>
-          saved.load_cases.map((lc, i) => ({ ...lc, __KEY__: prev[i]?.__KEY__ || crypto.randomUUID() }))
-        );
-        setDirty(false);
-        setStatus('saved');
-      } catch {
-        setStatus('not-saved');
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadCases, dirty, isNew, loadCasesHaveErrors]);
+  // Fires when focus leaves a field (blur) or the table itself (click-out) —
+  // triggers autosave. Guarded so it's a no-op when there's nothing to save.
+  async function handleLoadCasesBlur() {
+    if (isNew || !dirty || loadCasesHaveErrors || updateLoadCasesMutation.isPending) return;
+    setStatus('saving');
+    try {
+      const saved = await updateLoadCasesMutation.mutateAsync({ load_cases: loadCases });
+      // The PUT response carries backend-assigned ids for newly-added rows
+      // (needed by the fatigue profiles tab's load-case picker) — merge them
+      // back in, keeping each row's client-side __KEY__ for React identity.
+      setLoadCases((prev) =>
+        saved.load_cases.map((lc, i) => ({ ...lc, __KEY__: prev[i]?.__KEY__ || crypto.randomUUID() }))
+      );
+      setDirty(false);
+      setStatus('saved');
+    } catch {
+      setStatus('not-saved');
+    }
+  }
 
   return {
     loadCases,
@@ -120,6 +118,7 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
     addLoadCase,
     deleteLoadCase,
     duplicateLoadCase,
+    onBlur: handleLoadCasesBlur,
     status,
   };
 }

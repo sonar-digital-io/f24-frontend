@@ -74,7 +74,7 @@ export function useUpdateLoadCases(loadGroupId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: LoadCasesPayload) => loadGroupsApi.updateLoadCases(loadGroupId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: loadGroupKeys.loadCases(loadGroupId) }),
+    onSuccess: (data) => queryClient.setQueryData(loadGroupKeys.loadCases(loadGroupId), data),
   });
 }
 
@@ -90,6 +90,6 @@ export function useUpdateFatigueProfiles(loadGroupId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: FatigueProfilesPayload) => loadGroupsApi.updateFatigueProfiles(loadGroupId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: loadGroupKeys.fatigueProfiles(loadGroupId) }),
+    onSuccess: (data) => queryClient.setQueryData(loadGroupKeys.fatigueProfiles(loadGroupId), data),
   });
 }

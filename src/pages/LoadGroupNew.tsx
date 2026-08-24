@@ -91,6 +91,7 @@ export function LoadGroupNew() {
     addLoadCase,
     deleteLoadCase,
     duplicateLoadCase,
+    onBlur: handleLoadCasesBlur,
     status: loadCasesStatus,
   } = useLoadGroupLoadCasesState(loadGroupId, isNew);
 
@@ -120,9 +121,11 @@ export function LoadGroupNew() {
     deleteFatigueProfile,
     duplicateFatigueProfile,
     updateFatigueProfileName,
+    reorderFatigueCase,
     addFatigueCase,
     deleteFatigueCase,
     updateFatigueCase,
+    onBlur: handleFatigueProfilesBlur,
     status: fatigueStatus,
   } = useLoadGroupFatigueProfilesState(loadGroupId, isNew);
 
@@ -221,6 +224,7 @@ export function LoadGroupNew() {
               onAddLoadCase={addLoadCase}
               onDuplicateLoadCase={duplicateLoadCase}
               onDeleteLoadCase={deleteLoadCase}
+              onBlur={handleLoadCasesBlur}
             />
           )}
 
@@ -250,10 +254,12 @@ export function LoadGroupNew() {
               onDuplicateFatigueProfile={duplicateFatigueProfile}
               onDeleteFatigueProfile={deleteFatigueProfile}
               onUpdateFatigueProfileName={updateFatigueProfileName}
+              onReorderFatigueCase={reorderFatigueCase}
               onAddFatigueCase={addFatigueCase}
               onDeleteFatigueCase={deleteFatigueCase}
               onUpdateFatigueCase={updateFatigueCase}
               onPickLoadCase={(profileKey, caseKey) => setPickingLoadCase({ profileKey, caseKey })}
+              onBlur={handleFatigueProfilesBlur}
             />
           )}
         </div>

@@ -24,7 +24,10 @@ function toUiLoadGroup(g: BackendLoadGroup): LoadGroupItem {
     id: String(g.id),
     name: g.name,
     description: g.description ?? '',
-    lastUpdated: formatDateTime(g.last_modified),
+    // Keep the raw ISO value so sorting stays chronological — an "M/D/YYYY"
+    // display string (e.g. from formatDateTime) sorts lexicographically wrong
+    // (month "10" sorts before "9"). Formatted for display in LoadGroupRow.
+    lastUpdated: g.last_modified ?? '',
     profiles: [],
   };
 }
@@ -45,7 +48,7 @@ function LoadGroupRow({ item, onEdit, onDuplicate, onDelete }: LoadGroupRowProps
       <td className="px-3 py-4 text-[14px] font-medium leading-5 text-[#0a0a0a]">{item.name}</td>
       <td className="px-3 py-4 text-[14px] leading-5 text-[#6b7280]">{item.description}</td>
       <td className="w-[160px] px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-        {item.lastUpdated}
+        {formatDateTime(item.lastUpdated)}
       </td>
       <td className="px-3 py-4">
         <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">

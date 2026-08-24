@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useFatigueProfiles, useUpdateFatigueProfiles } from '@/hooks/api/useLoadGroups';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { fatigueProfilesHaveErrors } from '@/lib/fatigueValidation';
@@ -8,7 +8,7 @@ import type { FatigueCase, FatigueProfile } from '@/api/types/loadGroups';
 /**
  * Fatigue profiles tab state: 0 by default until the user adds one, hydrated
  * from the backend for edit/duplicate, autosaved via a dedicated PUT
- * /load/:id/fatigue-profiles/ shortly after an edit settles — only while
+ * /load/:id/fatigue-profiles/ once focus leaves a field — only while
  * every profile validates (an invalid case just leaves the status at "not
  * saved"). Extracted from LoadGroupNew.
  */
@@ -114,6 +114,21 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
     markDirty();
   }
 
+  // A drop doesn't blur any field, so it saves immediately with the freshly
+  // reordered array instead of waiting on the usual onBlur autosave.
+  function reorderFatigueCase(profileKey: string, fromIdx: number, toIdx: number) {
+    const next = fatigueProfiles.map((p) => {
+      if (p.__KEY__ !== profileKey) return p;
+      const cases = [...p.fatigue_cases];
+      const [moved] = cases.splice(fromIdx, 1);
+      cases.splice(toIdx, 0, moved);
+      return { ...p, fatigue_cases: cases };
+    });
+    setFatigueProfiles(next);
+    markDirty();
+    saveFatigueProfiles(next);
+  }
+
   function updateFatigueCase<K extends keyof FatigueCase>(
     profileKey: string,
     caseKey: string,
@@ -133,36 +148,37 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
     markDirty();
   }
 
-  const fatigueProfilesInvalid = fatigueProfilesHaveErrors(fatigueProfiles);
+  async function saveFatigueProfiles(profiles: FatigueProfile[]) {
+    if (isNew || fatigueProfilesHaveErrors(profiles) || updateFatigueProfilesMutation.isPending) return;
+    setStatus('saving');
+    try {
+      const saved = await updateFatigueProfilesMutation.mutateAsync(profiles);
+      // The PUT response carries backend-assigned ids for newly-added
+      // profiles/cases — merge them back in, keeping each row's client-side
+      // __KEY__ for React identity.
+      setFatigueProfiles((prev) =>
+        saved.map((p, i) => ({
+          ...p,
+          __KEY__: prev[i]?.__KEY__ || crypto.randomUUID(),
+          fatigue_cases: p.fatigue_cases.map((c, j) => ({
+            ...c,
+            __KEY__: prev[i]?.fatigue_cases[j]?.__KEY__ || crypto.randomUUID(),
+          })),
+        }))
+      );
+      setDirty(false);
+      setStatus('saved');
+    } catch {
+      setStatus('not-saved');
+    }
+  }
 
-  useEffect(() => {
-    if (isNew || !dirty || fatigueProfilesInvalid) return;
-    const timer = setTimeout(async () => {
-      setStatus('saving');
-      try {
-        const saved = await updateFatigueProfilesMutation.mutateAsync(fatigueProfiles);
-        // The PUT response carries backend-assigned ids for newly-added
-        // profiles/cases — merge them back in, keeping each row's client-side
-        // __KEY__ for React identity.
-        setFatigueProfiles((prev) =>
-          saved.map((p, i) => ({
-            ...p,
-            __KEY__: prev[i]?.__KEY__ || crypto.randomUUID(),
-            fatigue_cases: p.fatigue_cases.map((c, j) => ({
-              ...c,
-              __KEY__: prev[i]?.fatigue_cases[j]?.__KEY__ || crypto.randomUUID(),
-            })),
-          }))
-        );
-        setDirty(false);
-        setStatus('saved');
-      } catch {
-        setStatus('not-saved');
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fatigueProfiles, dirty, isNew, fatigueProfilesInvalid]);
+  // Fires when focus leaves a field (blur) or the panel itself (click-out) —
+  // triggers autosave. Guarded so it's a no-op when there's nothing to save.
+  async function handleFatigueProfilesBlur() {
+    if (!dirty) return;
+    await saveFatigueProfiles(fatigueProfiles);
+  }
 
   return {
     fatigueProfiles,
@@ -179,6 +195,8 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
     addFatigueCase,
     deleteFatigueCase,
     updateFatigueCase,
+    reorderFatigueCase,
+    onBlur: handleFatigueProfilesBlur,
     status,
   };
 }

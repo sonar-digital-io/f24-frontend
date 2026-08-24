@@ -12,6 +12,8 @@ interface LoadGroupLoadCasesTabProps {
   onAddLoadCase: () => void;
   onDuplicateLoadCase: (key: string) => void;
   onDeleteLoadCase: (key: string) => void;
+  /** Fires when focus leaves a field (blur) or the table itself (click-out) — triggers autosave. */
+  onBlur: () => void;
 }
 
 export function LoadGroupLoadCasesTab({
@@ -20,6 +22,7 @@ export function LoadGroupLoadCasesTab({
   onAddLoadCase,
   onDuplicateLoadCase,
   onDeleteLoadCase,
+  onBlur,
 }: LoadGroupLoadCasesTabProps) {
   // Fixed mode has no meaningful max — clear it to null (backend's "not set"),
   // and give range mode a starting max to edit instead of a bare null. Pitch
@@ -44,7 +47,10 @@ export function LoadGroupLoadCasesTab({
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+    <div
+      onBlur={onBlur}
+      className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
+    >
       {/* Table */}
       <div className="overflow-x-auto rounded-md border border-[#e5e7eb]">
         <table className="w-full border-collapse text-[13px]" style={{ minWidth: 1100 }}>

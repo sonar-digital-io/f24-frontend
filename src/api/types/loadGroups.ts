@@ -105,5 +105,6 @@ export interface FatigueCaseCallbacks {
     field: K,
     val: FatigueCase[K]
   ) => void;
+  onReorderFatigueCase: (profileKey: string, fromIdx: number, toIdx: number) => void;
   onPickLoadCase: (profileKey: string, caseKey: string) => void;
 }
