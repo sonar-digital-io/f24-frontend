@@ -70,6 +70,7 @@ export function LoadGroupNew() {
       torque: withCurve(g.rpm_torque_limit, prev.torque),
       power: withCurve(g.rpm_power_limit, prev.power),
     }));
+    markLimitsSaved();
   });
 
   useHydrateOnce(
@@ -90,9 +91,7 @@ export function LoadGroupNew() {
     addLoadCase,
     deleteLoadCase,
     duplicateLoadCase,
-    handleSaveLoadCases,
-    loadCasesHaveErrors,
-    updateLoadCasesMutation,
+    status: loadCasesStatus,
   } = useLoadGroupLoadCasesState(loadGroupId, isNew);
 
   const {
@@ -105,9 +104,9 @@ export function LoadGroupNew() {
     handleLimitCurveChange,
     addLimitCurvePoint,
     deleteLimitCurvePoint,
-    handleSaveLimits,
-    updateLimitsMutation,
-  } = useLoadGroupLimitsState(loadGroupId);
+    markSaved: markLimitsSaved,
+    status: limitsStatus,
+  } = useLoadGroupLimitsState(loadGroupId, isNew);
 
   const {
     fatigueProfiles,
@@ -124,9 +123,7 @@ export function LoadGroupNew() {
     addFatigueCase,
     deleteFatigueCase,
     updateFatigueCase,
-    handleSaveFatigueProfiles,
-    fatigueProfilesInvalid,
-    updateFatigueProfilesMutation,
+    status: fatigueStatus,
   } = useLoadGroupFatigueProfilesState(loadGroupId, isNew);
 
   const titleText = isNew ? name.trim() || 'New load group' : name.trim() || 'Loading…';
@@ -172,25 +169,14 @@ export function LoadGroupNew() {
     navigate('/load-group');
   }
 
-  // ── Toolbar save action, per tab ─────────────────────────────────────────
-  const tabAction: Partial<Record<LoadGroupTab, { onClick: () => void; disabled: boolean; label: string }>> = {
-    'load-cases': {
-      onClick: handleSaveLoadCases,
-      disabled: updateLoadCasesMutation.isPending || loadCasesHaveErrors,
-      label: updateLoadCasesMutation.isPending ? 'Saving…' : 'Save load cases',
-    },
-    limits: {
-      onClick: handleSaveLimits,
-      disabled: updateLimitsMutation.isPending,
-      label: updateLimitsMutation.isPending ? 'Saving…' : 'Save limits',
-    },
-    'fatigue-profiles': {
-      onClick: handleSaveFatigueProfiles,
-      disabled: updateFatigueProfilesMutation.isPending || fatigueProfilesInvalid,
-      label: updateFatigueProfilesMutation.isPending ? 'Saving…' : 'Save fatigue profiles',
-    },
+  // ── Toolbar save-status indicator, per tab — every tab autosaves, so this
+  // is the only save-related toolbar affordance left. ─────────────────────
+  const tabStatus: Record<LoadGroupTab, SaveStatus | undefined> = {
+    general: generalStatus,
+    'load-cases': loadCasesStatus,
+    limits: limitsStatus,
+    'fatigue-profiles': fatigueStatus,
   };
-  const activeTabAction = tabAction[activeTab];
 
   // ── Tab trigger class ─────────────────────────────────────────────────────
   const triggerCls =
@@ -206,19 +192,7 @@ export function LoadGroupNew() {
         onTabChange={(v) => setActiveTab(v as LoadGroupTab)}
         title={titleText}
         onBack={handleExit}
-        status={activeTab === 'general' ? generalStatus : undefined}
-        actions={
-          activeTabAction && (
-            <button
-              type="button"
-              onClick={activeTabAction.onClick}
-              disabled={activeTabAction.disabled}
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {activeTabAction.label}
-            </button>
-          )
-        }
+        status={tabStatus[activeTab]}
       />
       {saveError && (
         <p className="px-4 text-[13px] text-[#dc2626]">

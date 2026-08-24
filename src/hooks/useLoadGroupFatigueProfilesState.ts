@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useFatigueProfiles, useUpdateFatigueProfiles } from '@/hooks/api/useLoadGroups';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { fatigueProfilesHaveErrors } from '@/lib/fatigueValidation';
+import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import type { FatigueCase, FatigueProfile } from '@/api/types/loadGroups';
 
 /**
  * Fatigue profiles tab state: 0 by default until the user adds one, hydrated
- * from the backend for edit/duplicate, saved via a dedicated PUT
- * /load/:id/fatigue-profiles/ (sent as a raw array). Extracted from
- * LoadGroupNew.
+ * from the backend for edit/duplicate, autosaved via a dedicated PUT
+ * /load/:id/fatigue-profiles/ shortly after an edit settles — only while
+ * every profile validates (an invalid case just leaves the status at "not
+ * saved"). Extracted from LoadGroupNew.
  */
 export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boolean) {
   const fatigueProfilesQuery = useFatigueProfiles(loadGroupId);
@@ -21,6 +23,8 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
     profileKey: string;
     caseKey: string;
   } | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [status, setStatus] = useState<SaveStatus | undefined>(undefined);
 
   useHydrateOnce(!isNew && !fatigueProfilesQuery.isFetching && !!fatigueProfilesQuery.data, () => {
     const hydratedProfiles = fatigueProfilesQuery.data!.map((p) => ({
@@ -33,7 +37,13 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
       })),
     }));
     setFatigueProfiles(hydratedProfiles);
+    setStatus('saved');
   });
+
+  function markDirty() {
+    setDirty(true);
+    setStatus('not-saved');
+  }
 
   function toggleFatigueProfile(profileKey: string) {
     setOpenFatigueProfiles((prev) => ({ ...prev, [profileKey]: !prev[profileKey] }));
@@ -43,10 +53,12 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
     const key = crypto.randomUUID();
     setFatigueProfiles((prev) => [...prev, { __KEY__: key, name: 'New fatigue profile', fatigue_cases: [] }]);
     setOpenFatigueProfiles((prev) => ({ ...prev, [key]: true }));
+    markDirty();
   }
 
   function deleteFatigueProfile(profileKey: string) {
     setFatigueProfiles((prev) => prev.filter((p) => p.__KEY__ !== profileKey));
+    markDirty();
   }
 
   function duplicateFatigueProfile(profileKey: string) {
@@ -61,12 +73,14 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
       };
       return [...prev, clone];
     });
+    markDirty();
   }
 
   function updateFatigueProfileName(profileKey: string, newName: string) {
     setFatigueProfiles((prev) =>
       prev.map((p) => (p.__KEY__ === profileKey ? { ...p, name: newName } : p))
     );
+    markDirty();
   }
 
   function addFatigueCase(profileKey: string) {
@@ -86,6 +100,7 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
         return { ...p, fatigue_cases: [...p.fatigue_cases, fc] };
       })
     );
+    markDirty();
   }
 
   function deleteFatigueCase(profileKey: string, caseKey: string) {
@@ -96,6 +111,7 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
           : p
       )
     );
+    markDirty();
   }
 
   function updateFatigueCase<K extends keyof FatigueCase>(
@@ -114,13 +130,39 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
             }
       )
     );
-  }
-
-  async function handleSaveFatigueProfiles() {
-    await updateFatigueProfilesMutation.mutateAsync(fatigueProfiles);
+    markDirty();
   }
 
   const fatigueProfilesInvalid = fatigueProfilesHaveErrors(fatigueProfiles);
+
+  useEffect(() => {
+    if (isNew || !dirty || fatigueProfilesInvalid) return;
+    const timer = setTimeout(async () => {
+      setStatus('saving');
+      try {
+        const saved = await updateFatigueProfilesMutation.mutateAsync(fatigueProfiles);
+        // The PUT response carries backend-assigned ids for newly-added
+        // profiles/cases — merge them back in, keeping each row's client-side
+        // __KEY__ for React identity.
+        setFatigueProfiles((prev) =>
+          saved.map((p, i) => ({
+            ...p,
+            __KEY__: prev[i]?.__KEY__ || crypto.randomUUID(),
+            fatigue_cases: p.fatigue_cases.map((c, j) => ({
+              ...c,
+              __KEY__: prev[i]?.fatigue_cases[j]?.__KEY__ || crypto.randomUUID(),
+            })),
+          }))
+        );
+        setDirty(false);
+        setStatus('saved');
+      } catch {
+        setStatus('not-saved');
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fatigueProfiles, dirty, isNew, fatigueProfilesInvalid]);
 
   return {
     fatigueProfiles,
@@ -137,8 +179,6 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
     addFatigueCase,
     deleteFatigueCase,
     updateFatigueCase,
-    handleSaveFatigueProfiles,
-    fatigueProfilesInvalid,
-    updateFatigueProfilesMutation,
+    status,
   };
 }

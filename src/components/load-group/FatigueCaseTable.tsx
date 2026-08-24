@@ -26,7 +26,7 @@ export function FatigueCaseTable({
       <div className="overflow-hidden rounded-md border border-[#e5e7eb]">
         <table className="w-full border-collapse text-[13px]">
           <thead>
-            <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
+            <tr className="border-b border-[#e5e7eb]">
               <th className="h-9 w-8 px-2" />
               <th className="h-9 px-3 text-left font-medium text-[#6b7280]">Name</th>
               <th className="h-9 px-3 text-left font-medium text-[#6b7280]">Load case</th>
@@ -47,10 +47,20 @@ export function FatigueCaseTable({
                 </div>
               </th>
               <th className="h-9 w-[114px] whitespace-nowrap px-3 text-left font-medium text-[#6b7280]">
-                Time (h)
+                <div className="flex items-center gap-1 whitespace-nowrap">
+                  Time (h)
+                  <Tooltip content="Only one of Time or Cycles can be set — enter one to disable the other." side="top">
+                    <Info className="h-3.5 w-3.5 shrink-0 cursor-default text-[#9ca3af]" strokeWidth={2} />
+                  </Tooltip>
+                </div>
               </th>
               <th className="h-9 w-[114px] whitespace-nowrap px-3 text-left font-medium text-[#6b7280]">
-                Cycles
+                <div className="flex items-center gap-1 whitespace-nowrap">
+                  Cycles
+                  <Tooltip content="Only one of Time or Cycles can be set — enter one to disable the other." side="top">
+                    <Info className="h-3.5 w-3.5 shrink-0 cursor-default text-[#9ca3af]" strokeWidth={2} />
+                  </Tooltip>
+                </div>
               </th>
               <th className="h-9 w-8 px-1" />
             </tr>
@@ -63,7 +73,7 @@ export function FatigueCaseTable({
                   <td className="px-2 py-1.5 text-[#d1d5db]">
                     <GripVertical className="h-4 w-4" strokeWidth={1.5} />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <Input
                       value={fc.name}
                       onChange={(e) => onUpdateFatigueCase(profileKey, fc.__KEY__, 'name', e.target.value)}
@@ -72,7 +82,7 @@ export function FatigueCaseTable({
                       className="h-8 min-w-[140px] rounded border-[#e2e8f0] px-2 text-[13px]"
                     />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <button
                       type="button"
                       onClick={() => onPickLoadCase(profileKey, fc.__KEY__)}
@@ -85,7 +95,7 @@ export function FatigueCaseTable({
                       <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={2} />
                     </button>
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <BufferedNumberInput
                       step="0.01"
                       value={fc.min_scale}
@@ -95,7 +105,7 @@ export function FatigueCaseTable({
                       className="h-8 w-full rounded border-[#e2e8f0] px-2 text-[13px]"
                     />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <BufferedNumberInput
                       step="0.01"
                       value={fc.max_scale}
@@ -105,7 +115,7 @@ export function FatigueCaseTable({
                       className="h-8 w-full rounded border-[#e2e8f0] px-2 text-[13px]"
                     />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <div className="group/timetip relative">
                       <Input
                         type="number"
@@ -125,7 +135,7 @@ export function FatigueCaseTable({
                       )}
                     </div>
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <div className="group/cyclestip relative">
                       <Input
                         type="number"

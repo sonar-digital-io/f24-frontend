@@ -11,6 +11,8 @@ function requiredNumber(val: number): string | undefined {
 export function validateLoadCase(lc: LoadCase): LoadCaseErrors {
   const errors: LoadCaseErrors = {};
 
+  if (!lc.name.trim()) errors.name = 'Required.';
+
   if (lc.pitch_flag === 'range') {
     if (!(lc.pitch_min >= -180)) errors.pitch_min = 'Must be ≥ -180°.';
     if (lc.pitch_max === null || !Number.isFinite(lc.pitch_max)) {
