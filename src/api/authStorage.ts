@@ -1,3 +1,5 @@
+import { clearCachedSysconfig } from './sysconfigStorage';
+
 const STORAGE_KEY = 'f24_auth';
 
 export interface AuthState {
@@ -21,4 +23,8 @@ export function setAuthState(state: AuthState): void {
 
 export function clearAuthState(): void {
   localStorage.removeItem(STORAGE_KEY);
+  // The cached parameterless sysconfig (sysconfigStorage.ts) is only ever valid for the
+  // signed-in session that fetched it — drop it alongside auth state, same as the Angular
+  // app's `TokenStorageService.signOut()` clearing the whole localStorage.
+  clearCachedSysconfig();
 }
