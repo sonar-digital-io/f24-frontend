@@ -1,4 +1,5 @@
 import { EntityCard } from '@/components/common/card/EntityCard';
+import { formatDateTime } from '@/lib/utils';
 import type { Geometry } from '@/data/geometries';
 
 interface GeometryCardProps {
@@ -26,7 +27,7 @@ export function GeometryCard({ geometry, onClick, selected, showMenu = true, hov
       showMenu={showMenu}
       geometryId={Number(geometry.id)}
       hoverActionLabel={hoverActionLabel}
-      footer={<span className="text-[12px] leading-4 text-[#737373]">{geometry.lastUpdated}</span>}
+      footer={<span className="text-[12px] leading-4 text-[#737373]">{formatDateTime(geometry.lastUpdated)}</span>}
     />
   );
 }

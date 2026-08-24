@@ -7,9 +7,20 @@ const FALLBACK_MESSAGE = 'Something went wrong. Please try again.';
  * whatever the backend itself reported — DRF's `detail`/`message`, or the
  * first field-validation error — over the generic fallback.
  */
-export function getApiErrorMessage(error: unknown): string {
+export function getApiErrorMessage(error: unknown, fallback: string = FALLBACK_MESSAGE): string {
   if (isAxiosError(error)) {
-    const data: unknown = error.response?.data;
+    let data: unknown = error.response?.data;
+    // A request made with `responseType: 'arraybuffer'` (e.g. binary mesh
+    // downloads) still decodes a JSON/text error body to raw bytes — decode
+    // it back to text/JSON so the backend's own message isn't lost.
+    if (data instanceof ArrayBuffer) {
+      const text = new TextDecoder().decode(data);
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
     if (typeof data === 'string' && data.trim()) return data;
     if (data && typeof data === 'object') {
       const obj = data as Record<string, unknown>;
@@ -24,5 +35,5 @@ export function getApiErrorMessage(error: unknown): string {
     if (error.message) return error.message;
   }
   if (error instanceof Error && error.message) return error.message;
-  return FALLBACK_MESSAGE;
+  return fallback;
 }

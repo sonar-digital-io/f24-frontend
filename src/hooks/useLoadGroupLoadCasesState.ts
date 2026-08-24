@@ -1,24 +1,39 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useLoadCases, useUpdateLoadCases } from '@/hooks/api/useLoadGroups';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { loadCaseHasErrors } from '@/lib/loadCaseValidation';
+import { matchSavedRows } from '@/lib/mergeSavedRows';
+import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import type { LoadCase } from '@/api/types/loadGroups';
 
 /**
  * Load cases tab state: 0 by default until the user adds one, hydrated from
- * the backend for edit/duplicate, saved via a dedicated PUT
- * /load/:id/load-cases/. Extracted from LoadGroupNew — the fatigue profiles
- * tab also needs the resulting `pickableLoadCases`/`loadCaseNamesById`.
+ * the backend for edit/duplicate, autosaved via a dedicated PUT
+ * /load/:id/load-cases/ once focus leaves a field (only while every row
+ * validates — an invalid row just leaves the status at "not saved"). Extracted
+ * from LoadGroupNew — the fatigue profiles tab also needs the resulting
+ * `pickableLoadCases`/`loadCaseNamesById`.
  */
 export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) {
   const loadCasesQuery = useLoadCases(loadGroupId);
   const updateLoadCasesMutation = useUpdateLoadCases(loadGroupId);
   const [loadCases, setLoadCases] = useState<LoadCase[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [status, setStatus] = useState<SaveStatus | undefined>(undefined);
+  // Refs mirroring the latest state so a blur that arrives while a save is
+  // already in flight can be retried afterwards with fresh data, instead of
+  // being silently dropped or replayed with a stale snapshot.
+  const loadCasesRef = useRef(loadCases);
+  loadCasesRef.current = loadCases;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const retryBlurRef = useRef(false);
 
   useHydrateOnce(!isNew && !loadCasesQuery.isFetching && !!loadCasesQuery.data, () => {
     setLoadCases(
       loadCasesQuery.data!.load_cases.map((lc) => ({ ...lc, __KEY__: lc.__KEY__ || crypto.randomUUID() }))
     );
+    setStatus('saved');
   });
 
   // A fatigue case's load_case references a load case's backend id — only
@@ -28,8 +43,14 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
     .map((lc) => ({ id: lc.id, name: lc.name }));
   const loadCaseNamesById = Object.fromEntries(pickableLoadCases.map((lc) => [lc.id, lc.name]));
 
+  function markDirty() {
+    setDirty(true);
+    setStatus('not-saved');
+  }
+
   function updateLoadCase<K extends keyof LoadCase>(key: string, field: K, val: LoadCase[K]) {
     setLoadCases((prev) => prev.map((c) => (c.__KEY__ === key ? { ...c, [field]: val } : c)));
+    markDirty();
   }
 
   function addLoadCase() {
@@ -51,10 +72,12 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
       target_value: 0,
     };
     setLoadCases((prev) => [...prev, lc]);
+    markDirty();
   }
 
   function deleteLoadCase(key: string) {
     setLoadCases((prev) => prev.filter((c) => c.__KEY__ !== key));
+    markDirty();
   }
 
   function duplicateLoadCase(key: string) {
@@ -71,13 +94,40 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
       next.splice(idx + 1, 0, clone);
       return next;
     });
+    markDirty();
   }
 
-  async function handleSaveLoadCases() {
-    await updateLoadCasesMutation.mutateAsync({ load_cases: loadCases });
+  // Fires when focus leaves a field (blur) or the table itself (click-out) —
+  // triggers autosave. Guarded so it's a no-op when there's nothing to save.
+  async function handleLoadCasesBlur() {
+    if (updateLoadCasesMutation.isPending) {
+      retryBlurRef.current = true;
+      return;
+    }
+    if (isNew || !dirtyRef.current || loadCasesRef.current.some(loadCaseHasErrors)) return;
+    setStatus('saving');
+    try {
+      const saved = await updateLoadCasesMutation.mutateAsync({ load_cases: loadCasesRef.current });
+      // The PUT response carries backend-assigned ids for newly-added rows
+      // (needed by the fatigue profiles tab's load-case picker) — merge them
+      // back in, keeping each row's client-side __KEY__ for React identity.
+      setLoadCases((prev) =>
+        matchSavedRows(saved.load_cases, prev).map(({ row, matchedPrev }) => ({
+          ...row,
+          __KEY__: matchedPrev?.__KEY__ || crypto.randomUUID(),
+        }))
+      );
+      setDirty(false);
+      setStatus('saved');
+    } catch {
+      setStatus('not-saved');
+    } finally {
+      if (retryBlurRef.current) {
+        retryBlurRef.current = false;
+        handleLoadCasesBlur();
+      }
+    }
   }
-
-  const loadCasesHaveErrors = loadCases.some(loadCaseHasErrors);
 
   return {
     loadCases,
@@ -87,8 +137,7 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
     addLoadCase,
     deleteLoadCase,
     duplicateLoadCase,
-    handleSaveLoadCases,
-    loadCasesHaveErrors,
-    updateLoadCasesMutation,
+    onBlur: handleLoadCasesBlur,
+    status,
   };
 }

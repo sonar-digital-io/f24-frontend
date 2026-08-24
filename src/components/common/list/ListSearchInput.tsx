@@ -20,7 +20,7 @@ export function ListSearchInput({ value, onChange, placeholder = 'Search', width
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-9 rounded-md border-[#e2e8f0] pl-9 text-[14px]"
+        className="h-9 rounded-md border-[#e2e8f0] bg-transparent pl-9 text-[14px]"
       />
     </div>
   );

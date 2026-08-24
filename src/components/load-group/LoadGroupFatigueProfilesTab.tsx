@@ -1,4 +1,4 @@
-import { Plus, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { FatigueProfileAccordionItem } from '@/components/load-group/FatigueProfileAccordionItem';
 import type { FatigueCaseCallbacks, FatigueProfile } from '@/api/types/loadGroups';
@@ -16,6 +16,8 @@ interface LoadGroupFatigueProfilesTabProps extends FatigueCaseCallbacks {
   onDuplicateFatigueProfile: (profileKey: string) => void;
   onDeleteFatigueProfile: (profileKey: string) => void;
   onUpdateFatigueProfileName: (profileKey: string, newName: string) => void;
+  /** Fires when focus leaves a field (blur) or the panel itself (click-out) — triggers autosave. */
+  onBlur: () => void;
 }
 
 export function LoadGroupFatigueProfilesTab({
@@ -32,14 +34,19 @@ export function LoadGroupFatigueProfilesTab({
   onAddFatigueCase,
   onDeleteFatigueCase,
   onUpdateFatigueCase,
+  onReorderFatigueCase,
   onPickLoadCase,
+  onBlur,
 }: LoadGroupFatigueProfilesTabProps) {
   return (
-    <div className="flex w-full flex-col gap-0 rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+    <div
+      onBlur={onBlur}
+      className="flex w-full flex-col gap-0 rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
+    >
       {/* Panel header */}
-      <div className="flex items-center justify-between gap-4 border-b border-[#e5e7eb] px-6 py-4">
+      <div className="flex flex-col gap-4 border-b border-[#e5e7eb] px-6 py-4">
         <h3 className="text-[16px] font-semibold text-[#0a0a0a]">Fatigue profiles</h3>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-4">
           {/* Search */}
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6b7280]" />
@@ -53,9 +60,8 @@ export function LoadGroupFatigueProfilesTab({
           <button
             type="button"
             onClick={onAddFatigueProfile}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#006496] px-3 text-[13px] font-medium text-[#fafafa] hover:bg-[#005580]"
+            className="inline-flex h-8 items-center rounded-md bg-[#006496] px-3 text-[13px] font-medium text-[#fafafa] hover:bg-[#005580]"
           >
-            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
             Add fatigue profile
           </button>
         </div>
@@ -87,6 +93,7 @@ export function LoadGroupFatigueProfilesTab({
               onAddFatigueCase={onAddFatigueCase}
               onDeleteFatigueCase={onDeleteFatigueCase}
               onUpdateFatigueCase={onUpdateFatigueCase}
+              onReorderFatigueCase={onReorderFatigueCase}
               onPickLoadCase={onPickLoadCase}
             />
           ))}

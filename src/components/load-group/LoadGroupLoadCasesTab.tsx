@@ -12,6 +12,8 @@ interface LoadGroupLoadCasesTabProps {
   onAddLoadCase: () => void;
   onDuplicateLoadCase: (key: string) => void;
   onDeleteLoadCase: (key: string) => void;
+  /** Fires when focus leaves a field (blur) or the table itself (click-out) — triggers autosave. */
+  onBlur: () => void;
 }
 
 export function LoadGroupLoadCasesTab({
@@ -20,6 +22,7 @@ export function LoadGroupLoadCasesTab({
   onAddLoadCase,
   onDuplicateLoadCase,
   onDeleteLoadCase,
+  onBlur,
 }: LoadGroupLoadCasesTabProps) {
   // Fixed mode has no meaningful max — clear it to null (backend's "not set"),
   // and give range mode a starting max to edit instead of a bare null. Pitch
@@ -44,12 +47,15 @@ export function LoadGroupLoadCasesTab({
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+    <div
+      onBlur={onBlur}
+      className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
+    >
       {/* Table */}
       <div className="overflow-x-auto rounded-md border border-[#e5e7eb]">
         <table className="w-full border-collapse text-[13px]" style={{ minWidth: 1100 }}>
           <thead>
-            <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
+            <tr className="border-b border-[#e5e7eb]">
               <th className="h-10 px-3 text-left font-medium text-[#6b7280]">Name</th>
               <th className="h-10 px-3 text-left font-medium text-[#6b7280]">Pitch flag</th>
               <th className="h-10 px-3 text-left font-medium text-[#6b7280]">Pitch min [°]</th>
@@ -75,15 +81,16 @@ export function LoadGroupLoadCasesTab({
               const errors = validateLoadCase(lc);
               return (
               <tr key={lc.__KEY__} className="group border-b border-[#e5e7eb] last:border-b-0">
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <Input
                     value={lc.name}
                     onChange={(e) => onUpdateLoadCase(lc.__KEY__, 'name', e.target.value)}
                     placeholder="Placeholder"
+                    title={errors.name}
                     className="h-8 min-w-[160px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <SelectInline
                     value={lc.pitch_flag}
                     onChange={(v) => handleFlagChange(lc, 'pitch_flag', v as LoadCaseFlag)}
@@ -91,7 +98,7 @@ export function LoadGroupLoadCasesTab({
                     className="w-[80px]"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <Input
                     type="number"
                     value={lc.pitch_min}
@@ -102,7 +109,7 @@ export function LoadGroupLoadCasesTab({
                     className="h-8 w-[70px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <Input
                     type="number"
                     value={lc.pitch_max ?? ''}
@@ -114,7 +121,7 @@ export function LoadGroupLoadCasesTab({
                     className="h-8 w-[70px] rounded-md border-[#e2e8f0] px-2 text-[13px] disabled:cursor-not-allowed disabled:bg-[#f8fafc] disabled:opacity-50"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <SelectInline
                     value={lc.rpm_flag}
                     onChange={(v) => handleFlagChange(lc, 'rpm_flag', v as LoadCaseFlag)}
@@ -122,7 +129,7 @@ export function LoadGroupLoadCasesTab({
                     className="w-[80px]"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <Input
                     type="number"
                     value={lc.rpm_min}
@@ -133,7 +140,7 @@ export function LoadGroupLoadCasesTab({
                     className="h-8 w-[70px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <Input
                     type="number"
                     value={lc.rpm_max ?? ''}
@@ -145,7 +152,7 @@ export function LoadGroupLoadCasesTab({
                     className="h-8 w-[70px] rounded-md border-[#e2e8f0] px-2 text-[13px] disabled:cursor-not-allowed disabled:bg-[#f8fafc] disabled:opacity-50"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <Input
                     type="number"
                     value={lc.altitude}
@@ -156,7 +163,7 @@ export function LoadGroupLoadCasesTab({
                     className="h-8 w-[72px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <Input
                     type="number"
                     value={lc.disa}
@@ -167,7 +174,7 @@ export function LoadGroupLoadCasesTab({
                     className="h-8 w-[68px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <Input
                     type="number"
                     value={lc.inflow_velocity}
@@ -182,7 +189,7 @@ export function LoadGroupLoadCasesTab({
                     className="h-8 w-[76px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <Input
                     type="number"
                     value={lc.inflow_angle}
@@ -197,7 +204,7 @@ export function LoadGroupLoadCasesTab({
                     className="h-8 w-[72px] rounded-md border-[#e2e8f0] px-2 text-[13px]"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <SelectInline
                     value={lc.target_type}
                     onChange={(v) =>
@@ -207,7 +214,7 @@ export function LoadGroupLoadCasesTab({
                     className="w-[86px]"
                   />
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <div className="flex items-center gap-1">
                     <Input
                       type="number"
@@ -227,7 +234,7 @@ export function LoadGroupLoadCasesTab({
                     </span>
                   </div>
                 </td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-2">
                   <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       type="button"

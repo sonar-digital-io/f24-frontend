@@ -299,7 +299,7 @@ export function ProfileDistributionPanel({
         onFieldBlur={requestCommit}
       />
 
-      <div className="flex items-center gap-[6px]">
+      <div className="flex min-h-5 items-center gap-[6px]">
         {committing ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />

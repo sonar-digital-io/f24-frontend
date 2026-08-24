@@ -1,5 +1,5 @@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { SaveStatusIndicator, type SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
+import { SaveStatusAndExit, type SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 
 const TABS = [
   { value: 'create', label: 'Project configuration' },
@@ -71,15 +71,8 @@ export function GeometryEditToolbar({
         </Tabs>
       </div>
 
-      <div className="absolute inset-y-0 right-4 flex items-center gap-4">
-        <SaveStatusIndicator status={status} />
-        <button
-          type="button"
-          onClick={onExit}
-          className="inline-flex h-8 items-center rounded-md bg-[#f1f5f9]/95 px-3 py-2 text-[12px] font-medium text-[#171717] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#e2e8f0]"
-        >
-          Exit edit mode
-        </button>
+      <div className="absolute inset-y-0 right-4 flex items-center">
+        <SaveStatusAndExit status={status} onExit={onExit} floating />
       </div>
     </div>
   );

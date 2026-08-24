@@ -1,14 +1,13 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { CalculationSubToolbar } from '@/components/calculation/CalculationSubToolbar';
 import { CalculationGeneralTab } from '@/components/calculation/CalculationGeneralTab';
 import { CalculationCompositionTab } from '@/components/calculation/CalculationCompositionTab';
-import { CalculationConfigurationTab } from '@/components/calculation/CalculationConfigurationTab';
 import { CalculationLoadGroupTab } from '@/components/calculation/CalculationLoadGroupTab';
 import { CalculationFatigueProfileTab } from '@/components/calculation/CalculationFatigueProfileTab';
-import { useScrollSpy } from '@/hooks/useScrollSpy';
+import { PropertyFormTab } from '@/components/material/PropertyFormTab';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { useCalculationCompositionState } from '@/hooks/useCalculationCompositionState';
 import { useCalculationLoadGroupState } from '@/hooks/useCalculationLoadGroupState';
@@ -24,7 +23,15 @@ import { useSysconfig, sysconfigKeys } from '@/hooks/api/useSysconfig';
 import { getSysconfig } from '@/api/sysconfig';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { buildAnalysisSettingsPayload } from '@/lib/calculationSettings';
+import { buildSysconfigSections, buildStandaloneGroup } from '@/lib/sysconfigMapping';
+import { toKeyValueList, keyValueSignature } from '@/lib/keyValueMapping';
+import { isFormRangeValid } from '@/lib/sysconfigFormValidation';
 import type { Tab } from '@/types';
+
+/** Pulled out of the auto-built Configuration sections: `analysis_method` is owned by the
+ *  General tab, `econ_debug` gets its own pinned "Debug" group at the bottom instead of
+ *  wherever the backend happens to place it. */
+const CONFIG_PULLED_OUT = new Set(['analysis_method', 'econ_debug']);
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -74,9 +81,7 @@ export function CalculationNew() {
   const [activeTab, setActiveTab] = useState<Tab>('general');
 
   // ── General ──────────────────────────────────────────────────────────────
-  // Hydrated from the backend for edit — the Configuration tab stays on local
-  // mock state; General/Composition/Load group/Fatigue profile are wired to
-  // the real API.
+  // Hydrated from the backend for edit.
   const [name, setName] = useState('');
   const [analysisMethod, setAnalysisMethod] = useState('');
   const [description, setDescription] = useState('');
@@ -110,25 +115,74 @@ export function CalculationNew() {
   // Only fetched while the Configuration tab is actually open — drives every
   // field/group/unit shown there, no hardcoded field state on this page anymore.
   const sysconfigQuery = useSysconfig(activeTab === 'configuration' ? effectiveProjectId ?? '' : '');
-  const configSectionIds = useMemo(
-    () => sysconfigQuery.data?.configuration.project_settings.groups?.map((g) => g.id) ?? [],
-    [sysconfigQuery.data]
-  );
-  const {
-    activeId: activeConfigSection,
-    containerRef: configScrollRef,
-    sectionRefs: configSectionRefs,
-    jumpTo: jumpToConfigSection,
-  } = useScrollSpy(configSectionIds, configSectionIds[0] ?? '');
+  const configSections = useMemo(() => {
+    if (!sysconfigQuery.data) return [];
+    const projectSettings = sysconfigQuery.data.configuration.project_settings;
+    return [
+      ...buildSysconfigSections(sysconfigQuery.data, projectSettings, CONFIG_PULLED_OUT),
+      ...buildStandaloneGroup(sysconfigQuery.data, projectSettings, 'econ_debug', 'Debug'),
+    ];
+  }, [sysconfigQuery.data]);
+  const [configValues, setConfigValues] = useState<Record<string, string>>({});
+  const [configBaseline, setConfigBaseline] = useState<Record<string, string>>({});
+
+  // Seed any field sysconfig has resolved a value for that we don't already hold locally,
+  // and keep `fixed` (backend-computed) fields in sync on every refetch — same reasoning as
+  // Material's mechanical/fatigue tabs, just against sysconfig's own `value` directly since
+  // there's no separate "get project settings" endpoint to read current values from.
+  useEffect(() => {
+    const updates: Record<string, string> = {};
+    for (const field of configSections.flatMap((s) => s.fields)) {
+      if (field.value === undefined) continue;
+      if (field.fixed || configValues[field.name] === undefined) {
+        if (configValues[field.name] !== field.value) updates[field.name] = field.value;
+      }
+    }
+    if (Object.keys(updates).length === 0) return;
+    setConfigValues((prev) => ({ ...prev, ...updates }));
+    setConfigBaseline((prev) => ({ ...prev, ...updates }));
+    // configValues intentionally excluded — this only needs to react to a new sysconfig
+    // fetch, not every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configSections]);
+
+  const configRangeValid = isFormRangeValid(configSections, configValues);
+  const configUnsaved = keyValueSignature(configValues) !== keyValueSignature(configBaseline);
+
+  function handleConfigFieldChange(name: string, value: string) {
+    setConfigValues((prev) => ({ ...prev, [name]: value }));
+  }
+
+  // Autosave the Configuration tab on blur — a full-array PUT, same shape as Material's
+  // mechanical/fatigue tabs — then refetch sysconfig so any dependency this change affects
+  // (active/fixed/value on other fields) is reflected immediately.
+  async function handleConfigFieldBlur() {
+    if (!effectiveProjectId || !configRangeValid || !configUnsaved || updateSettingsMutation.isPending) return;
+    try {
+      await updateSettingsMutation.mutateAsync({ projectId: effectiveProjectId, settings: toKeyValueList(configValues) });
+      setConfigBaseline(configValues);
+      await queryClient.fetchQuery({
+        queryKey: sysconfigKeys.detail(effectiveProjectId),
+        queryFn: () => getSysconfig(effectiveProjectId),
+      });
+    } catch {
+      // updateSettingsMutation's onError (global mutation cache) already toasts.
+    }
+  }
 
   async function handleAnalysisMethodChange(value: string) {
+    // Flush any unsaved Configuration field before it gets wiped below.
+    await handleConfigFieldBlur();
     setAnalysisMethod(value);
     const settings = buildAnalysisSettingsPayload(value);
     const pid = await ensureProjectId();
     await updateSettingsMutation.mutateAsync({ projectId: pid, settings });
-    // The Configuration tab's fields/groups depend on the settings we just
-    // changed — refetch sysconfig now (regardless of which tab is open) so
-    // it's already current whenever the user gets to Configuration.
+    // The whole Configuration tab's fields/groups/values depend on the settings we just
+    // changed — drop our local snapshot (the seeding effect below rebuilds it from the
+    // fresh defaults) and refetch sysconfig now, regardless of which tab is open, so it's
+    // already current whenever the user gets to Configuration.
+    setConfigValues({});
+    setConfigBaseline({});
     await queryClient.fetchQuery({ queryKey: sysconfigKeys.detail(pid), queryFn: () => getSysconfig(pid) });
   }
 
@@ -264,15 +318,26 @@ export function CalculationNew() {
 
           {/* ── CONFIGURATION TAB ───────────────────────────────────────── */}
           {activeTab === 'configuration' && (
-            <CalculationConfigurationTab
-              isLoading={sysconfigQuery.isLoading}
-              isError={sysconfigQuery.isError}
-              sysconfig={sysconfigQuery.data}
-              activeConfigSection={activeConfigSection}
-              onJumpToSection={jumpToConfigSection}
-              configScrollRef={configScrollRef}
-              configSectionRefs={configSectionRefs}
-            />
+            <>
+              {sysconfigQuery.isLoading && (
+                <div className="flex h-full w-full max-w-[1200px] items-center justify-center rounded-[14px] border border-[#e5e7eb] bg-white text-[14px] text-[#6b7280] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+                  Loading configuration…
+                </div>
+              )}
+              {sysconfigQuery.isError && (
+                <div className="flex h-full w-full max-w-[1200px] items-center justify-center rounded-[14px] border border-[#e5e7eb] bg-white text-[14px] text-[#dc2626] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+                  Failed to load configuration from the server.
+                </div>
+              )}
+              {!sysconfigQuery.isLoading && !sysconfigQuery.isError && (
+                <PropertyFormTab
+                  sections={configSections}
+                  values={configValues}
+                  onChange={handleConfigFieldChange}
+                  onBlur={handleConfigFieldBlur}
+                />
+              )}
+            </>
           )}
 
           {/* ── LOAD GROUP TAB ──────────────────────────────────────────── */}

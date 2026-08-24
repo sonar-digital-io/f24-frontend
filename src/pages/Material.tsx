@@ -214,7 +214,7 @@ export function Material() {
 
             {/* Table */}
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full table-fixed border-collapse" style={{ minWidth: 1100 }}>
+              <table className="w-full table-fixed border-collapse [&_tbody_tr:last-child]:border-b-0" style={{ minWidth: 1100 }}>
                 <ListTableHead
                   columns={COLUMNS}
                   sort={sort}

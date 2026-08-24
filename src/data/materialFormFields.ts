@@ -14,7 +14,8 @@ export interface FormField {
    *  only source for a `fixed` field's value before it's ever appeared in the entity's
    *  own saved data (e.g. a brand new geometry's settings). */
   value?: string;
-  /** Present when `type === 'selection'` — the field renders as a dropdown of these. */
+  /** Present when `type === 'selection'` or `'multi_selection'` — the field renders as a
+   *  dropdown / tag picker of these. */
   options?: { id: string; name: string }[];
 }
 

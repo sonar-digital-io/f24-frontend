@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { ChevronRight, GripVertical, Info, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
+import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { useDragReorder } from '@/hooks/useDragReorder';
 import { validateFatigueCase } from '@/lib/fatigueValidation';
 import type { FatigueCase, FatigueCaseCallbacks } from '@/api/types/loadGroups';
 
@@ -19,14 +22,22 @@ export function FatigueCaseTable({
   onAddFatigueCase,
   onDeleteFatigueCase,
   onUpdateFatigueCase,
+  onReorderFatigueCase,
   onPickLoadCase,
 }: FatigueCaseTableProps) {
+  const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
+  const pendingDeleteCase = fatigueCases.find((fc) => fc.__KEY__ === pendingDeleteKey);
+
+  const { draggingIdx, insertBeforeIdx, getHandleProps, getRowDragProps } = useDragReorder<string>(
+    (fromIdx, toIdx) => onReorderFatigueCase(profileKey, fromIdx, toIdx)
+  );
+
   return (
     <TooltipProvider>
       <div className="overflow-hidden rounded-md border border-[#e5e7eb]">
         <table className="w-full border-collapse text-[13px]">
           <thead>
-            <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
+            <tr className="border-b border-[#e5e7eb]">
               <th className="h-9 w-8 px-2" />
               <th className="h-9 px-3 text-left font-medium text-[#6b7280]">Name</th>
               <th className="h-9 px-3 text-left font-medium text-[#6b7280]">Load case</th>
@@ -47,23 +58,53 @@ export function FatigueCaseTable({
                 </div>
               </th>
               <th className="h-9 w-[114px] whitespace-nowrap px-3 text-left font-medium text-[#6b7280]">
-                Time (h)
+                <div className="flex items-center gap-1 whitespace-nowrap">
+                  Time (h)
+                  <Tooltip content="Only one of Time or Cycles can be set — enter one to disable the other." side="top">
+                    <Info className="h-3.5 w-3.5 shrink-0 cursor-default text-[#9ca3af]" strokeWidth={2} />
+                  </Tooltip>
+                </div>
               </th>
               <th className="h-9 w-[114px] whitespace-nowrap px-3 text-left font-medium text-[#6b7280]">
-                Cycles
+                <div className="flex items-center gap-1 whitespace-nowrap">
+                  Cycles
+                  <Tooltip content="Only one of Time or Cycles can be set — enter one to disable the other." side="top">
+                    <Info className="h-3.5 w-3.5 shrink-0 cursor-default text-[#9ca3af]" strokeWidth={2} />
+                  </Tooltip>
+                </div>
               </th>
               <th className="h-9 w-8 px-1" />
             </tr>
           </thead>
           <tbody>
-            {fatigueCases.map((fc) => {
+            {fatigueCases.flatMap((fc, idx) => {
               const errors = validateFatigueCase(fc);
-              return (
-                <tr key={fc.__KEY__} className="group border-b border-[#e5e7eb] last:border-b-0">
-                  <td className="px-2 py-1.5 text-[#d1d5db]">
-                    <GripVertical className="h-4 w-4" strokeWidth={1.5} />
+              const isDragging = draggingIdx === idx;
+              const insertLine = (key: string) => (
+                <tr key={key} className="pointer-events-none">
+                  <td colSpan={8} className="p-0">
+                    <div className="mx-2 h-0.5 rounded-full bg-[#006496]" />
                   </td>
-                  <td className="px-2 py-1.5">
+                </tr>
+              );
+              const row = (
+                <tr
+                  key={fc.__KEY__}
+                  {...getRowDragProps(fc.__KEY__, idx)}
+                  className={`group border-b border-[#e5e7eb] transition-opacity last:border-b-0 ${
+                    isDragging ? 'opacity-40' : ''
+                  }`}
+                >
+                  <td className="px-2 py-1.5 text-[#d1d5db]">
+                    <span
+                      {...getHandleProps(fc.__KEY__)}
+                      aria-label="Drag handle"
+                      className="flex h-6 w-6 cursor-grab items-center justify-center text-[#d1d5db] hover:text-[#6b7280] active:cursor-grabbing"
+                    >
+                      <GripVertical className="h-4 w-4" strokeWidth={1.5} />
+                    </span>
+                  </td>
+                  <td className="px-2 py-2">
                     <Input
                       value={fc.name}
                       onChange={(e) => onUpdateFatigueCase(profileKey, fc.__KEY__, 'name', e.target.value)}
@@ -72,7 +113,7 @@ export function FatigueCaseTable({
                       className="h-8 min-w-[140px] rounded border-[#e2e8f0] px-2 text-[13px]"
                     />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <button
                       type="button"
                       onClick={() => onPickLoadCase(profileKey, fc.__KEY__)}
@@ -85,7 +126,7 @@ export function FatigueCaseTable({
                       <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={2} />
                     </button>
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <BufferedNumberInput
                       step="0.01"
                       value={fc.min_scale}
@@ -95,7 +136,7 @@ export function FatigueCaseTable({
                       className="h-8 w-full rounded border-[#e2e8f0] px-2 text-[13px]"
                     />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <BufferedNumberInput
                       step="0.01"
                       value={fc.max_scale}
@@ -105,7 +146,7 @@ export function FatigueCaseTable({
                       className="h-8 w-full rounded border-[#e2e8f0] px-2 text-[13px]"
                     />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <div className="group/timetip relative">
                       <Input
                         type="number"
@@ -125,7 +166,7 @@ export function FatigueCaseTable({
                       )}
                     </div>
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-2">
                     <div className="group/cyclestip relative">
                       <Input
                         type="number"
@@ -148,7 +189,7 @@ export function FatigueCaseTable({
                   <td className="px-1 py-1.5">
                     <button
                       type="button"
-                      onClick={() => onDeleteFatigueCase(profileKey, fc.__KEY__)}
+                      onClick={() => setPendingDeleteKey(fc.__KEY__)}
                       aria-label="Delete fatigue case"
                       className="flex h-6 w-6 items-center justify-center rounded text-[#6b7280] opacity-0 hover:bg-[#fee2e2] hover:text-[#dc2626] group-hover:opacity-100"
                     >
@@ -157,6 +198,13 @@ export function FatigueCaseTable({
                   </td>
                 </tr>
               );
+              const result = [];
+              if (draggingIdx !== null && insertBeforeIdx === idx) result.push(insertLine(`insert-before-${idx}`));
+              result.push(row);
+              if (draggingIdx !== null && idx === fatigueCases.length - 1 && insertBeforeIdx === fatigueCases.length) {
+                result.push(insertLine('insert-end'));
+              }
+              return result;
             })}
             {fatigueCases.length === 0 && (
               <tr>
@@ -177,6 +225,19 @@ export function FatigueCaseTable({
           Add fatigue case
         </button>
       </div>
+
+      <ConfirmDialog
+        open={pendingDeleteKey !== null}
+        title="Delete fatigue case"
+        message={`Are you sure you want to delete "${pendingDeleteCase?.name || 'this fatigue case'}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        danger
+        onCancel={() => setPendingDeleteKey(null)}
+        onConfirm={() => {
+          if (pendingDeleteKey) onDeleteFatigueCase(profileKey, pendingDeleteKey);
+          setPendingDeleteKey(null);
+        }}
+      />
     </TooltipProvider>
   );
 }

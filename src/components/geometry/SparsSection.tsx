@@ -8,9 +8,11 @@ import { SparsTable } from '@/components/geometry/SparsTable';
 
 interface SparsSectionProps {
   geometryId: number;
+  /** Narrow panel width — hides the preview canvas so the table isn't crammed. */
+  folded: boolean;
 }
 
-export function SparsSection({ geometryId }: SparsSectionProps) {
+export function SparsSection({ geometryId, folded }: SparsSectionProps) {
   const topViewQuery = useGeometryTopView(geometryId);
   const profilesQuery = useGeometryProfiles(geometryId);
   const profiles = profilesQuery.data?.profiles ?? [];
@@ -43,19 +45,21 @@ export function SparsSection({ geometryId }: SparsSectionProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <SparsPreviewPanel
-        topView={topViewQuery.data}
-        isLoading={topViewQuery.isLoading}
-        isError={topViewQuery.isError}
-        profiles={profiles}
-        spars={spars}
-        profilePointsById={profilePointsById}
-        highlightProfileIds={highlightProfileIds}
-        noTwist={!twist}
-        onNoTwistChange={(v) => setTwist(!v)}
-        parallel={parallel}
-        onParallelChange={setParallel}
-      />
+      {!folded && (
+        <SparsPreviewPanel
+          topView={topViewQuery.data}
+          isLoading={topViewQuery.isLoading}
+          isError={topViewQuery.isError}
+          profiles={profiles}
+          spars={spars}
+          profilePointsById={profilePointsById}
+          highlightProfileIds={highlightProfileIds}
+          noTwist={!twist}
+          onNoTwistChange={(v) => setTwist(!v)}
+          parallel={parallel}
+          onParallelChange={setParallel}
+        />
+      )}
 
       <SparsTable
         geometryId={geometryId}

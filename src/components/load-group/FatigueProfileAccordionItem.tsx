@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { ChevronDown, ChevronUp, Copy, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FatigueCaseTable } from '@/components/load-group/FatigueCaseTable';
+import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
 import type { FatigueCaseCallbacks, FatigueProfile } from '@/api/types/loadGroups';
 
 interface FatigueProfileAccordionItemProps extends FatigueCaseCallbacks {
@@ -26,8 +28,11 @@ export function FatigueProfileAccordionItem({
   onAddFatigueCase,
   onDeleteFatigueCase,
   onUpdateFatigueCase,
+  onReorderFatigueCase,
   onPickLoadCase,
 }: FatigueProfileAccordionItemProps) {
+  const [pendingAction, setPendingAction] = useState<'delete' | 'duplicate' | null>(null);
+
   return (
     <div className="border-b border-[#e5e7eb] last:border-b-0">
       {/* Profile accordion header */}
@@ -40,22 +45,22 @@ export function FatigueProfileAccordionItem({
           )}
           <span className="text-[14px] font-medium text-[#0a0a0a]">{profile.name}</span>
         </button>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={onDuplicate}
-            aria-label="Duplicate profile"
-            className="flex h-7 w-7 items-center justify-center rounded text-[#6b7280] hover:bg-[#e5e7eb] hover:text-[#0a0a0a]"
+            onClick={() => setPendingAction('delete')}
+            aria-label="Delete profile"
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#e2e8f0] text-[#6b7280] hover:border-[#fecaca] hover:bg-[#fee2e2] hover:text-[#dc2626]"
           >
-            <Copy className="h-3.5 w-3.5" strokeWidth={2} />
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
           <button
             type="button"
-            onClick={onDelete}
-            aria-label="Delete profile"
-            className="flex h-7 w-7 items-center justify-center rounded text-[#6b7280] hover:bg-[#fee2e2] hover:text-[#dc2626]"
+            onClick={() => setPendingAction('duplicate')}
+            aria-label="Duplicate profile"
+            className="flex h-7 w-7 items-center justify-center rounded border border-[#e2e8f0] text-[#6b7280] hover:bg-[#e5e7eb] hover:text-[#0a0a0a]"
           >
-            <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+            <Copy className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
         </div>
       </div>
@@ -81,10 +86,29 @@ export function FatigueProfileAccordionItem({
             onAddFatigueCase={onAddFatigueCase}
             onDeleteFatigueCase={onDeleteFatigueCase}
             onUpdateFatigueCase={onUpdateFatigueCase}
+            onReorderFatigueCase={onReorderFatigueCase}
             onPickLoadCase={onPickLoadCase}
           />
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingAction !== null}
+        title={pendingAction === 'delete' ? 'Delete fatigue profile' : 'Duplicate fatigue profile'}
+        message={
+          pendingAction === 'delete'
+            ? `Are you sure you want to delete "${profile.name}"? This action cannot be undone.`
+            : `Duplicate "${profile.name}"?`
+        }
+        confirmLabel={pendingAction === 'delete' ? 'Delete' : 'Duplicate'}
+        danger={pendingAction === 'delete'}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => {
+          if (pendingAction === 'delete') onDelete();
+          else if (pendingAction === 'duplicate') onDuplicate();
+          setPendingAction(null);
+        }}
+      />
     </div>
   );
 }

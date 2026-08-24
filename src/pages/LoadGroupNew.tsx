@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
+import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import { LoadGroupGeneralTab } from '@/components/load-group/LoadGroupGeneralTab';
 import { LoadGroupLoadCasesTab } from '@/components/load-group/LoadGroupLoadCasesTab';
 import { LoadGroupLimitsTab } from '@/components/load-group/LoadGroupLimitsTab';
@@ -69,6 +70,7 @@ export function LoadGroupNew() {
       torque: withCurve(g.rpm_torque_limit, prev.torque),
       power: withCurve(g.rpm_power_limit, prev.power),
     }));
+    markLimitsSaved();
   });
 
   useHydrateOnce(
@@ -89,9 +91,8 @@ export function LoadGroupNew() {
     addLoadCase,
     deleteLoadCase,
     duplicateLoadCase,
-    handleSaveLoadCases,
-    loadCasesHaveErrors,
-    updateLoadCasesMutation,
+    onBlur: handleLoadCasesBlur,
+    status: loadCasesStatus,
   } = useLoadGroupLoadCasesState(loadGroupId, isNew);
 
   const {
@@ -104,9 +105,9 @@ export function LoadGroupNew() {
     handleLimitCurveChange,
     addLimitCurvePoint,
     deleteLimitCurvePoint,
-    handleSaveLimits,
-    updateLimitsMutation,
-  } = useLoadGroupLimitsState(loadGroupId);
+    markSaved: markLimitsSaved,
+    status: limitsStatus,
+  } = useLoadGroupLimitsState(loadGroupId, isNew);
 
   const {
     fatigueProfiles,
@@ -120,62 +121,83 @@ export function LoadGroupNew() {
     deleteFatigueProfile,
     duplicateFatigueProfile,
     updateFatigueProfileName,
+    reorderFatigueCase,
     addFatigueCase,
     deleteFatigueCase,
     updateFatigueCase,
-    handleSaveFatigueProfiles,
-    fatigueProfilesInvalid,
-    updateFatigueProfilesMutation,
+    onBlur: handleFatigueProfilesBlur,
+    status: fatigueStatus,
   } = useLoadGroupFatigueProfilesState(loadGroupId, isNew);
 
   const titleText = isNew ? name.trim() || 'New load group' : name.trim() || 'Loading…';
 
-  const savePending = createMutation.isPending || updateMutation.isPending;
   const saveError = createMutation.isError || updateMutation.isError;
 
-  // ── Exit / save ──────────────────────────────────────────────────────────
-  async function handleSaveGeneral() {
-    if (isNew) {
-      const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
-      // /load-group/new and /load-group/:id share a route, so this navigate does
-      // NOT remount the component — switching the URL just flips isNew to false.
-      setActiveTab('load-cases');
-      navigate(`/load-group/${created.id}`, { replace: true });
+  // ── General tab autosave ─────────────────────────────────────────────────
+  const [generalStatus, setGeneralStatus] = useState<SaveStatus | undefined>(undefined);
+  // Mirrors the latest field values/isNew so a save requested while one is
+  // already in flight retries with fresh data afterwards, instead of firing
+  // a second concurrent create/update.
+  const generalRef = useRef({ name, description, date, isNew });
+  generalRef.current = { name, description, date, isNew };
+  const retryGeneralRef = useRef(false);
+
+  async function commitGeneral() {
+    if (createMutation.isPending || updateMutation.isPending) {
+      retryGeneralRef.current = true;
       return;
     }
-    if (!baseline || name !== baseline.name || description !== baseline.description || date !== baseline.date) {
-      await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+    const { name, description, date, isNew } = generalRef.current;
+    setGeneralStatus('saving');
+    try {
+      if (isNew) {
+        const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+        // /load-group/new and /load-group/:id share a route, so this navigate does
+        // NOT remount the component — switching the URL just flips isNew to false.
+        navigate(`/load-group/${created.id}`, { replace: true });
+      } else {
+        await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+        setBaseline({ name, description, date });
+      }
+      setGeneralStatus('saved');
+    } catch {
+      setGeneralStatus('not-saved');
+    } finally {
+      if (retryGeneralRef.current) {
+        retryGeneralRef.current = false;
+        commitGeneral();
+      }
     }
-    navigate('/load-group');
   }
+
+  useEffect(() => {
+    if (isNew) {
+      if (!name.trim() || !date) return;
+    } else {
+      if (!baseline) return;
+      if (name === baseline.name && description === baseline.description && date === baseline.date) {
+        setGeneralStatus('saved');
+        return;
+      }
+    }
+    setGeneralStatus('not-saved');
+    const timer = setTimeout(commitGeneral, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, description, date, isNew, baseline]);
 
   function handleExit() {
     navigate('/load-group');
   }
 
-  // ── Toolbar save action, per tab ─────────────────────────────────────────
-  const tabAction: { onClick: () => void; disabled: boolean; label: string } | undefined = {
-    general: {
-      onClick: handleSaveGeneral,
-      disabled: !name.trim() || !date || savePending,
-      label: savePending ? 'Saving…' : isNew ? 'Create load group' : 'Update load group',
-    },
-    'load-cases': {
-      onClick: handleSaveLoadCases,
-      disabled: updateLoadCasesMutation.isPending || loadCasesHaveErrors,
-      label: updateLoadCasesMutation.isPending ? 'Saving…' : 'Save load cases',
-    },
-    limits: {
-      onClick: handleSaveLimits,
-      disabled: updateLimitsMutation.isPending,
-      label: updateLimitsMutation.isPending ? 'Saving…' : 'Save limits',
-    },
-    'fatigue-profiles': {
-      onClick: handleSaveFatigueProfiles,
-      disabled: updateFatigueProfilesMutation.isPending || fatigueProfilesInvalid,
-      label: updateFatigueProfilesMutation.isPending ? 'Saving…' : 'Save fatigue profiles',
-    },
-  }[activeTab];
+  // ── Toolbar save-status indicator, per tab — every tab autosaves, so this
+  // is the only save-related toolbar affordance left. ─────────────────────
+  const tabStatus: Record<LoadGroupTab, SaveStatus | undefined> = {
+    general: generalStatus,
+    'load-cases': loadCasesStatus,
+    limits: limitsStatus,
+    'fatigue-profiles': fatigueStatus,
+  };
 
   // ── Tab trigger class ─────────────────────────────────────────────────────
   const triggerCls =
@@ -191,18 +213,7 @@ export function LoadGroupNew() {
         onTabChange={(v) => setActiveTab(v as LoadGroupTab)}
         title={titleText}
         onBack={handleExit}
-        actions={
-          tabAction && (
-            <button
-              type="button"
-              onClick={tabAction.onClick}
-              disabled={tabAction.disabled}
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {tabAction.label}
-            </button>
-          )
-        }
+        status={tabStatus[activeTab]}
       />
       {saveError && (
         <p className="px-4 text-[13px] text-[#dc2626]">
@@ -231,6 +242,7 @@ export function LoadGroupNew() {
               onAddLoadCase={addLoadCase}
               onDuplicateLoadCase={duplicateLoadCase}
               onDeleteLoadCase={deleteLoadCase}
+              onBlur={handleLoadCasesBlur}
             />
           )}
 
@@ -260,10 +272,12 @@ export function LoadGroupNew() {
               onDuplicateFatigueProfile={duplicateFatigueProfile}
               onDeleteFatigueProfile={deleteFatigueProfile}
               onUpdateFatigueProfileName={updateFatigueProfileName}
+              onReorderFatigueCase={reorderFatigueCase}
               onAddFatigueCase={addFatigueCase}
               onDeleteFatigueCase={deleteFatigueCase}
               onUpdateFatigueCase={updateFatigueCase}
               onPickLoadCase={(profileKey, caseKey) => setPickingLoadCase({ profileKey, caseKey })}
+              onBlur={handleFatigueProfilesBlur}
             />
           )}
         </div>

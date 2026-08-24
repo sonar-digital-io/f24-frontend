@@ -3,6 +3,7 @@ import { Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DropdownSelect } from '@/components/common/form/DropdownSelect';
+import { TagSelect } from '@/components/common/form/TagSelect';
 import { Tip } from '@/components/common/list/Tip';
 import type { FormField } from '@/data/materialFormFields';
 import { isFieldInRange } from '@/lib/sysconfigFormValidation';
@@ -42,6 +43,8 @@ export function SysconfigFieldRow({
   hideRequiredMarker,
 }: SysconfigFieldRowProps) {
   const isSelection = field.type === 'selection' && !!field.options?.length;
+  const isMultiSelection = field.type === 'multi_selection' && !!field.options?.length;
+  const isBoolean = field.type === 'boolean';
   // A single-option selection has nothing to choose — force it selected and read-only
   // rather than making the user open a dropdown just to pick the only entry.
   const onlyOption = isSelection && field.options!.length === 1 ? field.options![0] : undefined;
@@ -49,16 +52,16 @@ export function SysconfigFieldRow({
     if (onlyOption && value !== onlyOption.id) onChange(onlyOption.id);
   }, [onlyOption?.id, value, onChange]);
 
-  // The dropdown round-trips through display labels — disambiguate any that collide
-  // so a selection can't resolve back to the wrong option's id.
+  // The dropdown/tag picker round-trips through display labels — disambiguate any that
+  // collide so a selection can't resolve back to the wrong option's id.
   const labelById = useMemo(() => {
-    if (!isSelection) return new Map<string, string>();
+    if (!isSelection && !isMultiSelection) return new Map<string, string>();
     const counts = new Map<string, number>();
     field.options!.forEach((o) => counts.set(o.name, (counts.get(o.name) ?? 0) + 1));
     const map = new Map<string, string>();
     field.options!.forEach((o) => map.set(o.id, (counts.get(o.name) ?? 0) > 1 ? `${o.name} (${o.id})` : o.name));
     return map;
-  }, [isSelection, field.options]);
+  }, [isSelection, isMultiSelection, field.options]);
 
   // Validate on blur, not on every keystroke — an in-progress value (e.g. "-" before
   // typing the rest of a negative number) shouldn't flash an error while still typing.
@@ -90,6 +93,32 @@ export function SysconfigFieldRow({
             options={field.options!.map((o) => labelById.get(o.id) ?? '')}
             disabled={field.fixed || !!onlyOption}
           />
+        ) : isMultiSelection ? (
+          <TagSelect
+            options={field.options!.map((o) => labelById.get(o.id) ?? '')}
+            value={value
+              .split(',')
+              .filter(Boolean)
+              .map((id) => labelById.get(id) ?? id)}
+            onChange={(labels) =>
+              onChange(
+                labels
+                  .map((label) => field.options!.find((o) => labelById.get(o.id) === label)?.id ?? label)
+                  .join(',')
+              )
+            }
+          />
+        ) : isBoolean ? (
+          <label htmlFor={`field-${field.name}`} className="flex h-9 items-center">
+            <input
+              id={`field-${field.name}`}
+              type="checkbox"
+              checked={value === 'true'}
+              disabled={field.fixed}
+              onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
+              className="h-4 w-4 rounded border-[#e2e8f0] accent-[#006496] disabled:cursor-not-allowed"
+            />
+          </label>
         ) : (
           <Input
             id={`field-${field.name}`}
@@ -109,7 +138,7 @@ export function SysconfigFieldRow({
             }`}
           />
         )}
-        {!isSelection && outOfRange && (
+        {!isSelection && !isMultiSelection && !isBoolean && outOfRange && (
           <p className="text-[13px] leading-4 text-[#dc2626]">
             Value must be between {field.min ?? '…'} and {field.max ?? '…'}.
           </p>
