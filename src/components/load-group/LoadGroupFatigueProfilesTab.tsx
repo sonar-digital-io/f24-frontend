@@ -1,9 +1,9 @@
 import { Plus, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { FatigueProfileAccordionItem } from '@/components/load-group/FatigueProfileAccordionItem';
-import type { FatigueCase, FatigueProfile } from '@/api/types/loadGroups';
+import type { FatigueCaseCallbacks, FatigueProfile } from '@/api/types/loadGroups';
 
-interface LoadGroupFatigueProfilesTabProps {
+interface LoadGroupFatigueProfilesTabProps extends FatigueCaseCallbacks {
   fatigueProfiles: FatigueProfile[];
   /** Accordion open/closed per profile, keyed by __KEY__ — pure UI state. */
   openProfiles: Record<string, boolean>;
@@ -16,15 +16,6 @@ interface LoadGroupFatigueProfilesTabProps {
   onDuplicateFatigueProfile: (profileKey: string) => void;
   onDeleteFatigueProfile: (profileKey: string) => void;
   onUpdateFatigueProfileName: (profileKey: string, newName: string) => void;
-  onAddFatigueCase: (profileKey: string) => void;
-  onDeleteFatigueCase: (profileKey: string, caseKey: string) => void;
-  onUpdateFatigueCase: <K extends keyof FatigueCase>(
-    profileKey: string,
-    caseKey: string,
-    field: K,
-    val: FatigueCase[K]
-  ) => void;
-  onPickLoadCase: (profileKey: string, caseKey: string) => void;
 }
 
 export function LoadGroupFatigueProfilesTab({

@@ -1,6 +1,8 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { BezierZoomControls } from '@/components/common/viewer/BezierZoomControls';
-import { useChartZoomPan, CHART_ZOOM_MIN, CHART_ZOOM_MAX, CHART_ZOOM_STEP } from '@/hooks/useChartZoomPan';
+import { ChartBackgroundRect } from '@/components/common/viewer/ChartBackgroundRect';
+import { useChartZoomPan } from '@/hooks/useChartZoomPan';
+import { usePointerDrag } from '@/hooks/usePointerDrag';
 import {
   computeTicks,
   dataToPx,
@@ -14,7 +16,7 @@ import {
   VB_HEIGHT,
   VB_WIDTH,
 } from '@/lib/bezierMath';
-import { arcFractionNearestTo, leadingEdgeFraction, pointAtArcFraction } from '@/lib/profileGeometry';
+import { arcFractionNearestTo, leadingEdgeFraction, pointAtArcFraction, profileDomainFromPoints } from '@/lib/profileGeometry';
 import type { ControlPoint } from '@/types';
 
 interface SparProfileChartProps {
@@ -43,29 +45,27 @@ export function SparProfileChart({
   onLowerPositionChange,
 }: SparProfileChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [dragging, setDragging] = useState<'upper' | 'lower' | null>(null);
+  const { dragging, startDrag, endDrag } = usePointerDrag<'upper' | 'lower'>();
 
-  const { zoom, viewX, viewY, viewW, viewH, panningPointerId, zoomBy, screenToViewBox, resetView, bgPointerHandlers } =
-    useChartZoomPan(svgRef);
+  const {
+    zoom,
+    viewX,
+    viewY,
+    viewW,
+    viewH,
+    panningPointerId,
+    screenToViewBox,
+    resetView,
+    bgPointerHandlers,
+    zoomControlProps,
+  } = useChartZoomPan(svgRef);
 
   // The boundary between "upper" and "lower" positions along the contour's
   // arc length — the leading-edge vertex's own fraction, not a fixed 0.5
   // (see lib/profileGeometry.ts).
   const boundary = leadingEdgeFraction(points);
   const allPoints: ControlPoint[] = points.map(([x, y]) => ({ x, y }));
-  const xs = allPoints.map((p) => p.x);
-  const ys = allPoints.map((p) => p.y);
-  const xMin = xs.length ? Math.min(...xs) : 0;
-  const xMax = xs.length ? Math.max(...xs) : 1;
-  const yMin = ys.length ? Math.min(...ys) : -0.1;
-  const yMax = ys.length ? Math.max(...ys) : 0.1;
-  const xPad = (xMax - xMin) * 0.08 || 0.1;
-  const yPad = (yMax - yMin) * 0.15 || 0.02;
-
-  const domainXMin = xMin - xPad;
-  const domainXMax = xMax + xPad;
-  const domainYMin = yMin - yPad;
-  const domainYMax = yMax + yPad;
+  const { domainXMin, domainXMax, domainYMin, domainYMax } = profileDomainFromPoints(points);
 
   function toPx(p: ControlPoint) {
     return dataToPx(p, domainXMin, domainXMax, domainYMin, domainYMax);
@@ -93,22 +93,6 @@ export function SparProfileChart({
     else onLowerPositionChange(Math.max(t, boundary));
   }
 
-  function startDrag(which: 'upper' | 'lower', e: React.PointerEvent<SVGCircleElement>) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDragging(which);
-  }
-
-  function endDrag(e: React.PointerEvent) {
-    try {
-      (e.target as Element).releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-    setDragging(null);
-  }
-
   const xStep = niceStep(domainXMax - domainXMin);
   const yStep = niceStep(domainYMax - domainYMin);
   const xTicks = computeTicks(domainXMin, domainXMax, xStep);
@@ -118,12 +102,7 @@ export function SparProfileChart({
 
   return (
     <div className="relative h-[220px] w-full rounded-md border border-[#e5e7eb] bg-white">
-      <BezierZoomControls
-        onZoomIn={() => zoomBy(CHART_ZOOM_STEP)}
-        onZoomOut={() => zoomBy(1 / CHART_ZOOM_STEP)}
-        canZoomIn={zoom < CHART_ZOOM_MAX}
-        canZoomOut={zoom > CHART_ZOOM_MIN}
-      />
+      <BezierZoomControls {...zoomControlProps} />
       <svg
         ref={svgRef}
         viewBox={`${viewX} ${viewY} ${viewW} ${viewH}`}
@@ -133,14 +112,14 @@ export function SparProfileChart({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       >
-        <rect
-          x={viewX}
-          y={viewY}
-          width={viewW}
-          height={viewH}
-          fill="transparent"
-          style={{ cursor: zoom > 1 ? (panningPointerId !== null ? 'grabbing' : 'grab') : 'default' }}
-          {...bgPointerHandlers}
+        <ChartBackgroundRect
+          viewX={viewX}
+          viewY={viewY}
+          viewW={viewW}
+          viewH={viewH}
+          zoom={zoom}
+          panningPointerId={panningPointerId}
+          bgPointerHandlers={bgPointerHandlers}
           onDoubleClick={resetView}
         />
 

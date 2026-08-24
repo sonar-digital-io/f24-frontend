@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { FoldHorizontal, Info, Loader2, Check } from 'lucide-react';
 import type { ControlPoint } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
-import { FoldableSectionList } from '@/components/geometry/FoldableSectionList';
+import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
 import { ProfileGeneratorTopRow } from '@/components/geometry/ProfileGeneratorTopRow';
 import { ProfileDistributionSectionBody } from '@/components/geometry/ProfileDistributionSectionBody';
 import { Tip } from '@/components/common/list/Tip';
@@ -270,83 +270,72 @@ export function ProfileDistributionPanel({
     ? 'grid grid-cols-[minmax(160px,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-end gap-3'
     : 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-end gap-4';
 
-  return (
-    <div
-      className={`flex w-full ${folded ? 'max-w-[516px]' : 'max-w-[924px]'} max-h-[calc(100vh-128px)] flex-col rounded-[14px] border border-[#e5e7eb] bg-white/95 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm transition-[max-width] duration-150`}
-    >
-      {/* Sticky top region: section title + top row + distribution curves title + sub-tabs */}
-      <div className="flex flex-col gap-4 p-6 pb-4">
-        <div className="flex items-center justify-between">
-          <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">
-            Airfoil generation settings
-          </p>
-          <button
-            type="button"
-            onClick={onFoldToggle}
-            aria-pressed={folded}
-            aria-label={folded ? 'Show all sections at once (currently folded)' : 'Show sections one at a time (fold)'}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
-          >
-            <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
-          </button>
-        </div>
-
-        <ProfileGeneratorTopRow
-          gridClassName={topRowGrid}
-          type={type}
-          onTypeChange={setType}
-          profileTypes={PROFILE_TYPES}
-          profileCount={profileCount}
-          onProfileCountChange={setProfileCount}
-          startPos={startPos}
-          onStartPosChange={handleStartPosChange}
-          endPos={endPos}
-          onEndPosChange={setEndPos}
-          onFieldBlur={requestCommit}
-        />
-
-        <div className="flex items-center gap-[6px]">
-          {committing ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
-              <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
-            </>
-          ) : profilesUpdated ? (
-            <>
-              <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-              <span className="text-[14px] leading-5 text-[#737373]">Profiles updated</span>
-              <Tip label="Profiles were regenerated from the current settings and distribution curves.">
-                <Info className="h-3.5 w-3.5 text-[#6b7280]" strokeWidth={2} />
-              </Tip>
-            </>
-          ) : null}
-          {!hasEnoughPoints && <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>}
-        </div>
-
-        <p className="pt-2 text-[16px] font-semibold leading-none text-[#0a0a0a]">
-          Distribution curves
-        </p>
-
-        {/* Sub-tabs — only when expanded; folded mode stacks all sections instead. */}
-        {!folded && (
-          <SectionTabs
-            sectionKeys={SECTION_KEYS}
-            sectionLabels={SECTION_LABELS}
-            value={subTab}
-            onValueChange={setSubTab}
-          />
-        )}
+  const header = (
+    <div className="flex flex-col gap-4 p-6 pb-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">Airfoil generation settings</p>
+        <button
+          type="button"
+          onClick={onFoldToggle}
+          aria-pressed={folded}
+          aria-label={folded ? 'Show all sections at once (currently folded)' : 'Show sections one at a time (fold)'}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
+        >
+          <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
+        </button>
       </div>
 
-      <FoldableSectionList
-        folded={folded}
-        sectionKeys={SECTION_KEYS}
-        sectionLabels={SECTION_LABELS}
-        openSections={openSections}
-        onToggleSection={toggleSection}
-        activeTab={subTab}
-        renderSectionBody={renderSectionBody}
+      <ProfileGeneratorTopRow
+        gridClassName={topRowGrid}
+        type={type}
+        onTypeChange={setType}
+        profileTypes={PROFILE_TYPES}
+        profileCount={profileCount}
+        onProfileCountChange={setProfileCount}
+        startPos={startPos}
+        onStartPosChange={handleStartPosChange}
+        endPos={endPos}
+        onEndPosChange={setEndPos}
+        onFieldBlur={requestCommit}
       />
+
+      <div className="flex items-center gap-[6px]">
+        {committing ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
+            <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
+          </>
+        ) : profilesUpdated ? (
+          <>
+            <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
+            <span className="text-[14px] leading-5 text-[#737373]">Profiles updated</span>
+            <Tip label="Profiles were regenerated from the current settings and distribution curves.">
+              <Info className="h-3.5 w-3.5 text-[#6b7280]" strokeWidth={2} />
+            </Tip>
+          </>
+        ) : null}
+        {!hasEnoughPoints && <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>}
+      </div>
+
+      <p className="pt-2 text-[16px] font-semibold leading-none text-[#0a0a0a]">Distribution curves</p>
+
+      {/* Sub-tabs — only when expanded; folded mode stacks all sections instead. */}
+      {!folded && (
+        <SectionTabs sectionKeys={SECTION_KEYS} sectionLabels={SECTION_LABELS} value={subTab} onValueChange={setSubTab} />
+      )}
     </div>
+  );
+
+  return (
+    <FoldablePanelShell
+      folded={folded}
+      header={header}
+      sectionKeys={SECTION_KEYS}
+      sectionLabels={SECTION_LABELS}
+      openSections={openSections}
+      onToggleSection={toggleSection}
+      activeTab={subTab}
+      renderSectionBody={renderSectionBody}
+    />
   );
 }

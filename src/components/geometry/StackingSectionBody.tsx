@@ -1,10 +1,11 @@
 import { BezierEditor } from '@/components/common/viewer/BezierEditor';
-import { BezierPointsTable } from '@/components/common/viewer/BezierPointsTable';
+import { BezierPointsTable, type PointsTableEditCallbacks } from '@/components/common/viewer/BezierPointsTable';
+import { sectionBodyGridClassName } from '@/components/geometry/sectionBodyGridClassName';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { ControlPoint } from '@/types';
 
-interface StackingSectionBodyProps {
+interface StackingSectionBodyProps extends PointsTableEditCallbacks {
   folded: boolean;
   sectionKey: string;
   points: ControlPoint[];
@@ -17,10 +18,6 @@ interface StackingSectionBodyProps {
   getBoundInputValue: (field: 'min' | 'max') => string;
   onBoundChange: (field: 'min' | 'max', raw: string) => void;
   onBoundBlur: (field: 'min' | 'max') => void;
-  getInputValue: (idx: number, field: 'x' | 'y') => string;
-  onInputChange: (idx: number, field: 'x' | 'y', raw: string) => void;
-  onInputBlur: (idx: number, field: 'x' | 'y') => void;
-  onAddPoint: () => void;
 }
 
 /** A single sweep/dihedral/twist/chord section's Y-bounds inputs + chart + table. */
@@ -43,13 +40,7 @@ export function StackingSectionBody({
   onAddPoint,
 }: StackingSectionBodyProps) {
   return (
-    <div
-      className={
-        folded
-          ? 'flex flex-col gap-4'
-          : 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]'
-      }
-    >
+    <div className={sectionBodyGridClassName(folded)}>
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">

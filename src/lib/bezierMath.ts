@@ -64,6 +64,22 @@ export function niceStep(range: number, targetTicks = 8): number {
   return nice * mag;
 }
 
+/** SVG `<polygon points="...">` string for a set of data points, mapped through `dataToPx`. */
+export function pointsToPolygonString(
+  points: ControlPoint[],
+  xMin: number,
+  xMax: number,
+  yMin: number,
+  yMax: number,
+): string {
+  return points
+    .map((p) => {
+      const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
+      return `${cx.toFixed(1)},${cy.toFixed(1)}`;
+    })
+    .join(' ');
+}
+
 export interface MappingBounds {
   longitudinalMin: number;
   longitudinalMax: number;
@@ -190,6 +206,29 @@ export function applyXConstraints(
   const minX = points[idx - 1].x + eps;
   const maxX = points[idx + 1].x - eps;
   return Math.max(minX, Math.min(maxX, nextX));
+}
+
+/**
+ * Whether a closed polygon (points listed in order) is convex — no vertex bends
+ * back in on the shape. Used to block edits to the layup-mapping polygon that
+ * would fold it into a concave shape. Consecutive collinear points (zero cross
+ * product) don't count as a direction change by themselves.
+ */
+export function isConvexPolygon(points: ControlPoint[]): boolean {
+  const n = points.length;
+  if (n < 4) return true;
+  let sign = 0;
+  for (let i = 0; i < n; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % n];
+    const c = points[(i + 2) % n];
+    const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+    if (cross === 0) continue;
+    const s = cross > 0 ? 1 : -1;
+    if (sign === 0) sign = s;
+    else if (s !== sign) return false;
+  }
+  return true;
 }
 
 /**

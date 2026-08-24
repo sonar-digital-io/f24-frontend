@@ -5,7 +5,7 @@ interface CardThumbnailProps {
   children?: ReactNode;
 }
 
-/** Grid-card thumbnail slot (blade preview on a light backdrop) shared by GeometryCard/CompositionCard. */
+/** Grid-card thumbnail slot (blade preview on a light backdrop) used by GeometryCard. */
 export function CardThumbnail({ children }: CardThumbnailProps) {
   return (
     <div className="flex h-[160px] items-center justify-center px-[10px] py-[10px]">

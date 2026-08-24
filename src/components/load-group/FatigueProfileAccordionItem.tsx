@@ -2,9 +2,9 @@ import { ChevronDown, ChevronUp, Copy, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FatigueCaseTable } from '@/components/load-group/FatigueCaseTable';
-import type { FatigueCase, FatigueProfile } from '@/api/types/loadGroups';
+import type { FatigueCaseCallbacks, FatigueProfile } from '@/api/types/loadGroups';
 
-interface FatigueProfileAccordionItemProps {
+interface FatigueProfileAccordionItemProps extends FatigueCaseCallbacks {
   profile: FatigueProfile;
   open: boolean;
   loadCaseNamesById: Record<number, string>;
@@ -12,15 +12,6 @@ interface FatigueProfileAccordionItemProps {
   onDuplicate: () => void;
   onDelete: () => void;
   onUpdateName: (newName: string) => void;
-  onAddFatigueCase: (profileKey: string) => void;
-  onDeleteFatigueCase: (profileKey: string, caseKey: string) => void;
-  onUpdateFatigueCase: <K extends keyof FatigueCase>(
-    profileKey: string,
-    caseKey: string,
-    field: K,
-    val: FatigueCase[K]
-  ) => void;
-  onPickLoadCase: (profileKey: string, caseKey: string) => void;
 }
 
 /** One accordion item (header + expanded fatigue-case table) in the fatigue profiles list. */

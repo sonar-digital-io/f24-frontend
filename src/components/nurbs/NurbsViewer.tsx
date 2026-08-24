@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { buildNurbsSurfaceObjects } from '@/lib/nurbsGeometry';
+import { createViewerRenderer, createDampedOrbitControls, disposeSceneObjects } from '@/lib/threeViewerSetup';
 import type { NurbsGeometryType } from '@/types';
 
 interface NurbsViewerProps {
@@ -72,19 +73,10 @@ export function NurbsViewer({
     camera.position.set(12, 8, 12);
 
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
-    container.appendChild(renderer.domElement);
+    const renderer = createViewerRenderer(container, width, height, THREE.PCFSoftShadowMap);
 
     // Controls
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+    const controls = createDampedOrbitControls(camera, renderer);
     controls.minDistance = 3;
     controls.maxDistance = 50;
     controls.target.set(0, 0, 0);
@@ -158,13 +150,7 @@ export function NurbsViewer({
       controls.dispose();
       // Dispose every geometry/material still in the scene (surface, wireframe,
       // control points, grid, axes)
-      scene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
-          obj.geometry.dispose();
-          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-          mats.forEach((m) => m.dispose());
-        }
-      });
+      disposeSceneObjects(scene);
       skyTexture.dispose();
       renderer.dispose();
       if (container.contains(renderer.domElement)) {

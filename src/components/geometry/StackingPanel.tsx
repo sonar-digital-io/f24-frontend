@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { FoldHorizontal } from 'lucide-react';
 import type { ControlPoint } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
-import { FoldableSectionList } from '@/components/geometry/FoldableSectionList';
+import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
 import { StackingSectionBody } from '@/components/geometry/StackingSectionBody';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
 import { clamp } from '@/lib/bezierMath';
@@ -240,60 +240,51 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     );
   }
 
-  return (
-    <div
-      className={`flex w-full ${folded ? 'max-w-[516px]' : 'max-w-[924px]'} max-h-[calc(100vh-128px)] flex-col rounded-[14px] border border-[#e5e7eb] bg-white/95 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm transition-[max-width] duration-150`}
-    >
-      {/* Header: sub-tabs (expanded mode) + save + toggle button */}
-      <div className="flex flex-col gap-2 p-6 pb-4">
-        <div className="flex items-center justify-between gap-4">
-          {!folded ? (
-            <SectionTabs
-              sectionKeys={SECTION_KEYS}
-              sectionLabels={SECTION_LABELS}
-              value={subTab}
-              onValueChange={setSubTab}
-            />
-          ) : (
-            <div />
-          )}
-          <div className="flex items-center gap-2">
-            {onSave && (
-              <button
-                type="button"
-                onClick={() => onSave(buildEdges())}
-                disabled={saving || !hasEnoughPoints}
-                className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-            )}
+  const header = (
+    <div className="flex flex-col gap-2 p-6 pb-4">
+      <div className="flex items-center justify-between gap-4">
+        {!folded ? (
+          <SectionTabs sectionKeys={SECTION_KEYS} sectionLabels={SECTION_LABELS} value={subTab} onValueChange={setSubTab} />
+        ) : (
+          <div />
+        )}
+        <div className="flex items-center gap-2">
+          {onSave && (
             <button
               type="button"
-              onClick={onFoldToggle}
-              aria-pressed={folded}
-              aria-label={folded ? 'Show sections one at a time (expand)' : 'Show all sections as accordion (fold)'}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
+              onClick={() => onSave(buildEdges())}
+              disabled={saving || !hasEnoughPoints}
+              className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
+              {saving ? 'Saving…' : 'Save'}
             </button>
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={onFoldToggle}
+            aria-pressed={folded}
+            aria-label={folded ? 'Show sections one at a time (expand)' : 'Show all sections as accordion (fold)'}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
+          >
+            <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
+          </button>
         </div>
-        {!hasEnoughPoints && (
-          <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>
-        )}
-        {saveError && <p className="text-[13px] text-[#dc2626]">Failed to save. Please try again.</p>}
       </div>
-
-      <FoldableSectionList
-        folded={folded}
-        sectionKeys={SECTION_KEYS}
-        sectionLabels={SECTION_LABELS}
-        openSections={openSections}
-        onToggleSection={toggleSection}
-        activeTab={subTab}
-        renderSectionBody={renderSectionBody}
-      />
+      {!hasEnoughPoints && <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>}
+      {saveError && <p className="text-[13px] text-[#dc2626]">Failed to save. Please try again.</p>}
     </div>
+  );
+
+  return (
+    <FoldablePanelShell
+      folded={folded}
+      header={header}
+      sectionKeys={SECTION_KEYS}
+      sectionLabels={SECTION_LABELS}
+      openSections={openSections}
+      onToggleSection={toggleSection}
+      activeTab={subTab}
+      renderSectionBody={renderSectionBody}
+    />
   );
 }

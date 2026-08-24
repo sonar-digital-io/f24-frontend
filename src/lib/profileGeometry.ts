@@ -92,6 +92,33 @@ export function leadingEdgeFraction(points: [number, number][]): number {
   return 0.5;
 }
 
+export interface ProfileDomain {
+  domainXMin: number;
+  domainXMax: number;
+  domainYMin: number;
+  domainYMax: number;
+}
+
+/** Padded x/y domain bounds for rendering a profile's raw contour points —
+ *  scaled to the profile's own bounds (not a fixed aspect ratio) so the
+ *  outline fills the chart instead of sitting tiny in a true-aspect box. */
+export function profileDomainFromPoints(points: [number, number][]): ProfileDomain {
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const xMin = xs.length ? Math.min(...xs) : 0;
+  const xMax = xs.length ? Math.max(...xs) : 1;
+  const yMin = ys.length ? Math.min(...ys) : -0.1;
+  const yMax = ys.length ? Math.max(...ys) : 0.1;
+  const xPad = (xMax - xMin) * 0.08 || 0.1;
+  const yPad = (yMax - yMin) * 0.15 || 0.02;
+  return {
+    domainXMin: xMin - xPad,
+    domainXMax: xMax + xPad,
+    domainYMin: yMin - yPad,
+    domainYMax: yMax + yPad,
+  };
+}
+
 /** Chordwise fraction (0 = leading edge / min x, 1 = trailing edge / max x)
  *  of a local profile-space x — used to place a spar point on the main
  *  spanwise canvas by interpolating between the leading/trailing edge at

@@ -5,6 +5,17 @@ import type { ControlPoint } from '@/types';
 
 type Field = 'x' | 'y';
 
+/** Point-editing callbacks passed down through `ProfileDistributionSectionBody`/
+ *  `StackingSectionBody` into this table unchanged (`onInputChange`/`onInputBlur`
+ *  there map to this table's `onChange`/`onBlur`) — shared here so each caller's
+ *  props interface doesn't redeclare the same four signatures. */
+export interface PointsTableEditCallbacks {
+  getInputValue: (idx: number, field: Field) => string;
+  onInputChange: (idx: number, field: Field, raw: string) => void;
+  onInputBlur: (idx: number, field: Field) => void;
+  onAddPoint: () => void;
+}
+
 interface BezierPointsTableProps {
   points: ControlPoint[];
   /** Y column header, e.g. "Max Cam (%)" or "Sweep (m)". */

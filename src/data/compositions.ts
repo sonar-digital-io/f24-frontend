@@ -8,8 +8,6 @@ export interface Composition {
   nominalRadius: number;
   type: BladeType;
   lastUpdated: string;
-  /** Linked geometry id, if any — drives the grid card's profile-preview thumbnail. */
-  geometryId?: number;
 }
 
 export const COMPOSITIONS: Composition[] = [

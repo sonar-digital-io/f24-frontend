@@ -3,21 +3,12 @@ import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
 import { validateFatigueCase } from '@/lib/fatigueValidation';
-import type { FatigueCase } from '@/api/types/loadGroups';
+import type { FatigueCase, FatigueCaseCallbacks } from '@/api/types/loadGroups';
 
-interface FatigueCaseTableProps {
+interface FatigueCaseTableProps extends FatigueCaseCallbacks {
   profileKey: string;
   fatigueCases: FatigueCase[];
   loadCaseNamesById: Record<number, string>;
-  onAddFatigueCase: (profileKey: string) => void;
-  onDeleteFatigueCase: (profileKey: string, caseKey: string) => void;
-  onUpdateFatigueCase: <K extends keyof FatigueCase>(
-    profileKey: string,
-    caseKey: string,
-    field: K,
-    val: FatigueCase[K]
-  ) => void;
-  onPickLoadCase: (profileKey: string, caseKey: string) => void;
 }
 
 /** The fatigue-case sub-table inside an expanded fatigue-profile accordion item. */

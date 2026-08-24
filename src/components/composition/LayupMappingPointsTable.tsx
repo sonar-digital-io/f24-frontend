@@ -75,7 +75,7 @@ export function LayupMappingPointsTable({
                       type="button"
                       onClick={() => onDelete(idx)}
                       aria-label={`Delete row ${idx}`}
-                      disabled={points.length <= 3}
+                      disabled={points.length <= 4}
                       className="flex h-8 w-8 items-center justify-center rounded-md text-[#6b7280] hover:bg-[#fef2f2] hover:text-[#dc2626] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Trash2 className="h-4 w-4" strokeWidth={2} />

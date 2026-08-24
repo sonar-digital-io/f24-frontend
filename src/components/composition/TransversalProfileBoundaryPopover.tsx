@@ -4,11 +4,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SelectField } from '@/components/composition/SelectField';
-import { useChartZoomPan, CHART_ZOOM_MIN, CHART_ZOOM_MAX, CHART_ZOOM_STEP } from '@/hooks/useChartZoomPan';
+import { useChartZoomPan } from '@/hooks/useChartZoomPan';
+import { usePointerDrag } from '@/hooks/usePointerDrag';
 import { BezierZoomControls } from '@/components/common/viewer/BezierZoomControls';
+import { ChartBackgroundRect } from '@/components/common/viewer/ChartBackgroundRect';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { dataToPx, pxToData } from '@/lib/bezierMath';
-import { arcFractionNearestTo, pointAtArcFraction } from '@/lib/profileGeometry';
+import { arcFractionNearestTo, pointAtArcFraction, profileDomainFromPoints } from '@/lib/profileGeometry';
 import type { ControlPoint } from '@/types';
 import type { ProfileBoundary } from '@/components/composition/TransversalMappingRow';
 
@@ -65,24 +67,23 @@ export function TransversalProfileBoundaryPopover({
 }: TransversalProfileBoundaryPopoverProps) {
   useEscapeKey(onClose);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [dragging, setDragging] = useState<'start' | 'end' | null>(null);
+  const { dragging, startDrag, endDrag } = usePointerDrag<'start' | 'end'>();
   const [showAllLayups, setShowAllLayups] = useState(false);
-  const { zoom, viewX, viewY, viewW, viewH, panningPointerId, zoomBy, screenToViewBox, resetView, bgPointerHandlers } =
-    useChartZoomPan(svgRef);
+  const {
+    zoom,
+    viewX,
+    viewY,
+    viewW,
+    viewH,
+    panningPointerId,
+    screenToViewBox,
+    resetView,
+    bgPointerHandlers,
+    zoomControlProps,
+  } = useChartZoomPan(svgRef);
 
   const pts = points ?? [];
-  const xs = pts.map(([x]) => x);
-  const ys = pts.map(([, y]) => y);
-  const xMin = xs.length ? Math.min(...xs) : 0;
-  const xMax = xs.length ? Math.max(...xs) : 1;
-  const yMin = ys.length ? Math.min(...ys) : -0.1;
-  const yMax = ys.length ? Math.max(...ys) : 0.1;
-  const xPad = (xMax - xMin) * 0.08 || 0.1;
-  const yPad = (yMax - yMin) * 0.15 || 0.02;
-  const domainXMin = xMin - xPad;
-  const domainXMax = xMax + xPad;
-  const domainYMin = yMin - yPad;
-  const domainYMax = yMax + yPad;
+  const { domainXMin, domainXMax, domainYMin, domainYMax } = profileDomainFromPoints(pts);
 
   function toPx(p: ControlPoint) {
     return dataToPx(p, domainXMin, domainXMax, domainYMin, domainYMax);
@@ -112,20 +113,6 @@ export function TransversalProfileBoundaryPopover({
     if (dragging === 'start') onChange({ startPosition: t });
     else onChange({ endPosition: t });
   }
-  function startDrag(which: 'start' | 'end', e: React.PointerEvent<SVGCircleElement>) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDragging(which);
-  }
-  function endDrag(e: React.PointerEvent) {
-    try {
-      (e.target as Element).releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-    setDragging(null);
-  }
 
   return (
     <div className="flex w-[560px] flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white p-4 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]">
@@ -142,12 +129,7 @@ export function TransversalProfileBoundaryPopover({
       </div>
 
       <div className="relative h-[220px] w-full rounded-md border border-[#e5e7eb] bg-white">
-        <BezierZoomControls
-          onZoomIn={() => zoomBy(CHART_ZOOM_STEP)}
-          onZoomOut={() => zoomBy(1 / CHART_ZOOM_STEP)}
-          canZoomIn={zoom < CHART_ZOOM_MAX}
-          canZoomOut={zoom > CHART_ZOOM_MIN}
-        />
+        <BezierZoomControls {...zoomControlProps} />
         {pts.length ? (
           <svg
             ref={svgRef}
@@ -158,14 +140,14 @@ export function TransversalProfileBoundaryPopover({
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
           >
-            <rect
-              x={viewX}
-              y={viewY}
-              width={viewW}
-              height={viewH}
-              fill="transparent"
-              style={{ cursor: zoom > 1 ? (panningPointerId !== null ? 'grabbing' : 'grab') : 'default' }}
-              {...bgPointerHandlers}
+            <ChartBackgroundRect
+              viewX={viewX}
+              viewY={viewY}
+              viewW={viewW}
+              viewH={viewH}
+              zoom={zoom}
+              panningPointerId={panningPointerId}
+              bgPointerHandlers={bgPointerHandlers}
               onDoubleClick={resetView}
             />
             <path d={outlinePath} fill="none" stroke="#0a0a0a" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />

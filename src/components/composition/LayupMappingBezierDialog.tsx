@@ -3,7 +3,10 @@ import { Maximize2, Minimize2, X } from 'lucide-react';
 import { LayupMappingChart } from '@/components/composition/LayupMappingChart';
 import { LayupMappingPointsTable } from '@/components/composition/LayupMappingPointsTable';
 import type { ControlPoint } from '@/types';
-import { clamp } from '@/lib/bezierMath';
+import { clamp, isConvexPolygon } from '@/lib/bezierMath';
+
+/** The polygon can never drop below this many corners — mirrors LayupMappingChart. */
+const MIN_POINTS = 4;
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useDraggablePosition } from '@/hooks/useDraggablePosition';
 
@@ -152,13 +155,16 @@ export function LayupMappingBezierDialog({
     setEditingValues((v) => ({ ...v, [fieldKey(idx, field)]: raw }));
     const parsed = parseFloat(raw);
     if (!Number.isFinite(parsed)) return;
-    onChange(
-      points.map((p, i) => {
-        if (i !== idx) return p;
-        if (field === 'x') return { ...p, x: applyXConstraints(points, idx, parsed) };
-        return { ...p, y: clamp(parsed, yMin, yMax) };
-      }),
-    );
+    const next = points.map((p, i) => {
+      if (i !== idx) return p;
+      if (field === 'x') return { ...p, x: applyXConstraints(points, idx, parsed) };
+      return { ...p, y: clamp(parsed, yMin, yMax) };
+    });
+    // A typed value that would fold the polygon in on itself is rejected — the
+    // input keeps showing what was typed (via editingValues above) but the
+    // point itself doesn't move there.
+    if (!isConvexPolygon(next)) return;
+    onChange(next);
   }
   function handleInputBlur(idx: number, field: 'x' | 'y') {
     setEditingValues((v) => {
@@ -170,9 +176,9 @@ export function LayupMappingBezierDialog({
     });
   }
   function handleDelete(idx: number) {
-    // Match the chart's rules: endpoints stay, minimum 3 points.
+    // Match the chart's rules: endpoints stay, minimum MIN_POINTS points.
     if (idx === 0 || idx === points.length - 1) return;
-    if (points.length <= 3) return;
+    if (points.length <= MIN_POINTS) return;
     onChange(points.filter((_, i) => i !== idx));
   }
 
