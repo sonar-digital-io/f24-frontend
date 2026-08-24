@@ -1,7 +1,6 @@
 import { BezierEditor } from '@/components/common/viewer/BezierEditor';
 import { BezierPointsTable, type PointsTableEditCallbacks } from '@/components/common/viewer/BezierPointsTable';
 import { ProfileDistributionSwitch } from '@/components/geometry/ProfileDistributionSwitch';
-import { sectionBodyGridClassName } from '@/components/geometry/sectionBodyGridClassName';
 import type { ControlPoint } from '@/types';
 
 interface ProfileDistributionSectionBodyProps extends PointsTableEditCallbacks {
@@ -41,7 +40,7 @@ export function ProfileDistributionSectionBody({
 }: ProfileDistributionSectionBodyProps) {
   return (
     <div className="flex flex-col gap-4">
-      <div className={sectionBodyGridClassName(folded)}>
+      <div className={folded ? 'flex flex-col gap-4' : 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]'}>
         {/* Distribution view */}
         <div className="flex flex-col gap-3">
           <ProfileDistributionSwitch

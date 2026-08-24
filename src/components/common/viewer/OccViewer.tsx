@@ -29,12 +29,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { getOcc } from '@/lib/occ-init';
 import { loadIgesShapes, tessellate } from '@/lib/occGeometry';
 import { looksLikeAsciiStl, looksLikeZip, hexDump, parseAsciiStl, parseBinaryStl } from '@/lib/stlParsing';
 import { createViewerScene, fitViewerSceneToBounds, updateGroundFade } from '@/lib/viewerScene';
+import { createDampedOrbitControls, createWireframeOverlay, disposeSceneObjects } from '@/lib/threeViewerSetup';
 
 export interface OccViewerProps {
   wireframe?: boolean;
@@ -136,11 +136,9 @@ export function OccViewer({
     let fitMaxDim: number | null = null;
 
     // ── OrbitControls ──────────────────────────────────────────────────────
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.minDistance   = 0.1;
-    controls.maxDistance   = 5000;
+    const controls = createDampedOrbitControls(camera, renderer);
+    controls.minDistance = 0.1;
+    controls.maxDistance = 5000;
     controls.target.set(0, 0, 0);
 
     // ── Animate ─────────────────────────────────────────────────────────────
@@ -223,9 +221,7 @@ export function OccViewer({
       lines.visible = wireframeRef.current;
       scene.add(lines);
 
-      const webGeo = new THREE.WireframeGeometry(geo);
-      const webMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
-      const webLines = new THREE.LineSegments(webGeo, webMat);
+      const webLines = createWireframeOverlay(geo);
       webLines.scale.setScalar(stlScale);
       webLines.visible = showWebViewRef.current;
       scene.add(webLines);
@@ -266,9 +262,7 @@ export function OccViewer({
           scene.add(lines);
           newLines.push(lines);
 
-          const webGeo = new THREE.WireframeGeometry(mesh.geometry);
-          const webMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
-          const webLines = new THREE.LineSegments(webGeo, webMat);
+          const webLines = createWireframeOverlay(mesh.geometry);
           webLines.visible = showWebViewRef.current;
           scene.add(webLines);
           newWebLines.push(webLines);
@@ -347,9 +341,7 @@ export function OccViewer({
         // Sibling of `obj`, not a child of it — a child would inherit `obj.visible`
         // (see the showBlade/showLayups line above) and disappear along with the
         // solid mesh, even though the wireframe should stay visible on its own.
-        const webGeo = new THREE.WireframeGeometry(obj.geometry);
-        const webMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
-        const webLines = new THREE.LineSegments(webGeo, webMat);
+        const webLines = createWireframeOverlay(obj.geometry);
         webLines.visible = showWebViewRef.current;
         webLines.position.copy(obj.position);
         webLines.quaternion.copy(obj.quaternion);
@@ -408,18 +400,7 @@ export function OccViewer({
       // scene.clear() alone does not free GPU resources — dispose every
       // geometry/material/texture still in the scene (IGES meshes, edge lines,
       // shadow ground, loading ring)
-      scene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
-          obj.geometry.dispose();
-          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-          mats.forEach((mat) => {
-            Object.values(mat).forEach((v) => {
-              if (v instanceof THREE.Texture) v.dispose();
-            });
-            mat.dispose();
-          });
-        }
-      });
+      disposeSceneObjects(scene);
       (scene.background as THREE.Texture).dispose();
       scene.clear();
       renderer.dispose();

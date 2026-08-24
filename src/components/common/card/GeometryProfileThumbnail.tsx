@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import { useGeometryDetailCached, useGeometryProfilePreview } from '@/hooks/api/useGeometry';
+import { useInView } from '@/hooks/useInView';
+import { profileDomainFromPoints } from '@/lib/profileGeometry';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface GeometryProfileThumbnailProps {
@@ -21,38 +23,45 @@ const NO_PREVIEW = (
  * remounting the card (e.g. toggling list/grid view) reuses prior results.
  */
 export function GeometryProfileThumbnail({ geometryId }: GeometryProfileThumbnailProps) {
+  const { ref, inView } = useInView<HTMLDivElement>();
   const hasGeometry = geometryId !== undefined && Number.isFinite(geometryId);
-  const { data: detail, isLoading: isDetailLoading } = useGeometryDetailCached(geometryId ?? NaN);
+  // Defer both fetches until the card actually scrolls into view — a grid of
+  // many cards would otherwise fire a detail GET + preview POST per card on mount.
+  const { data: detail, isLoading: isDetailLoading } = useGeometryDetailCached(inView ? geometryId ?? NaN : NaN);
   const profile = hasGeometry ? detail?.profiles?.[0] : undefined;
 
-  const { data: points, isLoading: isPreviewLoading, isError } = useGeometryProfilePreview(geometryId ?? NaN, profile);
+  const { data: points, isLoading: isPreviewLoading, isError } = useGeometryProfilePreview(
+    inView ? geometryId ?? NaN : NaN,
+    profile,
+  );
 
   const path = useMemo(() => {
     if (!points || points.length === 0) return null;
-    const ys = points.map(([, y]) => -y); // flip so positive y renders upward
-    const xs = points.map(([x]) => x);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-    const padX = (maxX - minX) * 0.08 || 0.01;
-    const padY = (maxY - minY) * 0.08 || 0.01;
-    const viewBox = `${minX - padX} ${minY - padY} ${maxX - minX + 2 * padX} ${maxY - minY + 2 * padY}`;
-    const d = `M ${points.map(([x], i) => `${x},${ys[i]}`).join(' L ')} Z`;
+    const flipped: [number, number][] = points.map(([x, y]) => [x, -y]); // flip so positive y renders upward
+    const { domainXMin, domainXMax, domainYMin, domainYMax } = profileDomainFromPoints(flipped);
+    const viewBox = `${domainXMin} ${domainYMin} ${domainXMax - domainXMin} ${domainYMax - domainYMin}`;
+    const d = `M ${flipped.map(([x, y]) => `${x},${y}`).join(' L ')} Z`;
     return { viewBox, d };
   }, [points]);
 
-  if (!hasGeometry) return NO_PREVIEW;
-
-  if (isDetailLoading || (profile && isPreviewLoading)) {
-    return <Skeleton className="h-full w-full" />;
+  let content;
+  if (!hasGeometry) {
+    content = NO_PREVIEW;
+  } else if (!inView || isDetailLoading || (profile && isPreviewLoading)) {
+    content = <Skeleton className="h-full w-full" />;
+  } else if (!profile || isError || !path) {
+    content = NO_PREVIEW;
+  } else {
+    content = (
+      <svg viewBox={path.viewBox} className="h-full w-full" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <path d={path.d} fill="#e5e7eb" stroke="#374151" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+      </svg>
+    );
   }
 
-  if (!profile || isError || !path) return NO_PREVIEW;
-
   return (
-    <svg viewBox={path.viewBox} className="h-full w-full" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-      <path d={path.d} fill="#e5e7eb" stroke="#374151" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-    </svg>
+    <div ref={ref} className="flex h-full w-full items-center justify-center">
+      {content}
+    </div>
   );
 }

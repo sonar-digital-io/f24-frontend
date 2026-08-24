@@ -4,6 +4,8 @@ import type { ControlPoint } from '@/types';
 
 interface LayupMappingPointsTableProps {
   points: ControlPoint[];
+  /** Delete is disabled once the polygon is down to this many points. */
+  minPoints: number;
   xMin: number;
   xMax: number;
   yMin: number;
@@ -18,6 +20,7 @@ interface LayupMappingPointsTableProps {
 /** Longitudinal/transversal point-editing table shown alongside the LayupMappingChart. */
 export function LayupMappingPointsTable({
   points,
+  minPoints,
   xMin,
   xMax,
   yMin,
@@ -75,7 +78,7 @@ export function LayupMappingPointsTable({
                       type="button"
                       onClick={() => onDelete(idx)}
                       aria-label={`Delete row ${idx}`}
-                      disabled={points.length <= 4}
+                      disabled={points.length <= minPoints}
                       className="flex h-8 w-8 items-center justify-center rounded-md text-[#6b7280] hover:bg-[#fef2f2] hover:text-[#dc2626] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Trash2 className="h-4 w-4" strokeWidth={2} />

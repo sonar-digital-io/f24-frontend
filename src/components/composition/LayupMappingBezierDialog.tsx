@@ -3,10 +3,7 @@ import { Maximize2, Minimize2, X } from 'lucide-react';
 import { LayupMappingChart } from '@/components/composition/LayupMappingChart';
 import { LayupMappingPointsTable } from '@/components/composition/LayupMappingPointsTable';
 import type { ControlPoint } from '@/types';
-import { clamp, isConvexPolygon } from '@/lib/bezierMath';
-
-/** The polygon can never drop below this many corners — mirrors LayupMappingChart. */
-const MIN_POINTS = 4;
+import { clamp, isConvexPolygon, MIN_LAYUP_POLYGON_POINTS } from '@/lib/bezierMath';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useDraggablePosition } from '@/hooks/useDraggablePosition';
 
@@ -162,8 +159,9 @@ export function LayupMappingBezierDialog({
     });
     // A typed value that would fold the polygon in on itself is rejected — the
     // input keeps showing what was typed (via editingValues above) but the
-    // point itself doesn't move there.
-    if (!isConvexPolygon(next)) return;
+    // point itself doesn't move there. If the polygon was already concave,
+    // don't lock all further edits — only block convex-to-concave moves.
+    if (isConvexPolygon(points) && !isConvexPolygon(next)) return;
     onChange(next);
   }
   function handleInputBlur(idx: number, field: 'x' | 'y') {
@@ -176,9 +174,9 @@ export function LayupMappingBezierDialog({
     });
   }
   function handleDelete(idx: number) {
-    // Match the chart's rules: endpoints stay, minimum MIN_POINTS points.
+    // Match the chart's rules: endpoints stay, minimum MIN_LAYUP_POLYGON_POINTS points.
     if (idx === 0 || idx === points.length - 1) return;
-    if (points.length <= MIN_POINTS) return;
+    if (points.length <= MIN_LAYUP_POLYGON_POINTS) return;
     onChange(points.filter((_, i) => i !== idx));
   }
 
@@ -258,6 +256,7 @@ export function LayupMappingBezierDialog({
 
           <LayupMappingPointsTable
             points={points}
+            minPoints={MIN_LAYUP_POLYGON_POINTS}
             xMin={xMin}
             xMax={xMax}
             yMin={yMin}

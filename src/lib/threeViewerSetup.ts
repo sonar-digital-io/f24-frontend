@@ -28,14 +28,26 @@ export function createDampedOrbitControls(camera: THREE.Camera, renderer: THREE.
   return controls;
 }
 
-/** Disposes every mesh/line geometry+material still in `scene` — the boilerplate
- *  every Three.js viewer repeats on unmount. */
+/** Disposes every mesh/line geometry+material(+texture) still in `scene` — the
+ *  boilerplate every Three.js viewer repeats on unmount. */
 export function disposeSceneObjects(scene: THREE.Scene): void {
   scene.traverse((obj) => {
     if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
       obj.geometry.dispose();
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-      mats.forEach((m) => m.dispose());
+      mats.forEach((m) => {
+        Object.values(m).forEach((v) => { if (v instanceof THREE.Texture) v.dispose(); });
+        m.dispose();
+      });
     }
   });
+}
+
+/** The true wireframe of `geometry` (every triangle edge, via `THREE.WireframeGeometry`) as
+ *  a standalone `LineSegments` — unlike an edges-only overlay, this doesn't hide the solid
+ *  fill underneath it and shows every facet, not just hard edges. */
+export function createWireframeOverlay(geometry: THREE.BufferGeometry): THREE.LineSegments {
+  const webGeo = new THREE.WireframeGeometry(geometry);
+  const webMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
+  return new THREE.LineSegments(webGeo, webMat);
 }

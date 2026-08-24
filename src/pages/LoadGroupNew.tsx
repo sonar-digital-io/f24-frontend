@@ -215,7 +215,6 @@ export function LoadGroupNew() {
         <div>
           {activeTab === 'general' && (
             <LoadGroupGeneralTab
-              isNew={isNew}
               name={name}
               onNameChange={setName}
               description={description}

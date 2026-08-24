@@ -16,9 +16,10 @@ interface EntityCardProps {
 }
 
 /**
- * Shared grid card shell for Geometry and Composition list/picker views —
- * name + menu header, geometry profile-preview thumbnail, and a footer slot
- * for entity-specific metadata (description, last-updated, etc).
+ * Grid card shell used by `GeometryCard` — name + menu header, geometry
+ * profile-preview thumbnail, and a footer slot for entity-specific metadata
+ * (description, last-updated, etc). `GeometryCard` itself renders in both the
+ * Geometry grid and the Composition geometry-picker tab.
  */
 export function EntityCard({
   title,

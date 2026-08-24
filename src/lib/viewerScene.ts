@@ -132,7 +132,8 @@ export function updateGroundFade(
   const dist = camera.position.distanceTo(target);
   const fadeInEnd = maxDim * 0.6;
   const fadeInStart = maxDim * 0.3;
-  const t = Math.max(0, Math.min(1, (dist - fadeInStart) / (fadeInEnd - fadeInStart)));
+  // maxDim === 0 (degenerate/empty geometry) would otherwise divide by zero.
+  const t = fadeInEnd === fadeInStart ? 1 : Math.max(0, Math.min(1, (dist - fadeInStart) / (fadeInEnd - fadeInStart)));
   groundMat.opacity = baseGroundOpacity * t;
   ground.visible = t > 0.001;
 }

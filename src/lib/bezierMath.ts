@@ -208,6 +208,9 @@ export function applyXConstraints(
   return Math.max(minX, Math.min(maxX, nextX));
 }
 
+/** The layup-mapping polygon can never drop below this many corners. */
+export const MIN_LAYUP_POLYGON_POINTS = 4;
+
 /**
  * Whether a closed polygon (points listed in order) is convex — no vertex bends
  * back in on the shape. Used to block edits to the layup-mapping polygon that

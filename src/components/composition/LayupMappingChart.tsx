@@ -14,10 +14,8 @@ import {
   decimalsForStep,
   isConvexPolygon,
   pointsToPolygonString,
+  MIN_LAYUP_POLYGON_POINTS,
 } from '@/lib/bezierMath';
-
-/** The polygon can never drop below this many corners. */
-const MIN_POINTS = 4;
 
 /**
  * Layup mapping chart — closed straight-line polygon over the blade's real
@@ -71,10 +69,12 @@ export function LayupMappingChart({
   } = useChartZoomPan(svgRef);
 
   // Dragging past the point where the polygon would fold in on itself just
-  // stops moving it there — the drag/nudge itself isn't cancelled.
+  // stops moving it there — the drag/nudge itself isn't cancelled. If the
+  // polygon was already concave (e.g. legacy data), don't lock all further
+  // edits — only block moves that turn an already-convex polygon concave.
   function commitIfConvex(idx: number, x: number, y: number) {
     const next = points.map((p, i) => (i === idx ? { x, y } : p));
-    if (!isConvexPolygon(next)) return;
+    if (isConvexPolygon(points) && !isConvexPolygon(next)) return;
     onChange(next);
   }
 
@@ -103,10 +103,10 @@ export function LayupMappingChart({
   }
 
   // Double-click any point to remove it, same as the other bezier canvases —
-  // but the polygon always needs at least MIN_POINTS points to stay a closed shape.
+  // but the polygon always needs at least MIN_LAYUP_POLYGON_POINTS points to stay a closed shape.
   function handlePointDoubleClick(idx: number, e: React.MouseEvent) {
     e.stopPropagation();
-    if (points.length <= MIN_POINTS) return;
+    if (points.length <= MIN_LAYUP_POLYGON_POINTS) return;
     onChange(points.filter((_, i) => i !== idx));
   }
 
@@ -116,7 +116,7 @@ export function LayupMappingChart({
   function handleKeyDown(idx: number, e: React.KeyboardEvent<SVGCircleElement>) {
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
-      if (points.length <= MIN_POINTS) return;
+      if (points.length <= MIN_LAYUP_POLYGON_POINTS) return;
       onChange(points.filter((_, i) => i !== idx));
       return;
     }
@@ -211,7 +211,7 @@ export function LayupMappingChart({
           points={points}
           project={(p) => dataToPx(p, xMin, xMax, yMin, yMax)}
           draggingIndex={draggingIndex}
-          minPoints={MIN_POINTS}
+          minPoints={MIN_LAYUP_POLYGON_POINTS}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
