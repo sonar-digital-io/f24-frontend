@@ -97,6 +97,8 @@ export function ProfileDetailPopover({ geometryId, profile, onChange, onClose, o
               label="Position (relative radius)"
               value={profile.position}
               onCommit={(v) => update('position', v)}
+              min={0}
+              minMessage="Min value of position is 0"
               max={1}
               maxMessage="Max value of position is 1"
               onBlur={onSort}

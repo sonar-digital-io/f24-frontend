@@ -3,7 +3,7 @@ import { isAxiosError } from 'axios';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { apiClient } from '@/api/client';
-import { Settings } from 'lucide-react';
+import { FoldHorizontal, Settings } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { OccViewer } from '@/components/common/viewer/OccViewer';
 import { GeometryEditToolbar } from '@/components/geometry/GeometryEditToolbar';
@@ -32,6 +32,7 @@ import { useGeometrySysconfig } from '@/hooks/api/useSysconfig';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { toUiProfile, toApiProfile } from '@/lib/geometryProfileMapping';
+import { getApiErrorMessage } from '@/lib/apiError';
 import { buildSysconfigSections } from '@/lib/sysconfigMapping';
 import { isFormValid } from '@/lib/sysconfigFormValidation';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
@@ -43,8 +44,13 @@ const PANEL_WIDTH_NARROW = 'w-[516px] max-w-[calc(100vw-2rem)]';
 const PANEL_WIDTH_WIDE = 'w-[924px] max-w-[calc(100vw-2rem)]';
 
 /** The floating properties panel's width depends on the active tab (and, for
- *  the two foldable tabs, whether their side panel is folded). */
-function getPanelWidthClass(activeTab: string, profileFolded: boolean, stackingFolded: boolean): string {
+ *  the foldable tabs, whether their side panel is folded). */
+function getPanelWidthClass(
+  activeTab: string,
+  profileFolded: boolean,
+  stackingFolded: boolean,
+  sparsFolded: boolean
+): string {
   switch (activeTab) {
     case 'create':
       return 'w-[468px] max-w-[calc(100vw-2rem)]';
@@ -55,7 +61,7 @@ function getPanelWidthClass(activeTab: string, profileFolded: boolean, stackingF
     case 'stacking':
       return stackingFolded ? PANEL_WIDTH_NARROW : PANEL_WIDTH_WIDE;
     case 'spars':
-      return PANEL_WIDTH_WIDE;
+      return sparsFolded ? PANEL_WIDTH_NARROW : PANEL_WIDTH_WIDE;
     default:
       return 'w-[280px]';
   }
@@ -95,6 +101,7 @@ export function GeometryEdit() {
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
   const [profileFolded, setProfileFolded] = useState(false);
   const [stackingFolded, setStackingFolded] = useState(true);
+  const [sparsFolded, setSparsFolded] = useState(true);
   // Global properties — field list/labels/constraints come from GET /sysconfig/'s
   // configuration.geometry_settings; values are keyed by backend `reference` (e.g.
   // "nominal_radius"), sent via PUT /geometry/:id/settings/ as key/value pairs, and
@@ -339,11 +346,11 @@ export function GeometryEdit() {
       setResultScale(Number(props.nominal_radius) || 1);
       setResultStl(data);
     } catch (err) {
-      // responseType: 'arraybuffer' means even a JSON error body decodes to raw
-      // bytes here, not text — getApiErrorMessage can't read it, so this stays
-      // on the per-status friendly text instead of the backend's own message.
+      // getApiErrorMessage decodes the arraybuffer error body back to
+      // text/JSON, so the backend's own message is used when it has one —
+      // the per-status text below is only a fallback for a body it can't parse.
       const status = isAxiosError(err) ? err.response?.status : undefined;
-      const message =
+      const fallback =
         status === 409
           ? 'Geometry is invalid or incomplete (needs at least 2 profiles and a valid spline).'
           : status === 403
@@ -353,11 +360,42 @@ export function GeometryEdit() {
               : status === 500
                 ? 'Result generation failed on the server.'
                 : 'Failed to generate. Please try again.';
+      const message = getApiErrorMessage(err, fallback);
       setResultError(message);
       toast.error(message);
       setResultStatus('error');
     }
   }
+
+  // If this geometry already has a previously-generated result, show it as
+  // soon as the page loads instead of leaving the viewer empty until the user
+  // revisits Spars and clicks Generate again. Silent on failure (most likely
+  // no result has been generated yet, which isn't an error worth a toast) —
+  // the manual "Generate result" button remains the way to surface real errors.
+  useEffect(() => {
+    if (isNew || !hydrated || resultRequested) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await apiClient.get<ArrayBuffer>(`/geometry/${geometryId}/result/`, {
+          responseType: 'arraybuffer',
+          timeout: 120_000,
+        });
+        if (cancelled) return;
+        setResultScale(Number(props.nominal_radius) || 1);
+        setResultStl(data);
+        setResultRequested(true);
+        setResultStatus('ready');
+      } catch {
+        // No result generated yet — leave the empty viewer for the user to
+        // trigger generation manually from the Spars tab.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, hydrated, geometryId]);
 
   function handleExit() {
     navigate('/geometry');
@@ -391,7 +429,7 @@ export function GeometryEdit() {
         {/* Floating properties panel (top-left, gap below toolbar matches gap above tab pill = 8px).
             Width depends on the active tab. z-30 so it sits above the render toggle (z-20). */}
         <aside
-          className={`absolute left-4 top-[52px] z-30 ${getPanelWidthClass(activeTab, profileFolded, stackingFolded)}`}
+          className={`absolute left-4 top-[52px] z-30 ${getPanelWidthClass(activeTab, profileFolded, stackingFolded, sparsFolded)}`}
         >
           {activeTab === 'create' && !isNew && !hydrated && (detailQuery.isLoading || detailQuery.isFetching) && (
             <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
@@ -463,14 +501,28 @@ export function GeometryEdit() {
             />
           )}
           {activeTab === 'spars' && (
-            <div className="flex flex-col gap-4">
-              <SparsSection geometryId={geometryId} />
-              <GeometryResultPanel
-                onGenerate={handleGenerateResult}
-                requested={resultRequested}
-                status={resultStatus}
-                error={resultError}
-              />
+            <div className="flex max-h-[calc(100vh-128px)] w-full flex-col overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+              <div className="flex items-center justify-between gap-4 p-6 pb-4">
+                <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">Spars</p>
+                <button
+                  type="button"
+                  onClick={() => setSparsFolded((f) => !f)}
+                  aria-pressed={sparsFolded}
+                  aria-label={sparsFolded ? 'Expand panel' : 'Collapse panel'}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
+                >
+                  <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
+                </button>
+              </div>
+              <div className="flex flex-col gap-4 px-6 pb-6">
+                <SparsSection geometryId={geometryId} />
+                <GeometryResultPanel
+                  onGenerate={handleGenerateResult}
+                  requested={resultRequested}
+                  status={resultStatus}
+                  error={resultError}
+                />
+              </div>
             </div>
           )}
           {activeTab !== 'create' &&
