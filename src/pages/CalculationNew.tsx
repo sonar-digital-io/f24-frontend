@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
 import { useQueryClient } from '@tanstack/react-query';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { CalculationSubToolbar } from '@/components/calculation/CalculationSubToolbar';
@@ -37,6 +38,7 @@ const CONFIG_PULLED_OUT = new Set(['analysis_method', 'econ_debug']);
 
 export function CalculationNew() {
   const navigate = useNavigate();
+  const exitTarget = useExitEditModeTarget('/calculation');
   const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
   const isNew = !id || id === 'new';
@@ -224,7 +226,7 @@ export function CalculationNew() {
   function handleExit() {
     // Pure navigation — composition/load group/fatigue profile picks already
     // saved themselves immediately, and General has no save-on-exit here.
-    navigate('/calculation');
+    navigate(exitTarget);
   }
 
   // Name/description/date save on blur, but only once a project already

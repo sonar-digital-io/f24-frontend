@@ -3,15 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Copy, Download, Pencil, Trash2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
-import { Pagination } from '@/components/common/list/Pagination';
+import { ListPageCard } from '@/components/common/list/ListPageCard';
+import { ListTable } from '@/components/common/list/ListTable';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
-import { ListPageHeader } from '@/components/common/list/ListPageHeader';
-import { ListSearchInput } from '@/components/common/list/ListSearchInput';
 import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
+import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
+import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
 import { matchesQuery, paginate, rowInteractionProps, sortItems, toggleSort } from '@/lib/listTable';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, parseLastUpdated } from '@/lib/utils';
+import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
 import type { SortState, LoadGroupSortKey } from '@/types';
 import { type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
 import { useDeleteLoadGroup, useLoadGroupList } from '@/hooks/api/useLoadGroups';
@@ -67,6 +69,8 @@ export function LoadGroup() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortState<LoadGroupSortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
+  const dateFilter = useDateFilterPopover(() => setPage(1));
+  const { dateRange } = dateFilter;
 
   const { data: backendLoadGroups, isLoading, isError } = useLoadGroupList();
   const LOAD_GROUPS = useMemo(() => (backendLoadGroups ?? []).map(toUiLoadGroup), [backendLoadGroups]);
@@ -84,10 +88,19 @@ export function LoadGroup() {
     }
   }
 
-  const filtered = useMemo(
-    () => LOAD_GROUPS.filter((g) => matchesQuery(query, [g.name, g.description])),
-    [LOAD_GROUPS, query]
-  );
+  const filtered = useMemo(() => {
+    return LOAD_GROUPS.filter((g) => {
+      if (!matchesQuery(query, [g.name, g.description])) return false;
+      if (dateRange?.from || dateRange?.to) {
+        const d = parseLastUpdated(g.lastUpdated);
+        if (d) {
+          if (dateRange.from && d < dateRange.from) return false;
+          if (dateRange.to && d > new Date(dateRange.to.getTime() + 86399999)) return false;
+        }
+      }
+      return true;
+    });
+  }, [LOAD_GROUPS, query, dateRange]);
 
   const sorted = useMemo(() => sortItems(filtered, sort, (g, key) => g[key]), [filtered, sort]);
 
@@ -100,7 +113,12 @@ export function LoadGroup() {
   const COLUMNS: ListTableHeadColumn<LoadGroupSortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[260px]' },
     { label: 'Description' },
-    { label: 'Last updated', sortKey: 'lastUpdated', className: 'w-[160px]' },
+    {
+      label: 'Last updated',
+      sortKey: 'lastUpdated',
+      className: 'w-[160px]',
+      action: <DateColumnFilter ariaLabel="Filter by last updated" {...dateFilter} />,
+    },
   ];
 
   return (
@@ -109,59 +127,51 @@ export function LoadGroup() {
 
       <main className="flex-1 px-4 py-6 sm:px-8 lg:px-16">
         <div className="mx-auto w-full max-w-[1400px]">
-          <div className="rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-            <ListPageHeader
-              title="Load groups"
-              actions={
-                <button
-                  type="button"
-                  onClick={() => navigate('/load-group/new')}
-                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
-                >
-                  New load group
-                </button>
-              }
-            />
-
-            {/* Search */}
-            <div className="mt-4 max-w-[384px]">
-              <ListSearchInput
-                value={query}
-                onChange={(v) => { setQuery(v); setPage(1); }}
-                widthClassName=""
+          <ListPageCard
+            title="Load groups"
+            headerActions={
+              <button
+                type="button"
+                onClick={() => navigate('/load-group/new')}
+                className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
+              >
+                New load group
+              </button>
+            }
+            search={{
+              value: query,
+              onChange: (v) => { setQuery(v); setPage(1); },
+              placeholder: 'Search for load group',
+            }}
+            filters={
+              dateRange?.from || dateRange?.to ? (
+                <DateRangeFilterChip label="Last updated" dateRange={dateRange} onClear={dateFilter.clear} />
+              ) : undefined
+            }
+            pagination={{ page, totalPages, onChange: setPage }}
+          >
+            <ListTable>
+              <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
+              <ListTableBody
+                colSpan={4}
+                isLoading={isLoading}
+                isError={isError}
+                loadingLabel="Loading load groups…"
+                errorLabel="Failed to load load groups from the server."
+                rows={pageRows}
+                renderRow={(item) => (
+                  <LoadGroupRow
+                    key={item.id}
+                    item={item}
+                    onEdit={() => navigate(`/load-group/${item.id}`)}
+                    onDuplicate={() => navigate(`/load-group/new?duplicateFrom=${item.id}`)}
+                    onDelete={() => setPendingDelete({ id: item.id, name: item.name })}
+                  />
+                )}
+                emptyLabel="No load groups match your search."
               />
-            </div>
-
-            {/* Table */}
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full border-collapse [&_tbody_tr:last-child]:border-b-0">
-                <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
-                <ListTableBody
-                  colSpan={4}
-                  isLoading={isLoading}
-                  isError={isError}
-                  loadingLabel="Loading load groups…"
-                  errorLabel="Failed to load load groups from the server."
-                  rows={pageRows}
-                  renderRow={(item) => (
-                    <LoadGroupRow
-                      key={item.id}
-                      item={item}
-                      onEdit={() => navigate(`/load-group/${item.id}`)}
-                      onDuplicate={() => navigate(`/load-group/new?duplicateFrom=${item.id}`)}
-                      onDelete={() => setPendingDelete({ id: item.id, name: item.name })}
-                    />
-                  )}
-                  emptyLabel="No load groups match your search."
-                />
-              </table>
-            </div>
-
-            {/* Pagination */}
-            <div className="mt-4">
-              <Pagination page={page} totalPages={totalPages} onChange={setPage} />
-            </div>
-          </div>
+            </ListTable>
+          </ListPageCard>
         </div>
       </main>
 

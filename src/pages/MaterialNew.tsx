@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
@@ -22,7 +23,23 @@ import {
 } from '@/lib/sysconfigMapping';
 import { isFormValid, isFormRangeValid } from '@/lib/sysconfigFormValidation';
 import type { MaterialPayload } from '@/api/types/materials';
+import type { FormSection } from '@/data/materialFormFields';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
+
+/** A fixed field's value is backend-locked to sysconfig's own `entry.value` rather than
+ *  anything the material has saved — fills it in for any field that doesn't already have
+ *  a saved value of its own. Already-present values (saved or in-progress) are untouched. */
+function withFixedDefaults(values: Record<string, string>, sections: FormSection[]): Record<string, string> {
+  const next = { ...values };
+  sections.forEach((section) =>
+    section.fields.forEach((field) => {
+      if (field.fixed && field.value !== undefined && next[field.name] === undefined) {
+        next[field.name] = field.value;
+      }
+    })
+  );
+  return next;
+}
 
 /** Loading/error placeholder shared by the Mechanical and Fatigue tabs while
  *  `useMaterialSysconfig` resolves — both tabs' fields come from that one config. */
@@ -49,6 +66,7 @@ interface Baseline {
 
 export function MaterialNew() {
   const navigate = useNavigate();
+  const exitTarget = useExitEditModeTarget('/material');
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const isEditing = Boolean(id);
@@ -106,6 +124,22 @@ export function MaterialNew() {
     [sysconfigQuery.data]
   );
 
+  // Seed fixed fields' sysconfig defaults as soon as sections load, same pattern as
+  // GeometryEdit's global properties.
+  useEffect(() => {
+    setMechValues((prev) => {
+      const next = withFixedDefaults(prev, mechanicalSections);
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
+  }, [mechanicalSections]);
+
+  useEffect(() => {
+    setFatigueValues((prev) => {
+      const next = withFixedDefaults(prev, fatigueSections);
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
+  }, [fatigueSections]);
+
   // Values (including Type) always come from GET /material/:id/ — the direct,
   // authoritative source — not sysconfig, which only supplies structure (labels, units,
   // required, min/max, active, fixed). This effect keeps fixed/computed fields and Type
@@ -116,9 +150,17 @@ export function MaterialNew() {
 
     const freshMech = toValueMap(detailQuery.data.mechanical_properties);
     const mechUpdates: Record<string, string> = {};
+    const mechDeletes = new Set<string>();
     for (const field of mechanicalSections.flatMap((s) => s.fields)) {
-      if (field.fixed && freshMech[field.name] !== undefined && mechValues[field.name] !== freshMech[field.name]) {
-        mechUpdates[field.name] = freshMech[field.name];
+      if (!field.fixed) continue;
+      // Fixed fields are always backend-controlled — resolve fully to the material's own
+      // saved value, falling back to sysconfig's default, and drop it if neither has one
+      // (e.g. it lost relevance after a type change and was never saved).
+      const resolved = freshMech[field.name] ?? field.value;
+      if (resolved === undefined) {
+        if (mechValues[field.name] !== undefined) mechDeletes.add(field.name);
+      } else if (mechValues[field.name] !== resolved) {
+        mechUpdates[field.name] = resolved;
       }
     }
     if (freshMech[MECH_PROP_TYPE_REFERENCE] !== undefined && mechValues[MECH_PROP_TYPE_REFERENCE] !== freshMech[MECH_PROP_TYPE_REFERENCE]) {
@@ -127,28 +169,47 @@ export function MaterialNew() {
 
     const freshFatigue = toValueMap(detailQuery.data.fatigue_properties);
     const fatigueUpdates: Record<string, string> = {};
+    const fatigueDeletes = new Set<string>();
     for (const field of fatigueSections.flatMap((s) => s.fields)) {
-      if (
-        field.fixed &&
-        freshFatigue[field.name] !== undefined &&
-        fatigueValues[field.name] !== freshFatigue[field.name]
-      ) {
-        fatigueUpdates[field.name] = freshFatigue[field.name];
+      if (!field.fixed) continue;
+      const resolved = freshFatigue[field.name] ?? field.value;
+      if (resolved === undefined) {
+        if (fatigueValues[field.name] !== undefined) fatigueDeletes.add(field.name);
+      } else if (fatigueValues[field.name] !== resolved) {
+        fatigueUpdates[field.name] = resolved;
       }
     }
 
-    if (Object.keys(mechUpdates).length === 0 && Object.keys(fatigueUpdates).length === 0) return;
-    if (Object.keys(mechUpdates).length > 0) setMechValues((prev) => ({ ...prev, ...mechUpdates }));
-    if (Object.keys(fatigueUpdates).length > 0) setFatigueValues((prev) => ({ ...prev, ...fatigueUpdates }));
-    setBaseline((prev) =>
-      prev
-        ? {
-            ...prev,
-            mechValues: { ...prev.mechValues, ...mechUpdates },
-            fatigueValues: { ...prev.fatigueValues, ...fatigueUpdates },
-          }
-        : prev
-    );
+    if (
+      Object.keys(mechUpdates).length === 0 &&
+      Object.keys(fatigueUpdates).length === 0 &&
+      mechDeletes.size === 0 &&
+      fatigueDeletes.size === 0
+    ) {
+      return;
+    }
+    if (Object.keys(mechUpdates).length > 0 || mechDeletes.size > 0) {
+      setMechValues((prev) => {
+        const next = { ...prev, ...mechUpdates };
+        mechDeletes.forEach((name) => delete next[name]);
+        return next;
+      });
+    }
+    if (Object.keys(fatigueUpdates).length > 0 || fatigueDeletes.size > 0) {
+      setFatigueValues((prev) => {
+        const next = { ...prev, ...fatigueUpdates };
+        fatigueDeletes.forEach((name) => delete next[name]);
+        return next;
+      });
+    }
+    setBaseline((prev) => {
+      if (!prev) return prev;
+      const mechValuesNext = { ...prev.mechValues, ...mechUpdates };
+      mechDeletes.forEach((name) => delete mechValuesNext[name]);
+      const fatigueValuesNext = { ...prev.fatigueValues, ...fatigueUpdates };
+      fatigueDeletes.forEach((name) => delete fatigueValuesNext[name]);
+      return { ...prev, mechValues: mechValuesNext, fatigueValues: fatigueValuesNext };
+    });
     // mechValues/fatigueValues intentionally excluded — this only needs to react to a new
     // detail fetch, not every keystroke; the values read here are current as of that fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,6 +248,27 @@ export function MaterialNew() {
       });
     }
   );
+
+  // Switching into the Mechanical or Fatigue tab re-fetches GET /material/:id/ and fully
+  // re-syncs both tabs' fields from its mechanical_properties/fatigue_properties arrays —
+  // filling in whatever has a saved value, clearing whatever doesn't. Safe to overwrite
+  // in-progress edits here: switching tabs blurs the previous tab's fields first, so
+  // anything editable has already autosaved by the time this runs.
+  useEffect(() => {
+    if (!isEditing || !hydrated || (activeTab !== 'mechanical' && activeTab !== 'fatigue')) return;
+    detailQuery.refetch().then((result) => {
+      const data = result.data;
+      if (!data) return;
+      const freshMech = withFixedDefaults(toValueMap(data.mechanical_properties), mechanicalSections);
+      const freshFatigue = withFixedDefaults(toValueMap(data.fatigue_properties), fatigueSections);
+      setMechValues(freshMech);
+      setFatigueValues(freshFatigue);
+      setBaseline((prev) => (prev ? { ...prev, mechValues: freshMech, fatigueValues: freshFatigue } : prev));
+    });
+    // Deliberately re-runs only on tab changes — detailQuery/mechanicalSections/fatigueSections
+    // are read fresh via closure, and isEditing/hydrated never flip back after becoming true.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // Duplicate: prefill a NEW (create-mode) form from another material's data, with
   // "_copy" appended to the name. No baseline needed — Save always does a plain POST here.
@@ -368,7 +450,7 @@ export function MaterialNew() {
     // never autosaved) is a real unsaved change.
     const hasUnsavedChanges = Boolean(baseline) && (hasUnsavedGeneral || mechanicalUnsaved || fatigueUnsaved);
     if (hasUnsavedChanges && !window.confirm('You have unsaved changes. Exit without saving?')) return;
-    navigate('/material');
+    navigate(exitTarget);
   }
 
   const isDuplicating = !isEditing && Number.isFinite(duplicateSourceId);

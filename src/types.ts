@@ -28,7 +28,7 @@ export interface SortState<K extends string = string> {
 // ─── /calculation ─────────────────────────────────────────────────────────────
 
 /** Sortable columns on the /calculation list page. */
-export type CalculationSortKey = 'timestamp' | 'name';
+export type CalculationSortKey = 'name' | 'lastUpdated';
 
 // ─── CalculationNew (also imported by the CalculationXTab components) ────────
 

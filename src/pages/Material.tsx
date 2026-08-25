@@ -1,27 +1,28 @@
 import { useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { Filter, X } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { MaterialRow } from '@/components/material/MaterialRow';
-import { MaterialDateFilterPopover } from '@/components/material/MaterialDateFilterPopover';
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
-import { Pagination } from '@/components/common/list/Pagination';
+import { ListPageCard } from '@/components/common/list/ListPageCard';
+import { ListTable } from '@/components/common/list/ListTable';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
-import { ListPageHeader } from '@/components/common/list/ListPageHeader';
-import { ListSearchInput } from '@/components/common/list/ListSearchInput';
 import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { ActiveFilterChip } from '@/components/common/list/ActiveFilterChip';
 import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton';
 import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
+import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
+import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
 import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
-import { toUiMaterial, formatDateLabel, parseLastUpdated } from '@/lib/materialListMapping';
+import { toUiMaterial } from '@/lib/materialListMapping';
+import { getMechPropTypeParameter } from '@/lib/sysconfigMapping';
+import { parseLastUpdated, toTitleCase } from '@/lib/utils';
 import type { SortState, MaterialSortKey } from '@/types';
 import { lastUpdatedSortKey, type Material } from '@/data/materials';
 import { useDeleteMaterial, useExportMaterial, useMaterialList } from '@/hooks/api/useMaterials';
+import { useMaterialSysconfig } from '@/hooks/api/useSysconfig';
 
 const PAGE_SIZE = 10;
 
@@ -31,25 +32,24 @@ export function Material() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortState<MaterialSortKey>>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
-  const {
-    dateRange,
-    filterOpen,
-    filterPos,
-    filterBtnRef,
-    popoverRef,
-    leftMonth,
-    rightMonth,
-    setLeftMonth,
-    setRightMonth,
-    goPrev,
-    goNext,
-    openFilter,
-    handleSelect: handleDateRangeSelect,
-    clear: clearDateRange,
-  } = useDateFilterPopover(() => setPage(1));
+  const dateFilter = useDateFilterPopover(() => setPage(1));
+  const { dateRange } = dateFilter;
 
   const { data: backendMaterials, isLoading, isError } = useMaterialList();
-  const materials = useMemo(() => (backendMaterials ?? []).map(toUiMaterial), [backendMaterials]);
+  // Parameterless (no ?material=) sysconfig fetch — just need mech_prop_type's id->name catalog.
+  const { data: sysconfigData } = useMaterialSysconfig(NaN);
+  const typeNameById = useMemo(() => {
+    const options = sysconfigData ? getMechPropTypeParameter(sysconfigData)?.options : undefined;
+    return new Map((options ?? []).map((o) => [o.id, toTitleCase(o.name)]));
+  }, [sysconfigData]);
+  const materials = useMemo(
+    () =>
+      (backendMaterials ?? []).map((m) => {
+        const ui = toUiMaterial(m);
+        return { ...ui, type: typeNameById.get(ui.type) ?? ui.type };
+      }),
+    [backendMaterials, typeNameById]
+  );
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useDeleteMaterial();
@@ -125,6 +125,7 @@ export function Material() {
 
   const COLUMNS: ListTableHeadColumn<MaterialSortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[240px]' },
+    { label: 'Description' },
     {
       label: 'Type',
       sortKey: 'type',
@@ -138,24 +139,11 @@ export function Material() {
         />
       ),
     },
-    { label: 'Description' },
     {
       label: 'Last updated',
       sortKey: 'lastUpdated',
       className: 'w-[160px]',
-      action: (
-        <button
-          ref={filterBtnRef}
-          type="button"
-          aria-label="Filter by last updated"
-          onClick={openFilter}
-          className={`flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-[#f1f5f9] ${
-            dateRange?.from || dateRange?.to ? 'text-[#006496]' : 'text-[#9ca3af]'
-          }`}
-        >
-          <Filter className="h-3.5 w-3.5" strokeWidth={2} />
-        </button>
-      ),
+      action: <DateColumnFilter ariaLabel="Filter by last updated" {...dateFilter} />,
     },
   ];
 
@@ -165,91 +153,63 @@ export function Material() {
 
       <main className="flex-1 px-4 py-6 sm:px-8 lg:px-16">
         <div className="mx-auto w-full max-w-[1400px]">
-          <div className="rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-            <ListPageHeader
-              title="Materials"
-              actions={
-                <Link
-                  to="/material/new"
-                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
-                >
-                  New material
-                </Link>
-              }
-            />
-
-            {/* Search + date filter */}
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <ListSearchInput
-                value={query}
-                onChange={(v) => { setQuery(v); setPage(1); }}
-                placeholder="Search for materials"
+          <ListPageCard
+            title="Materials"
+            headerActions={
+              <Link
+                to="/material/new"
+                className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580]"
+              >
+                New material
+              </Link>
+            }
+            search={{
+              value: query,
+              onChange: (v) => { setQuery(v); setPage(1); },
+              placeholder: 'Search for materials',
+            }}
+            filters={
+              <>
+                {(typeFilter.selected.size > 0 || dateRange?.from || dateRange?.to) && (
+                  <span className="text-[13px] font-medium text-[#6b7280]">Filtered by</span>
+                )}
+                <ActiveFilterChip label="Type" selected={typeFilter.selected} onClear={typeFilter.clear} />
+                <DateRangeFilterChip label="Last updated" dateRange={dateRange} onClear={dateFilter.clear} />
+              </>
+            }
+            pagination={{ page, totalPages, onChange: setPage }}
+          >
+            <ListTable fixedLayout minWidth={1100}>
+              <ListTableHead
+                columns={COLUMNS}
+                sort={sort}
+                onSort={handleSort}
+                leadingWidthClassName="w-[52px]"
               />
-
-              {(typeFilter.selected.size > 0 || dateRange?.from || dateRange?.to) && (
-                <span className="text-[13px] font-medium text-[#6b7280]">Filtered by</span>
-              )}
-
-              <ActiveFilterChip label="Type" selected={typeFilter.selected} onClear={typeFilter.clear} />
-
-              {(dateRange?.from || dateRange?.to) && (
-                <div className="flex items-center gap-1 rounded-full border border-[#e5e7eb] bg-[#f9fafb] px-3 py-1.5 text-[13px]">
-                  <span className="text-[#9ca3af]">Last updated</span>
-                  <span className="font-semibold text-[#0a0a0a]">
-                    {dateRange?.from ? formatDateLabel(dateRange.from) : '…'}
-                    {' – '}
-                    {dateRange?.to ? formatDateLabel(dateRange.to) : '…'}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Clear date filter"
-                    onClick={clearDateRange}
-                    className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-[#9ca3af] hover:bg-[#e5e7eb] hover:text-[#0a0a0a]"
-                  >
-                    <X className="h-3 w-3" strokeWidth={2.5} />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Table */}
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full table-fixed border-collapse [&_tbody_tr:last-child]:border-b-0" style={{ minWidth: 1100 }}>
-                <ListTableHead
-                  columns={COLUMNS}
-                  sort={sort}
-                  onSort={handleSort}
-                  leadingWidthClassName="w-[52px]"
-                />
-                <ListTableBody
-                  colSpan={6}
-                  isLoading={isLoading}
-                  isError={isError}
-                  loadingLabel="Loading materials…"
-                  errorLabel="Failed to load materials from the server."
-                  rows={pageRows}
-                  renderRow={(material) => (
-                    <MaterialRow
-                      key={material.id}
-                      material={material}
-                      expanded={expandedIds.has(material.id)}
-                      onToggle={() => toggleExpand(material.id)}
-                      onOpen={() => navigate(`/material/${material.id}`)}
-                      onExport={() => handleExport(material)}
-                      onDuplicate={() => handleDuplicate(material)}
-                      onDelete={() => setPendingDelete({ id: material.id, name: material.name })}
-                    />
-                  )}
-                  emptyLabel="No materials match your search."
-                />
-              </table>
-            </div>
-
-            {/* Pagination */}
-            <div className="mt-4">
-              <Pagination page={page} totalPages={totalPages} onChange={setPage} />
-            </div>
-          </div>
+              <ListTableBody
+                colSpan={6}
+                isLoading={isLoading}
+                isError={isError}
+                loadingLabel="Loading materials…"
+                errorLabel="Failed to load materials from the server."
+                rows={pageRows}
+                renderRow={(material) => (
+                  <MaterialRow
+                    key={material.id}
+                    material={material}
+                    typeNameById={typeNameById}
+                    expanded={expandedIds.has(material.id)}
+                    onToggle={() => toggleExpand(material.id)}
+                    onOpen={() => navigate(`/material/${material.id}`)}
+                    onExport={() => handleExport(material)}
+                    onDuplicate={() => handleDuplicate(material)}
+                    onDelete={() => setPendingDelete({ id: material.id, name: material.name })}
+                  />
+                )}
+                emptyLabel="No materials match your search."
+              />
+            </ListTable>
+          </ListPageCard>
         </div>
       </main>
 
@@ -266,25 +226,6 @@ export function Material() {
         onToggle={typeFilter.toggle}
         onToggleAll={typeFilter.toggleSelectAll}
       />
-
-      {filterOpen &&
-        filterPos &&
-        createPortal(
-          <MaterialDateFilterPopover
-            ref={popoverRef}
-            top={filterPos.top}
-            left={filterPos.left}
-            leftMonth={leftMonth}
-            rightMonth={rightMonth}
-            dateRange={dateRange}
-            onLeftMonthChange={setLeftMonth}
-            onRightMonthChange={setRightMonth}
-            onSelect={handleDateRangeSelect}
-            onPrevMonth={goPrev}
-            onNextMonth={goNext}
-          />,
-          document.body
-        )}
 
       <ConfirmDialog
         open={pendingDelete !== null}

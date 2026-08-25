@@ -20,6 +20,16 @@ export function PropertyFormTab({ sections, values, onChange, onBlur }: Property
     jumpTo,
   } = useScrollSpy(sectionIds, sections[0]?.id ?? '');
 
+  if (sections.length === 0) {
+    return (
+      <div className="flex h-full w-full max-w-[1200px] items-center justify-center rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+        <p className="text-[14px] text-[#6b7280]">
+          No fields to edit here — earlier answers rule out any properties on this tab.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       onBlur={onBlur}

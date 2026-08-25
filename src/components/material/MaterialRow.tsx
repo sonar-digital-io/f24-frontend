@@ -15,6 +15,7 @@ function nonEmpty(list?: KeyValuePair[]): KeyValuePair[] {
 
 interface MaterialDetailPanelProps {
   materialId: number;
+  typeNameById: Map<string, string>;
   mechanicalOpen: boolean;
   onToggleMechanical: () => void;
   fatigueOpen: boolean;
@@ -25,6 +26,7 @@ interface MaterialDetailPanelProps {
 // expanded is true — no need to thread that through as a query enabled/disabled flag.
 function MaterialDetailPanel({
   materialId,
+  typeNameById,
   mechanicalOpen,
   onToggleMechanical,
   fatigueOpen,
@@ -36,9 +38,14 @@ function MaterialDetailPanel({
   if (isError) {
     return <p className="px-1 py-2 text-[14px] text-[#dc2626]">Failed to load material properties.</p>;
   }
+  const mechanicalProperties = nonEmpty(data?.mechanical_properties).map((kv) =>
+    kv.reference === 'mech_prop_type'
+      ? { ...kv, value: typeNameById.get(String(kv.value)) ?? kv.value }
+      : kv
+  );
   return (
     <MaterialPropertyList
-      mechanicalProperties={nonEmpty(data?.mechanical_properties)}
+      mechanicalProperties={mechanicalProperties}
       fatigueProperties={nonEmpty(data?.fatigue_properties)}
       mechanicalOpen={mechanicalOpen}
       onToggleMechanical={onToggleMechanical}
@@ -50,6 +57,7 @@ function MaterialDetailPanel({
 
 export interface MaterialRowProps {
   material: MaterialItem;
+  typeNameById: Map<string, string>;
   expanded: boolean;
   onToggle: () => void;
   onOpen: () => void;
@@ -60,6 +68,7 @@ export interface MaterialRowProps {
 
 export function MaterialRow({
   material,
+  typeNameById,
   expanded,
   onToggle,
   onOpen,
@@ -82,11 +91,11 @@ export function MaterialRow({
         <td className="w-[240px] px-3 py-4 align-top text-[14px] font-medium leading-5 text-[#0a0a0a]">
           {material.name}
         </td>
-        <td className="w-[240px] px-3 py-4 align-top text-[14px] leading-5 text-[#0a0a0a]">
-          {material.type}
-        </td>
         <td className="px-3 py-4 align-top text-[14px] leading-5 text-[#0a0a0a]">
           {material.description}
+        </td>
+        <td className="w-[240px] px-3 py-4 align-top text-[14px] leading-5 text-[#0a0a0a]">
+          {material.type}
         </td>
         <td className="w-[160px] px-3 py-4 align-top text-[14px] leading-5 text-[#0a0a0a]">
           {formatDateTime(material.lastUpdated)}
@@ -110,6 +119,7 @@ export function MaterialRow({
           <td colSpan={5} className="px-3 pb-5 pt-1">
             <MaterialDetailPanel
               materialId={Number(material.id)}
+              typeNameById={typeNameById}
               mechanicalOpen={mechanicalOpen}
               onToggleMechanical={() => setMechanicalOpen((o) => !o)}
               fatigueOpen={fatigueOpen}

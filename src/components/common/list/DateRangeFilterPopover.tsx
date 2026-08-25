@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { type DateRange } from 'react-day-picker';
 import { Calendar } from '@/components/ui/calendar';
 
-interface MaterialDateFilterPopoverProps {
+interface DateRangeFilterPopoverProps {
   top: number;
   left: number;
   leftMonth: Date;
@@ -16,10 +16,11 @@ interface MaterialDateFilterPopoverProps {
   onNextMonth: () => void;
 }
 
-/** "Last updated" date-range popover for the Material list — two side-by-side
- *  month calendars plus prev/next month nav, positioned by the parent. */
-export const MaterialDateFilterPopover = forwardRef<HTMLDivElement, MaterialDateFilterPopoverProps>(
-  function MaterialDateFilterPopover(
+/** Date-range popover for a list page's "Last updated" column filter (Material,
+ *  Geometry, Composition, LoadGroup, Calculation) — two side-by-side month
+ *  calendars plus prev/next month nav, positioned by the parent. */
+export const DateRangeFilterPopover = forwardRef<HTMLDivElement, DateRangeFilterPopoverProps>(
+  function DateRangeFilterPopover(
     {
       top,
       left,
