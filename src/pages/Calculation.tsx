@@ -14,9 +14,9 @@ import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
-import { matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
+import { matchesDateRange, matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, CalculationSortKey } from '@/types';
-import { formatDateTime, parseLastUpdated } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import { type Calculation } from '@/data/calculations';
 import { useProjectList } from '@/hooks/api/useProjects';
 import type { Project } from '@/api/types/projects';
@@ -40,28 +40,31 @@ function toUiCalculation(p: Project): Calculation {
 export function Calculation() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<CalculationSortKey>>({ key: 'lastUpdated', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<CalculationSortKey>>({
+    key: 'lastUpdated',
+    direction: 'desc',
+  });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
 
   const { data: backendProjects, isLoading, isError } = useProjectList();
-  const CALCULATIONS = useMemo(() => (backendProjects ?? []).map(toUiCalculation), [backendProjects]);
+  const CALCULATIONS = useMemo(
+    () => (backendProjects ?? []).map(toUiCalculation),
+    [backendProjects],
+  );
 
-  const allStatuses = useMemo(() => [...new Set(CALCULATIONS.map((c) => c.status))].sort(), [CALCULATIONS]);
+  const allStatuses = useMemo(
+    () => [...new Set(CALCULATIONS.map((c) => c.status))].sort(),
+    [CALCULATIONS],
+  );
   const statusFilter = useColumnFilter(allStatuses, () => setPage(1));
 
   const filtered = useMemo(() => {
     return CALCULATIONS.filter((c) => {
       if (!matchesQuery(query, [c.name, c.description])) return false;
       if (statusFilter.selected.size > 0 && !statusFilter.selected.has(c.status)) return false;
-      if (dateRange?.from || dateRange?.to) {
-        const d = parseLastUpdated(c.lastUpdated);
-        if (d) {
-          if (dateRange.from && d < dateRange.from) return false;
-          if (dateRange.to && d > new Date(dateRange.to.getTime() + 86399999)) return false;
-        }
-      }
+      if (!matchesDateRange(c.lastUpdated, dateRange)) return false;
       return true;
     });
   }, [CALCULATIONS, query, statusFilter.selected, dateRange]);
@@ -116,7 +119,10 @@ export function Calculation() {
             }
             search={{
               value: query,
-              onChange: (v) => { setQuery(v); setPage(1); },
+              onChange: (v) => {
+                setQuery(v);
+                setPage(1);
+              },
               placeholder: 'Search for calculation',
             }}
             filters={
@@ -124,8 +130,16 @@ export function Calculation() {
                 {(statusFilter.selected.size > 0 || dateRange?.from || dateRange?.to) && (
                   <span className="text-[13px] font-medium text-[#6b7280]">Filtered by</span>
                 )}
-                <ActiveFilterChip label="Status" selected={statusFilter.selected} onClear={statusFilter.clear} />
-                <DateRangeFilterChip label="Last updated" dateRange={dateRange} onClear={dateFilter.clear} />
+                <ActiveFilterChip
+                  label="Status"
+                  selected={statusFilter.selected}
+                  onClear={statusFilter.clear}
+                />
+                <DateRangeFilterChip
+                  label="Last updated"
+                  dateRange={dateRange}
+                  onClear={dateFilter.clear}
+                />
               </>
             }
             pagination={{ page, totalPages, onChange: setPage }}

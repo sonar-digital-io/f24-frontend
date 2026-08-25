@@ -9,11 +9,18 @@ import { ListTableHead, type ListTableHeadColumn } from '@/components/common/lis
 import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
-import { matchesQuery, paginate, rowInteractionProps, sortItems, toggleSort } from '@/lib/listTable';
+import {
+  matchesDateRange,
+  matchesQuery,
+  paginate,
+  rowInteractionProps,
+  sortItems,
+  toggleSort,
+} from '@/lib/listTable';
 import type { SortState, ViewMode, GeometrySortKey } from '@/types';
 import { ViewModeToggle } from '@/components/common/list/ViewModeToggle';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
-import { formatDateTime, parseLastUpdated } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
 import { GeometryCard } from '@/components/common/card/GeometryCard';
 import { type Geometry as GeometryItem, type BladeType } from '@/data/geometries';
@@ -42,13 +49,19 @@ export function Geometry() {
   const location = useLocation();
   const [view, setView] = useState<ViewMode>('list');
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<GeometrySortKey>>({ key: 'lastUpdated', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<GeometrySortKey>>({
+    key: 'lastUpdated',
+    direction: 'desc',
+  });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
 
   const { data: backendGeometries, isLoading, isError } = useGeometryList();
-  const GEOMETRIES = useMemo(() => (backendGeometries ?? []).map(toUiGeometry), [backendGeometries]);
+  const GEOMETRIES = useMemo(
+    () => (backendGeometries ?? []).map(toUiGeometry),
+    [backendGeometries],
+  );
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useDeleteGeometry();
@@ -74,13 +87,7 @@ export function Geometry() {
   const filtered = useMemo(() => {
     return GEOMETRIES.filter((g) => {
       if (!matchesQuery(query, [g.name, g.description])) return false;
-      if (dateRange?.from || dateRange?.to) {
-        const d = parseLastUpdated(g.lastUpdated);
-        if (d) {
-          if (dateRange.from && d < dateRange.from) return false;
-          if (dateRange.to && d > new Date(dateRange.to.getTime() + 86399999)) return false;
-        }
-      }
+      if (!matchesDateRange(g.lastUpdated, dateRange)) return false;
       return true;
     });
   }, [GEOMETRIES, query, dateRange]);
@@ -123,12 +130,19 @@ export function Geometry() {
             }
             search={{
               value: query,
-              onChange: (v) => { setQuery(v); setPage(1); },
+              onChange: (v) => {
+                setQuery(v);
+                setPage(1);
+              },
               placeholder: 'Search for geometry',
             }}
             filters={
               dateRange?.from || dateRange?.to ? (
-                <DateRangeFilterChip label="Last updated" dateRange={dateRange} onClear={dateFilter.clear} />
+                <DateRangeFilterChip
+                  label="Last updated"
+                  dateRange={dateRange}
+                  onClear={dateFilter.clear}
+                />
               ) : undefined
             }
             trailing={<ViewModeToggle value={view} onChange={setView} />}
@@ -167,7 +181,11 @@ export function Geometry() {
                             icon={Pencil}
                             onClick={() => navigate(`/geometry/${g.id}`)}
                           />
-                          <RowIconButton label="Export geometry" icon={Download} onClick={() => {}} />
+                          <RowIconButton
+                            label="Export geometry"
+                            icon={Download}
+                            onClick={() => {}}
+                          />
                           <RowIconButton
                             label="Duplicate geometry"
                             icon={Copy}
