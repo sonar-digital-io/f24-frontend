@@ -1,5 +1,7 @@
 import type { KeyboardEvent } from 'react';
+import type { DateRange } from 'react-day-picker';
 import type { SortState } from '@/types';
+import { parseLastUpdated } from '@/lib/utils';
 
 /**
  * Shared building blocks for the list pages (Material, Geometry, Layup,
@@ -22,7 +24,11 @@ export function toggleSetMember<T>(prev: Set<T>, value: T): Set<T> {
 }
 
 /** Slices `sorted` into the current page, and the page count it took to get there. */
-export function paginate<T>(sorted: T[], page: number, pageSize: number): { totalPages: number; pageRows: T[] } {
+export function paginate<T>(
+  sorted: T[],
+  page: number,
+  pageSize: number,
+): { totalPages: number; pageRows: T[] } {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const pageRows = sorted.slice((page - 1) * pageSize, page * pageSize);
   return { totalPages, pageRows };
@@ -45,7 +51,7 @@ export function matchesQuery(query: string, fields: Array<string | null | undefi
 export function sortItems<T, K extends string>(
   items: T[],
   sort: SortState<K>,
-  getValue: (item: T, key: K) => string | number
+  getValue: (item: T, key: K) => string | number,
 ): T[] {
   const dir = sort.direction === 'asc' ? 1 : -1;
   return [...items].sort((a, b) => {
@@ -56,6 +62,18 @@ export function sortItems<T, K extends string>(
     const bStr = String(bVal).toLowerCase();
     return (aStr < bStr ? -1 : aStr > bStr ? 1 : 0) * dir;
   });
+}
+
+/** True when `lastUpdated` falls within `dateRange` — no active range always passes.
+ *  A row whose value doesn't parse is excluded (not passed through) once a range is
+ *  active, since "unknown date" can't be inside any range the user asked for. */
+export function matchesDateRange(lastUpdated: string, dateRange: DateRange | undefined): boolean {
+  if (!dateRange?.from && !dateRange?.to) return true;
+  const d = parseLastUpdated(lastUpdated);
+  if (!d) return false;
+  if (dateRange.from && d < dateRange.from) return false;
+  if (dateRange.to && d > new Date(dateRange.to.getTime() + 86399999)) return false;
+  return true;
 }
 
 /** Spread onto a clickable <tr> so keyboard users can open rows too. */

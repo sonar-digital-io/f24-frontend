@@ -9,10 +9,10 @@ import { ListTableHead, type ListTableHeadColumn } from '@/components/common/lis
 import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
-import { matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
+import { matchesDateRange, matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
 import type { SortState, CompositionSortKey } from '@/types';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
-import { formatDateTime, parseLastUpdated } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
 import { type Composition as CompositionItem } from '@/data/compositions';
 import { type BladeType } from '@/data/geometries';
@@ -39,13 +39,19 @@ function toUiComposition(c: BackendComposition): CompositionItem {
 export function Composition() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<CompositionSortKey>>({ key: 'name', direction: 'asc' });
+  const [sort, setSort] = useState<SortState<CompositionSortKey>>({
+    key: 'name',
+    direction: 'asc',
+  });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
 
   const { data: backendCompositions, isLoading, isError } = useCompositionList();
-  const COMPOSITIONS = useMemo(() => (backendCompositions ?? []).map(toUiComposition), [backendCompositions]);
+  const COMPOSITIONS = useMemo(
+    () => (backendCompositions ?? []).map(toUiComposition),
+    [backendCompositions],
+  );
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useDeleteComposition();
@@ -63,13 +69,7 @@ export function Composition() {
   const filtered = useMemo(() => {
     return COMPOSITIONS.filter((c) => {
       if (!matchesQuery(query, [c.name, c.description])) return false;
-      if (dateRange?.from || dateRange?.to) {
-        const d = parseLastUpdated(c.lastUpdated);
-        if (d) {
-          if (dateRange.from && d < dateRange.from) return false;
-          if (dateRange.to && d > new Date(dateRange.to.getTime() + 86399999)) return false;
-        }
-      }
+      if (!matchesDateRange(c.lastUpdated, dateRange)) return false;
       return true;
     });
   }, [COMPOSITIONS, query, dateRange]);
@@ -113,12 +113,19 @@ export function Composition() {
             }
             search={{
               value: query,
-              onChange: (v) => { setQuery(v); setPage(1); },
-              placeholder: 'Search for composition'
+              onChange: (v) => {
+                setQuery(v);
+                setPage(1);
+              },
+              placeholder: 'Search for composition',
             }}
             filters={
               dateRange?.from || dateRange?.to ? (
-                <DateRangeFilterChip label="Last updated" dateRange={dateRange} onClear={dateFilter.clear} />
+                <DateRangeFilterChip
+                  label="Last updated"
+                  dateRange={dateRange}
+                  onClear={dateFilter.clear}
+                />
               ) : undefined
             }
             pagination={{ page, totalPages, onChange: setPage }}
@@ -153,7 +160,11 @@ export function Composition() {
                           icon={Pencil}
                           onClick={() => navigate(`/composition/${c.id}`)}
                         />
-                        <RowIconButton label="Export composition" icon={Download} onClick={() => {}} />
+                        <RowIconButton
+                          label="Export composition"
+                          icon={Download}
+                          onClick={() => {}}
+                        />
                         <RowIconButton
                           label="Duplicate composition"
                           icon={Copy}

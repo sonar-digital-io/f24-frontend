@@ -15,10 +15,17 @@ import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
-import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
+import {
+  matchesDateRange,
+  matchesQuery,
+  paginate,
+  sortItems,
+  toggleSetMember,
+  toggleSort,
+} from '@/lib/listTable';
 import { toUiMaterial } from '@/lib/materialListMapping';
 import { getMechPropTypeParameter } from '@/lib/sysconfigMapping';
-import { parseLastUpdated, toTitleCase } from '@/lib/utils';
+import { toTitleCase } from '@/lib/utils';
 import type { SortState, MaterialSortKey } from '@/types';
 import { lastUpdatedSortKey, type Material } from '@/data/materials';
 import { useDeleteMaterial, useExportMaterial, useMaterialList } from '@/hooks/api/useMaterials';
@@ -30,7 +37,10 @@ export function Material() {
   const navigate = useNavigate();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<MaterialSortKey>>({ key: 'lastUpdated', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<MaterialSortKey>>({
+    key: 'lastUpdated',
+    direction: 'desc',
+  });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
@@ -48,7 +58,7 @@ export function Material() {
         const ui = toUiMaterial(m);
         return { ...ui, type: typeNameById.get(ui.type) ?? ui.type };
       }),
-    [backendMaterials, typeNameById]
+    [backendMaterials, typeNameById],
   );
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
@@ -85,7 +95,7 @@ export function Material() {
 
   const allTypes = useMemo(
     () => [...new Set(materials.map((m) => m.type).filter(Boolean))].sort(),
-    [materials]
+    [materials],
   );
   const typeFilter = useColumnFilter(allTypes, () => setPage(1));
 
@@ -93,13 +103,7 @@ export function Material() {
     return materials.filter((m) => {
       if (!matchesQuery(query, [m.name, m.type, m.description])) return false;
       if (typeFilter.selected.size > 0 && !typeFilter.selected.has(m.type)) return false;
-      if (dateRange?.from || dateRange?.to) {
-        const d = parseLastUpdated(m.lastUpdated);
-        if (d) {
-          if (dateRange.from && d < dateRange.from) return false;
-          if (dateRange.to && d > new Date(dateRange.to.getTime() + 86399999)) return false;
-        }
-      }
+      if (!matchesDateRange(m.lastUpdated, dateRange)) return false;
       return true;
     });
   }, [materials, query, typeFilter.selected, dateRange]);
@@ -108,9 +112,9 @@ export function Material() {
   const sorted = useMemo(
     () =>
       sortItems(filtered, sort, (m, key) =>
-        key === 'lastUpdated' ? lastUpdatedSortKey(m.lastUpdated) : m[key]
+        key === 'lastUpdated' ? lastUpdatedSortKey(m.lastUpdated) : m[key],
       ),
-    [filtered, sort]
+    [filtered, sort],
   );
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
@@ -165,7 +169,10 @@ export function Material() {
             }
             search={{
               value: query,
-              onChange: (v) => { setQuery(v); setPage(1); },
+              onChange: (v) => {
+                setQuery(v);
+                setPage(1);
+              },
               placeholder: 'Search for materials',
             }}
             filters={
@@ -173,8 +180,16 @@ export function Material() {
                 {(typeFilter.selected.size > 0 || dateRange?.from || dateRange?.to) && (
                   <span className="text-[13px] font-medium text-[#6b7280]">Filtered by</span>
                 )}
-                <ActiveFilterChip label="Type" selected={typeFilter.selected} onClear={typeFilter.clear} />
-                <DateRangeFilterChip label="Last updated" dateRange={dateRange} onClear={dateFilter.clear} />
+                <ActiveFilterChip
+                  label="Type"
+                  selected={typeFilter.selected}
+                  onClear={typeFilter.clear}
+                />
+                <DateRangeFilterChip
+                  label="Last updated"
+                  dateRange={dateRange}
+                  onClear={dateFilter.clear}
+                />
               </>
             }
             pagination={{ page, totalPages, onChange: setPage }}

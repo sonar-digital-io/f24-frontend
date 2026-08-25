@@ -7,11 +7,15 @@ import { ChartGrid } from '@/components/common/viewer/ChartGrid';
 import { ChartAnchorPointsLayer } from '@/components/common/viewer/ChartAnchorPointsLayer';
 import { useChartZoomPan } from '@/hooks/useChartZoomPan';
 import {
+  VB_WIDTH,
+  VB_HEIGHT,
+  PAD_RIGHT,
   dataToPx,
   pxToData,
   clamp,
   computeTicks,
   decimalsForStep,
+  capStepForTicks,
   isConvexPolygon,
   pointsToPolygonString,
   MIN_LAYUP_POLYGON_POINTS,
@@ -36,6 +40,8 @@ interface LayupMappingChartProps {
   yMin?: number;
   yMax?: number;
   yStep?: number;
+  xUnit?: string;
+  yUnit?: string;
   className?: string;
 }
 
@@ -50,6 +56,8 @@ export function LayupMappingChart({
   yMin = -14,
   yMax = 0,
   yStep = 2,
+  xUnit = '',
+  yUnit = '',
   className,
 }: LayupMappingChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -134,10 +142,14 @@ export function LayupMappingChart({
     commitIfConvex(idx, clamp(x, xMin, xMax), clamp(y, yMin, yMax));
   }
 
-  const yTicks = computeTicks(yMin, yMax, yStep);
-  const xTicks = computeTicks(xMin, xMax, xStep);
-  const yDecimals = decimalsForStep(yStep);
-  const xDecimals = decimalsForStep(xStep);
+  // Cap gridlines at 10 per axis — a caller-fixed step can otherwise flood
+  // the chart once the mapping bounds grow.
+  const effectiveYStep = capStepForTicks(yMin, yMax, yStep);
+  const effectiveXStep = capStepForTicks(xMin, xMax, xStep);
+  const yTicks = computeTicks(yMin, yMax, effectiveYStep);
+  const xTicks = computeTicks(xMin, xMax, effectiveXStep);
+  const yDecimals = decimalsForStep(effectiveYStep);
+  const xDecimals = decimalsForStep(effectiveXStep);
 
   // Closed polygon points string
   const polygonPoints = pointsToPolygonString(points, xMin, xMax, yMin, yMax);
@@ -185,6 +197,18 @@ export function LayupMappingChart({
           xDecimals={xDecimals}
           yDecimals={yDecimals}
         />
+
+        {yUnit && (
+          <text x="6" y="12" fontSize="10" fill="#6b7280">
+            [{yUnit}]
+          </text>
+        )}
+
+        {xUnit && (
+          <text x={VB_WIDTH - PAD_RIGHT} y={VB_HEIGHT - 4} fontSize="10" fill="#6b7280" textAnchor="end">
+            [{xUnit}]
+          </text>
+        )}
 
         {/* Blade planform background — leading/trailing edge from GET /geometry/:id/top-view/ */}
         <polygon

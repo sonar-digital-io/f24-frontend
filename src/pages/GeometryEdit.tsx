@@ -412,6 +412,7 @@ export function GeometryEdit() {
           stlData={resultStl}
           stlScale={resultScale}
           onStatusChange={setResultStatus}
+          treatAsBlade
         />
 
         <GeometryEditToolbar

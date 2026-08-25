@@ -251,6 +251,8 @@ export function LayupMappingBezierDialog({
               yMin={yMin}
               yMax={yMax}
               yStep={yStep}
+              xUnit="mm"
+              yUnit="mm"
             />
           </div>
 

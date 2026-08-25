@@ -11,8 +11,15 @@ import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
-import { matchesQuery, paginate, rowInteractionProps, sortItems, toggleSort } from '@/lib/listTable';
-import { formatDateTime, parseLastUpdated } from '@/lib/utils';
+import {
+  matchesDateRange,
+  matchesQuery,
+  paginate,
+  rowInteractionProps,
+  sortItems,
+  toggleSort,
+} from '@/lib/listTable';
+import { formatDateTime } from '@/lib/utils';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
 import type { SortState, LoadGroupSortKey } from '@/types';
 import { type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
@@ -57,7 +64,12 @@ function LoadGroupRow({ item, onEdit, onDuplicate, onDelete }: LoadGroupRowProps
           <RowIconButton label="Edit load group" icon={Pencil} onClick={onEdit} />
           <RowIconButton label="Export load group" icon={Download} onClick={() => {}} />
           <RowIconButton label="Duplicate load group" icon={Copy} onClick={onDuplicate} />
-          <RowIconButton label="Delete load group" icon={Trash2} onClick={onDelete} variant="danger" />
+          <RowIconButton
+            label="Delete load group"
+            icon={Trash2}
+            onClick={onDelete}
+            variant="danger"
+          />
         </div>
       </td>
     </tr>
@@ -67,13 +79,19 @@ function LoadGroupRow({ item, onEdit, onDuplicate, onDelete }: LoadGroupRowProps
 export function LoadGroup() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<LoadGroupSortKey>>({ key: 'lastUpdated', direction: 'desc' });
+  const [sort, setSort] = useState<SortState<LoadGroupSortKey>>({
+    key: 'lastUpdated',
+    direction: 'desc',
+  });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
 
   const { data: backendLoadGroups, isLoading, isError } = useLoadGroupList();
-  const LOAD_GROUPS = useMemo(() => (backendLoadGroups ?? []).map(toUiLoadGroup), [backendLoadGroups]);
+  const LOAD_GROUPS = useMemo(
+    () => (backendLoadGroups ?? []).map(toUiLoadGroup),
+    [backendLoadGroups],
+  );
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useDeleteLoadGroup();
@@ -91,13 +109,7 @@ export function LoadGroup() {
   const filtered = useMemo(() => {
     return LOAD_GROUPS.filter((g) => {
       if (!matchesQuery(query, [g.name, g.description])) return false;
-      if (dateRange?.from || dateRange?.to) {
-        const d = parseLastUpdated(g.lastUpdated);
-        if (d) {
-          if (dateRange.from && d < dateRange.from) return false;
-          if (dateRange.to && d > new Date(dateRange.to.getTime() + 86399999)) return false;
-        }
-      }
+      if (!matchesDateRange(g.lastUpdated, dateRange)) return false;
       return true;
     });
   }, [LOAD_GROUPS, query, dateRange]);
@@ -140,12 +152,19 @@ export function LoadGroup() {
             }
             search={{
               value: query,
-              onChange: (v) => { setQuery(v); setPage(1); },
+              onChange: (v) => {
+                setQuery(v);
+                setPage(1);
+              },
               placeholder: 'Search for load group',
             }}
             filters={
               dateRange?.from || dateRange?.to ? (
-                <DateRangeFilterChip label="Last updated" dateRange={dateRange} onClear={dateFilter.clear} />
+                <DateRangeFilterChip
+                  label="Last updated"
+                  dateRange={dateRange}
+                  onClear={dateFilter.clear}
+                />
               ) : undefined
             }
             pagination={{ page, totalPages, onChange: setPage }}

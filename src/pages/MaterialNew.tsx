@@ -15,7 +15,12 @@ import {
 } from '@/hooks/api/useMaterials';
 import { useMaterialSysconfig } from '@/hooks/api/useSysconfig';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
-import { MECH_PROP_TYPE_REFERENCE, toKeyValueList, toValueMap, keyValueSignature } from '@/lib/keyValueMapping';
+import {
+  MECH_PROP_TYPE_REFERENCE,
+  toKeyValueList,
+  toValueMap,
+  keyValueSignature,
+} from '@/lib/keyValueMapping';
 import {
   buildSysconfigSections,
   getMechPropTypeParameter,
@@ -29,14 +34,17 @@ import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 /** A fixed field's value is backend-locked to sysconfig's own `entry.value` rather than
  *  anything the material has saved — fills it in for any field that doesn't already have
  *  a saved value of its own. Already-present values (saved or in-progress) are untouched. */
-function withFixedDefaults(values: Record<string, string>, sections: FormSection[]): Record<string, string> {
+function withFixedDefaults(
+  values: Record<string, string>,
+  sections: FormSection[],
+): Record<string, string> {
   const next = { ...values };
   sections.forEach((section) =>
     section.fields.forEach((field) => {
       if (field.fixed && field.value !== undefined && next[field.name] === undefined) {
         next[field.name] = field.value;
       }
-    })
+    }),
   );
   return next;
 }
@@ -46,7 +54,9 @@ function withFixedDefaults(values: Record<string, string>, sections: FormSection
 function SysconfigLoadStatus({ isLoading, isError }: { isLoading: boolean; isError: boolean }) {
   return (
     <>
-      {isLoading && <p className="px-2 py-8 text-center text-[14px] text-[#6b7280]">Loading configuration…</p>}
+      {isLoading && (
+        <p className="px-2 py-8 text-center text-[14px] text-[#6b7280]">Loading configuration…</p>
+      )}
       {isError && (
         <p className="px-2 py-8 text-center text-[14px] text-[#dc2626]">
           Failed to load configuration from the server.
@@ -94,6 +104,10 @@ export function MaterialNew() {
   // doesn't flash "Loading material…" over the tab the user is actively filling in —
   // we already have its data locally; the background refetch is just React Query's habit.
   const [justCreatedId, setJustCreatedId] = useState<number | null>(null);
+  // Latest in-flight blur-autosave PUT, if any — the tab-switch refetch below awaits this
+  // first so it can't land in between the blur firing and its PUT resolving and overwrite
+  // the just-typed value with the pre-edit server snapshot.
+  const pendingSaveRef = useRef<Promise<unknown> | null>(null);
 
   const type = mechValues[MECH_PROP_TYPE_REFERENCE] ?? 'ud_ply';
 
@@ -103,25 +117,31 @@ export function MaterialNew() {
   const sysconfigQuery = useMaterialSysconfig(materialId);
   const typeParameter = useMemo(
     () => (sysconfigQuery.data ? getMechPropTypeParameter(sysconfigQuery.data) : undefined),
-    [sysconfigQuery.data]
+    [sysconfigQuery.data],
   );
   const typeEntry = useMemo(
     () => (sysconfigQuery.data ? getMechPropTypeEntry(sysconfigQuery.data) : undefined),
-    [sysconfigQuery.data]
+    [sysconfigQuery.data],
   );
   const mechanicalSections = useMemo(
     () =>
       sysconfigQuery.data
-        ? buildSysconfigSections(sysconfigQuery.data, sysconfigQuery.data.configuration.mechanical_properties)
+        ? buildSysconfigSections(
+            sysconfigQuery.data,
+            sysconfigQuery.data.configuration.mechanical_properties,
+          )
         : [],
-    [sysconfigQuery.data]
+    [sysconfigQuery.data],
   );
   const fatigueSections = useMemo(
     () =>
       sysconfigQuery.data
-        ? buildSysconfigSections(sysconfigQuery.data, sysconfigQuery.data.configuration.fatigue_properties)
+        ? buildSysconfigSections(
+            sysconfigQuery.data,
+            sysconfigQuery.data.configuration.fatigue_properties,
+          )
         : [],
-    [sysconfigQuery.data]
+    [sysconfigQuery.data],
   );
 
   // Seed fixed fields' sysconfig defaults as soon as sections load, same pattern as
@@ -163,7 +183,10 @@ export function MaterialNew() {
         mechUpdates[field.name] = resolved;
       }
     }
-    if (freshMech[MECH_PROP_TYPE_REFERENCE] !== undefined && mechValues[MECH_PROP_TYPE_REFERENCE] !== freshMech[MECH_PROP_TYPE_REFERENCE]) {
+    if (
+      freshMech[MECH_PROP_TYPE_REFERENCE] !== undefined &&
+      mechValues[MECH_PROP_TYPE_REFERENCE] !== freshMech[MECH_PROP_TYPE_REFERENCE]
+    ) {
       mechUpdates[MECH_PROP_TYPE_REFERENCE] = freshMech[MECH_PROP_TYPE_REFERENCE];
     }
 
@@ -246,7 +269,7 @@ export function MaterialNew() {
         mechValues: hydratedMech,
         fatigueValues: hydratedFatigue,
       });
-    }
+    },
   );
 
   // Switching into the Mechanical or Fatigue tab re-fetches GET /material/:id/ and fully
@@ -256,15 +279,26 @@ export function MaterialNew() {
   // anything editable has already autosaved by the time this runs.
   useEffect(() => {
     if (!isEditing || !hydrated || (activeTab !== 'mechanical' && activeTab !== 'fatigue')) return;
-    detailQuery.refetch().then((result) => {
-      const data = result.data;
-      if (!data) return;
-      const freshMech = withFixedDefaults(toValueMap(data.mechanical_properties), mechanicalSections);
-      const freshFatigue = withFixedDefaults(toValueMap(data.fatigue_properties), fatigueSections);
-      setMechValues(freshMech);
-      setFatigueValues(freshFatigue);
-      setBaseline((prev) => (prev ? { ...prev, mechValues: freshMech, fatigueValues: freshFatigue } : prev));
-    });
+    Promise.resolve(pendingSaveRef.current)
+      .catch(() => {})
+      .then(() => detailQuery.refetch())
+      .then((result) => {
+        const data = result.data;
+        if (!data) return;
+        const freshMech = withFixedDefaults(
+          toValueMap(data.mechanical_properties),
+          mechanicalSections,
+        );
+        const freshFatigue = withFixedDefaults(
+          toValueMap(data.fatigue_properties),
+          fatigueSections,
+        );
+        setMechValues(freshMech);
+        setFatigueValues(freshFatigue);
+        setBaseline((prev) =>
+          prev ? { ...prev, mechValues: freshMech, fatigueValues: freshFatigue } : prev,
+        );
+      });
     // Deliberately re-runs only on tab changes — detailQuery/mechanicalSections/fatigueSections
     // are read fresh via closure, and isEditing/hydrated never flip back after becoming true.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,7 +307,10 @@ export function MaterialNew() {
   // Duplicate: prefill a NEW (create-mode) form from another material's data, with
   // "_copy" appended to the name. No baseline needed — Save always does a plain POST here.
   const duplicateHydrated = useHydrateOnce(
-    !isEditing && Number.isFinite(duplicateSourceId) && !duplicateQuery.isFetching && !!duplicateQuery.data,
+    !isEditing &&
+      Number.isFinite(duplicateSourceId) &&
+      !duplicateQuery.isFetching &&
+      !!duplicateQuery.data,
     () => {
       const m = duplicateQuery.data!;
       setName(`${m.name}_copy`);
@@ -281,7 +318,7 @@ export function MaterialNew() {
       setDate(toDateInputValue(m.date));
       setMechValues(toValueMap(m.mechanical_properties));
       setFatigueValues(toValueMap(m.fatigue_properties));
-    }
+    },
   );
 
   // Title: editing shows the material name everywhere; creating shows "New material" on General.
@@ -302,7 +339,10 @@ export function MaterialNew() {
   const isSaved = isEditing;
   const generalValid = Boolean(name.trim() && description.trim() && date);
   const hasUnsavedGeneral =
-    !baseline || name !== baseline.name || date !== baseline.date || description !== baseline.description;
+    !baseline ||
+    name !== baseline.name ||
+    date !== baseline.date ||
+    description !== baseline.description;
   const creatingRef = useRef<Promise<number> | null>(null);
 
   // Creates the material (POSTing the current mechanical/fatigue defaults along with
@@ -344,18 +384,24 @@ export function MaterialNew() {
   }
 
   const generalSaved = generalValid && !hasUnsavedGeneral;
-  const generalStatus: SaveStatus = createMaterialMutation.isPending || updateGeneralMutation.isPending
-    ? 'saving'
-    : generalSaved
-      ? 'saved'
-      : 'not-saved';
+  const generalStatus: SaveStatus =
+    createMaterialMutation.isPending || updateGeneralMutation.isPending
+      ? 'saving'
+      : generalSaved
+        ? 'saved'
+        : 'not-saved';
 
   // Autosave the General tab once every required field is filled — fires when focus
   // leaves a field (blur) or the form itself (click-out), not on every keystroke. Gates
   // only on its own mutations (not the aggregate savePending) — otherwise a Mechanical/
   // Fatigue save still in flight (e.g. from handleTypeChange) would silently swallow this.
   async function handleGeneralBlur() {
-    if (!generalValid || !hasUnsavedGeneral || createMaterialMutation.isPending || updateGeneralMutation.isPending) {
+    if (
+      !generalValid ||
+      !hasUnsavedGeneral ||
+      createMaterialMutation.isPending ||
+      updateGeneralMutation.isPending
+    ) {
       return;
     }
     try {
@@ -375,18 +421,24 @@ export function MaterialNew() {
   async function handleTypeChange(newType: string) {
     setMechValues((prev) => ({ ...prev, [MECH_PROP_TYPE_REFERENCE]: newType }));
     if (!isEditing) return;
+    const savePromise = Promise.all([
+      // Same guard as handleGeneralBlur — never PUT general fields while a required
+      // one (e.g. Name) is empty.
+      generalValid ? saveGeneralFields() : Promise.resolve(materialId),
+      updateMechanicalMutation.mutateAsync({
+        payload: {
+          mechanical_properties: [{ reference: MECH_PROP_TYPE_REFERENCE, value: newType }],
+        },
+        typeChanged: true,
+      }),
+    ]);
+    pendingSaveRef.current = savePromise;
     try {
-      await Promise.all([
-        // Same guard as handleGeneralBlur — never PUT general fields while a required
-        // one (e.g. Name) is empty.
-        generalValid ? saveGeneralFields() : Promise.resolve(materialId),
-        updateMechanicalMutation.mutateAsync({
-          payload: { mechanical_properties: [{ reference: MECH_PROP_TYPE_REFERENCE, value: newType }] },
-          typeChanged: true,
-        }),
-      ]);
+      await savePromise;
       setBaseline((prev) =>
-        prev ? { ...prev, mechValues: { ...prev.mechValues, [MECH_PROP_TYPE_REFERENCE]: newType } } : prev
+        prev
+          ? { ...prev, mechValues: { ...prev.mechValues, [MECH_PROP_TYPE_REFERENCE]: newType } }
+          : prev,
       );
     } catch {
       // saveGeneralFields/updateMechanicalMutation's onError (global mutation cache) already toasts.
@@ -399,7 +451,8 @@ export function MaterialNew() {
   // fine to save, out-of-range data isn't.
   const mechanicalValid = isFormValid(mechanicalSections, mechValues);
   const mechanicalRangeValid = isFormRangeValid(mechanicalSections, mechValues);
-  const mechanicalUnsaved = keyValueSignature(mechValues) !== keyValueSignature(baseline?.mechValues ?? {});
+  const mechanicalUnsaved =
+    keyValueSignature(mechValues) !== keyValueSignature(baseline?.mechValues ?? {});
   const mechanicalSaved = mechanicalValid && !mechanicalUnsaved;
   const mechanicalStatus: SaveStatus = updateMechanicalMutation.isPending
     ? 'saving'
@@ -411,8 +464,12 @@ export function MaterialNew() {
   // filled — same PUT as before, just no longer gated on completeness.
   async function handleMechanicalBlur() {
     if (!mechanicalRangeValid || !mechanicalUnsaved || updateMechanicalMutation.isPending) return;
+    const savePromise = updateMechanicalMutation.mutateAsync({
+      payload: { mechanical_properties: toKeyValueList(mechValues) },
+    });
+    pendingSaveRef.current = savePromise;
     try {
-      await updateMechanicalMutation.mutateAsync({ payload: { mechanical_properties: toKeyValueList(mechValues) } });
+      await savePromise;
       setBaseline((prev) => (prev ? { ...prev, mechValues } : prev));
     } catch {
       // updateMechanicalMutation's onError (global mutation cache) already toasts.
@@ -423,7 +480,8 @@ export function MaterialNew() {
   // within its min/max — same structure as the Mechanical tab above.
   const fatigueValid = isFormValid(fatigueSections, fatigueValues);
   const fatigueRangeValid = isFormRangeValid(fatigueSections, fatigueValues);
-  const fatigueUnsaved = keyValueSignature(fatigueValues) !== keyValueSignature(baseline?.fatigueValues ?? {});
+  const fatigueUnsaved =
+    keyValueSignature(fatigueValues) !== keyValueSignature(baseline?.fatigueValues ?? {});
   const fatigueSaved = fatigueValid && !fatigueUnsaved;
   const fatigueStatus: SaveStatus = updateFatigueMutation.isPending
     ? 'saving'
@@ -435,8 +493,12 @@ export function MaterialNew() {
   // filled — same structure as Mechanical above.
   async function handleFatigueBlur() {
     if (!fatigueRangeValid || !fatigueUnsaved || updateFatigueMutation.isPending) return;
+    const savePromise = updateFatigueMutation.mutateAsync({
+      fatigue_properties: toKeyValueList(fatigueValues),
+    });
+    pendingSaveRef.current = savePromise;
     try {
-      await updateFatigueMutation.mutateAsync({ fatigue_properties: toKeyValueList(fatigueValues) });
+      await savePromise;
       setBaseline((prev) => (prev ? { ...prev, fatigueValues } : prev));
     } catch {
       // updateFatigueMutation's onError (global mutation cache) already toasts.
@@ -448,8 +510,10 @@ export function MaterialNew() {
     // an incomplete/blank draft has nothing to lose. Once it exists, any of the three
     // tabs' current values drifting from it (including an out-of-range edit that
     // never autosaved) is a real unsaved change.
-    const hasUnsavedChanges = Boolean(baseline) && (hasUnsavedGeneral || mechanicalUnsaved || fatigueUnsaved);
-    if (hasUnsavedChanges && !window.confirm('You have unsaved changes. Exit without saving?')) return;
+    const hasUnsavedChanges =
+      Boolean(baseline) && (hasUnsavedGeneral || mechanicalUnsaved || fatigueUnsaved);
+    if (hasUnsavedChanges && !window.confirm('You have unsaved changes. Exit without saving?'))
+      return;
     navigate(exitTarget);
   }
 
@@ -462,7 +526,9 @@ export function MaterialNew() {
         detailQuery.isFetching ||
         sysconfigQuery.isLoading ||
         sysconfigQuery.isFetching)) ||
-    (isDuplicating && !duplicateHydrated && (duplicateQuery.isLoading || duplicateQuery.isFetching));
+    (isDuplicating &&
+      !duplicateHydrated &&
+      (duplicateQuery.isLoading || duplicateQuery.isFetching));
   // Scoped to !hydrated so a later background sysconfig refetch failure (e.g. after a
   // blur-autosave PUT) doesn't blank out an already-loaded Mechanical/Fatigue tab — those
   // handle that case inline via their own sysconfigQuery.isError check further down.
@@ -530,7 +596,10 @@ export function MaterialNew() {
 
         {!showLoadingState && !showLoadErrorState && activeTab === 'mechanical' && (
           <>
-            <SysconfigLoadStatus isLoading={sysconfigQuery.isLoading} isError={sysconfigQuery.isError} />
+            <SysconfigLoadStatus
+              isLoading={sysconfigQuery.isLoading}
+              isError={sysconfigQuery.isError}
+            />
             {sysconfigQuery.data && (
               <PropertyFormTab
                 sections={mechanicalSections}
@@ -544,7 +613,10 @@ export function MaterialNew() {
 
         {!showLoadingState && !showLoadErrorState && activeTab === 'fatigue' && (
           <>
-            <SysconfigLoadStatus isLoading={sysconfigQuery.isLoading} isError={sysconfigQuery.isError} />
+            <SysconfigLoadStatus
+              isLoading={sysconfigQuery.isLoading}
+              isError={sysconfigQuery.isError}
+            />
             {sysconfigQuery.data && (
               <PropertyFormTab
                 sections={fatigueSections}
