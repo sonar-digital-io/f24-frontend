@@ -204,10 +204,6 @@ export function Home() {
                 title="Gas turbine blade templates"
                 description="With the new templates and calculation models you can design gas turbine blades faster in F24."
               />
-              <NewsCard
-                title="Spars in wind turbine blades"
-                description="From now on, you can define spars, add materials to them and use them in calculation."
-              />
             </div>
           </section>
         </div>

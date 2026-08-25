@@ -4,14 +4,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
 import { toast } from 'sonner';
 import { apiClient } from '@/api/client';
-import { FoldHorizontal, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { OccViewer } from '@/components/common/viewer/OccViewer';
 import { GeometryEditToolbar } from '@/components/geometry/GeometryEditToolbar';
 import { GeometryCreatePanel } from '@/components/geometry/GeometryCreatePanel';
 import { GeometryGlobalPropertiesPanel } from '@/components/geometry/GeometryGlobalPropertiesPanel';
 import { GeometryResultPanel } from '@/components/geometry/GeometryResultPanel';
-import { SparsSection } from '@/components/geometry/SparsSection';
 import { ProfileDistributionPanel } from '@/components/geometry/ProfileDistributionPanel';
 import { ProfilesPanel } from '@/components/geometry/ProfilesPanel';
 import { StackingPanel } from '@/components/geometry/StackingPanel';
@@ -49,8 +48,7 @@ const PANEL_WIDTH_WIDE = 'w-[924px] max-w-[calc(100vw-2rem)]';
 function getPanelWidthClass(
   activeTab: string,
   profileFolded: boolean,
-  stackingFolded: boolean,
-  sparsFolded: boolean
+  stackingFolded: boolean
 ): string {
   switch (activeTab) {
     case 'create':
@@ -61,8 +59,8 @@ function getPanelWidthClass(
       return 'w-[404px] max-w-[calc(100vw-2rem)]';
     case 'stacking':
       return stackingFolded ? PANEL_WIDTH_NARROW : PANEL_WIDTH_WIDE;
-    case 'spars':
-      return sparsFolded ? PANEL_WIDTH_NARROW : PANEL_WIDTH_WIDE;
+    case '3d-view':
+      return 'w-[404px] max-w-[calc(100vw-2rem)]';
     default:
       return 'w-[280px]';
   }
@@ -103,7 +101,6 @@ export function GeometryEdit() {
   const [renderMode, setRenderMode] = useState<RenderMode>('wireframe');
   const [profileFolded, setProfileFolded] = useState(false);
   const [stackingFolded, setStackingFolded] = useState(true);
-  const [sparsFolded, setSparsFolded] = useState(true);
   // Global properties — field list/labels/constraints come from GET /sysconfig/'s
   // configuration.geometry_settings; values are keyed by backend `reference` (e.g.
   // "nominal_radius"), sent via PUT /geometry/:id/settings/ as key/value pairs, and
@@ -165,7 +162,7 @@ export function GeometryEdit() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew]);
 
-  // Re-fetch GET /geometry/:id/ on every tab switch — Stacking/Spars' availability
+  // Re-fetch GET /geometry/:id/ on every tab switch — Stacking/3D view's availability
   // (see `profilesSaved` below) depends on its nested `profiles` array staying
   // current, e.g. right after a profile-generator run persists profiles server-side.
   useEffect(() => {
@@ -173,7 +170,7 @@ export function GeometryEdit() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  // Keep the Profiles tab's list (and Stacking/Spars' gating) in sync with the backend's
+  // Keep the Profiles tab's list (and Stacking/3D view's gating) in sync with the backend's
   // nested `profiles`/`edges` arrays on every GET /geometry/:id/ — not hydrate-once, since
   // the effect above refetches repeatedly and both can also be created by other means
   // (e.g. profiles via the profile-generator — see handleProfileGeneratorCommit/
@@ -312,7 +309,7 @@ export function GeometryEdit() {
         payload: { profile_generator_parameters: params },
       });
       // Persist the generated profiles — same shape as the write payload (no id/file) —
-      // so they show up on the Profiles tab and unlock Stacking/Spars.
+      // so they show up on the Profiles tab and unlock Stacking/3D view.
       const saved = await updateProfilesMutation.mutateAsync({ profiles: generated.profiles });
       setHydratedProfiles(saved.profiles.map(toUiProfile));
       setProfilesUpdated(true);
@@ -324,7 +321,7 @@ export function GeometryEdit() {
   async function handleSaveEdges(edges: GeometryEdgeInput[]) {
     const result = await updateEdgesMutation.mutateAsync({ edges });
     // Set immediately from the PUT's own response — don't wait for the next tab-switch's
-    // GET /geometry/:id/ refetch to catch up, which would leave Spars gated for one extra
+    // GET /geometry/:id/ refetch to catch up, which would leave 3D view gated for one extra
     // tab switch after a successful save. Still refetched below for the endpoint itself.
     setEdgesAvailable(result.edges.length > 0);
     await detailQuery.refetch();
@@ -371,7 +368,7 @@ export function GeometryEdit() {
 
   // If this geometry already has a previously-generated result, show it as
   // soon as the page loads instead of leaving the viewer empty until the user
-  // revisits Spars and clicks Generate again. Silent on failure (most likely
+  // revisits 3D view and clicks Generate again. Silent on failure (most likely
   // no result has been generated yet, which isn't an error worth a toast) —
   // the manual "Generate result" button remains the way to surface real errors.
   useEffect(() => {
@@ -390,7 +387,7 @@ export function GeometryEdit() {
         setResultStatus('ready');
       } catch {
         // No result generated yet — leave the empty viewer for the user to
-        // trigger generation manually from the Spars tab.
+        // trigger generation manually from the 3D view tab.
       }
     })();
     return () => {
@@ -431,7 +428,7 @@ export function GeometryEdit() {
         {/* Floating properties panel (top-left, gap below toolbar matches gap above tab pill = 8px).
             Width depends on the active tab. z-30 so it sits above the render toggle (z-20). */}
         <aside
-          className={`absolute left-4 top-[52px] z-30 ${getPanelWidthClass(activeTab, profileFolded, stackingFolded, sparsFolded)}`}
+          className={`absolute left-4 top-[52px] z-30 ${getPanelWidthClass(activeTab, profileFolded, stackingFolded)}`}
         >
           {activeTab === 'create' && !isNew && !hydrated && (detailQuery.isLoading || detailQuery.isFetching) && (
             <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
@@ -502,37 +499,20 @@ export function GeometryEdit() {
               saveError={updateEdgesMutation.isError}
             />
           )}
-          {activeTab === 'spars' && (
-            <div className="flex max-h-[calc(100vh-128px)] w-full flex-col overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
-              <div className="flex items-center justify-between gap-4 p-6 pb-4">
-                <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">Spars</p>
-                <button
-                  type="button"
-                  onClick={() => setSparsFolded((f) => !f)}
-                  aria-pressed={sparsFolded}
-                  aria-label={sparsFolded ? 'Expand panel' : 'Collapse panel'}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
-                >
-                  <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
-                </button>
-              </div>
-              <div className="flex flex-col gap-4 px-6 pb-6">
-                <SparsSection geometryId={geometryId} folded={sparsFolded} />
-                <GeometryResultPanel
-                  onGenerate={handleGenerateResult}
-                  requested={resultRequested}
-                  status={resultStatus}
-                  error={resultError}
-                />
-              </div>
-            </div>
+          {activeTab === '3d-view' && (
+            <GeometryResultPanel
+              onGenerate={handleGenerateResult}
+              requested={resultRequested}
+              status={resultStatus}
+              error={resultError}
+            />
           )}
           {activeTab !== 'create' &&
             activeTab !== 'global-properties' &&
             activeTab !== 'profile-distribution' &&
             activeTab !== 'profiles' &&
             activeTab !== 'stacking' &&
-            activeTab !== 'spars' && (
+            activeTab !== '3d-view' && (
             <div className="flex flex-col items-center justify-center gap-2 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
               <p className="text-[14px] font-semibold text-[#0a0a0a]">
                 {activeTab.replace('-', ' ').replace(/^./, (c) => c.toUpperCase())}

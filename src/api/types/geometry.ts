@@ -81,8 +81,8 @@ export interface GeometryProfilesWritePayload {
 }
 
 /** GET /geometry/:id/ — the list shape plus whatever nested sub-resources the
- * backend includes inline (settings/profiles confirmed; edges/spars not typed
- * here yet — their edge_type/spar shape conventions aren't established). */
+ * backend includes inline (settings/profiles confirmed; edges' edge_type shape
+ * conventions aren't established yet). */
 export interface GeometryDetail extends Geometry {
   settings?: KeyValuePair[];
   profiles?: GeometryProfile[];
@@ -99,29 +99,6 @@ export interface GeometryProfilePreviewPayload {
 export interface GeometryProfileQuery {
   resolution?: number;
   standard?: boolean;
-}
-
-/**
- * A single spar running between two profiles, each end carrying an
- * upper/lower chordwise position (0 = leading edge, 1 = trailing edge).
- * Field names are a best guess — the backend's exact spar shape isn't
- * documented (see GeometrySparsPayload); adjust here if it turns out
- * different, the rest of the app only depends on this interface.
- */
-export interface GeometrySpar {
-  id?: number;
-  start_profile: number;
-  start_upper_position: number;
-  start_lower_position: number;
-  end_profile: number;
-  end_upper_position: number;
-  end_lower_position: number;
-}
-
-export interface GeometrySparsPayload {
-  twist: boolean;
-  parallel: boolean;
-  spars: GeometrySpar[];
 }
 
 export interface GeometryTopView {

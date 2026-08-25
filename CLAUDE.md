@@ -130,7 +130,7 @@ src/
 | `/material` | `Material` | Material data table accordion-szerű expand-dal — Figma 576:19313 |
 | `/material/new` | `MaterialNew` | Új material létrehozás 3 tab-bal — Figma 584:15600 |
 | `/geometry` | `Geometry` | Geometry list + grid view toggle — Figma 600:22786 / 600:22858 |
-| `/geometry/:id` | `GeometryEdit` | Geometry edit full-bleed OccViewer canvas-szal. Sub-tabs: Create geometry (csak `/geometry/new`), Global properties (596:22661), Profile distribution (596:19816), Profiles (596:19631), Stacking (596:20399), Spars (placeholder) |
+| `/geometry/:id` | `GeometryEdit` | Geometry edit full-bleed OccViewer canvas-szal. Sub-tabs: Create geometry (csak `/geometry/new`), Global properties (596:22661), Profile distribution (596:19816), Profiles (596:19631), Stacking (596:20399), 3D view (result generálás) |
 | `/geometry/new` | `GeometryEdit` | Új geometria inline létrehozás (a `/geometry?new=1` link ide redirectel) |
 | `/layup` | `Layup` | Layup list page (table) — Figma 600:23689 |
 | `/layup/new` | `LayupNew` | New layup (General + Layup building) — Figma 600:27124 / 600:24328 |

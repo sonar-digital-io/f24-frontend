@@ -11,7 +11,6 @@ import type {
   GeometryProfilesWritePayload,
   GeometryProfilePreviewPayload,
   GeometryProfileQuery,
-  GeometrySparsPayload,
   GeometryTopView,
   ProfileGeneratorPayload,
   ProfileGeneratorResponse,
@@ -86,21 +85,6 @@ export async function getGeometryProfile(geometryId: number, profileId: number, 
 
 export async function getGeometryResult(geometryId: number): Promise<Blob> {
   const { data } = await apiClient.get(`/geometry/${geometryId}/result/`, { responseType: 'blob' });
-  return data;
-}
-
-export async function getGeometrySpars(geometryId: number): Promise<GeometrySparsPayload> {
-  const { data } = await apiClient.get<GeometrySparsPayload>(`/geometry/${geometryId}/spars/`);
-  return data;
-}
-
-export async function updateGeometrySpars(geometryId: number, payload: GeometrySparsPayload): Promise<GeometrySparsPayload> {
-  const { data } = await apiClient.put<GeometrySparsPayload>(`/geometry/${geometryId}/spars/`, payload);
-  return data;
-}
-
-export async function getGeometrySparsPreview(geometryId: number): Promise<Blob> {
-  const { data } = await apiClient.get(`/geometry/${geometryId}/spars/preview/`, { responseType: 'blob' });
   return data;
 }
 

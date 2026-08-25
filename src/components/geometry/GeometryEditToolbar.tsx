@@ -7,22 +7,22 @@ const TABS = [
   { value: 'profile-distribution', label: 'Profile distribution' },
   { value: 'profiles', label: 'Profiles' },
   { value: 'stacking', label: 'Stacking' },
-  { value: 'spars', label: 'Spars' },
+  { value: '3d-view', label: '3D view' },
 ];
 
 /** These tabs build on the global properties (e.g. nominal/root radius), so they stay
  *  unreachable until that tab's mandatory fields are filled in and autosaved. */
-const GATED_UNTIL_GLOBAL_PROPERTIES_SAVED = ['profile-distribution', 'profiles', 'stacking', 'spars'];
+const GATED_UNTIL_GLOBAL_PROPERTIES_SAVED = ['profile-distribution', 'profiles', 'stacking', '3d-view'];
 
 /** These tabs build on the profile list, so they stay unreachable until PUT
  *  /geometry/:id/profiles/ has saved at least one profile (or GET /geometry/:id/
  *  already had a non-empty nested `profiles` array). */
-const GATED_UNTIL_PROFILES_SAVED = ['stacking', 'spars'];
+const GATED_UNTIL_PROFILES_SAVED = ['stacking', '3d-view'];
 
-/** Spars builds on the stacking edges, so it stays unreachable until PUT
- *  /geometry/:id/edges/ has saved at least one edge (or GET /geometry/:id/
+/** Result generation builds on the stacking edges, so 3D view stays unreachable
+ *  until PUT /geometry/:id/edges/ has saved at least one edge (or GET /geometry/:id/
  *  already had a non-empty nested `edges` array). */
-const GATED_UNTIL_EDGES_SAVED = ['spars'];
+const GATED_UNTIL_EDGES_SAVED = ['3d-view'];
 
 interface GeometryEditToolbarProps {
   activeTab: string;

@@ -8,7 +8,6 @@ import type {
   GeometryProfilesWritePayload,
   GeometryProfilePreviewPayload,
   GeometryProfileQuery,
-  GeometrySparsPayload,
   ProfileGeneratorPayload,
 } from '@/api/types/geometry';
 
@@ -22,8 +21,6 @@ export const geometryKeys = {
     ['geometry', 'profile', geometryId, profileId, query] as const,
   profilePreview: (geometryId: number, profile?: GeometryProfile) =>
     ['geometry', 'profile-preview', geometryId, profile?.id, profile?.position, profile?.type, JSON.stringify(profile?.parameters)] as const,
-  spars: (geometryId: number) => ['geometry', 'spars', geometryId] as const,
-  sparsPreview: (geometryId: number) => ['geometry', 'spars-preview', geometryId] as const,
   topView: (geometryId: number) => ['geometry', 'top-view', geometryId] as const,
 };
 
@@ -176,30 +173,6 @@ export function useGeometryProfile(geometryId: number, profileId: number, query?
 export function useGeometryResult() {
   return useMutation({
     mutationFn: (geometryId: number) => geometryApi.getGeometryResult(geometryId),
-  });
-}
-
-export function useGeometrySpars(geometryId: number) {
-  return useQuery({
-    queryKey: geometryKeys.spars(geometryId),
-    queryFn: () => geometryApi.getGeometrySpars(geometryId),
-    enabled: Number.isFinite(geometryId),
-  });
-}
-
-export function useUpdateGeometrySpars(geometryId: number) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: GeometrySparsPayload) => geometryApi.updateGeometrySpars(geometryId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: geometryKeys.spars(geometryId) }),
-  });
-}
-
-export function useGeometrySparsPreview(geometryId: number) {
-  return useQuery({
-    queryKey: geometryKeys.sparsPreview(geometryId),
-    queryFn: () => geometryApi.getGeometrySparsPreview(geometryId),
-    enabled: Number.isFinite(geometryId),
   });
 }
 

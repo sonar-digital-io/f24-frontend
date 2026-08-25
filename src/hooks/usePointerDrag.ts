@@ -1,9 +1,9 @@
 import { useState, type PointerEvent } from 'react';
 
 /**
- * Which-handle-is-being-dragged state machine shared by the SVG profile
- * charts (`TransversalProfileBoundaryPopover`, `SparProfileChart`): pointer
- * capture on drag start, cleared (best-effort) on drag end/cancel.
+ * Which-handle-is-being-dragged state machine used by SVG profile charts
+ * (e.g. `TransversalProfileBoundaryPopover`): pointer capture on drag start,
+ * cleared (best-effort) on drag end/cancel.
  */
 export function usePointerDrag<T extends string>() {
   const [dragging, setDragging] = useState<T | null>(null);
