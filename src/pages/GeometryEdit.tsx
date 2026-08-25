@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
 import { toast } from 'sonner';
 import { apiClient } from '@/api/client';
 import { FoldHorizontal, Settings } from 'lucide-react';
@@ -70,6 +71,7 @@ function getPanelWidthClass(
 export function GeometryEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const exitTarget = useExitEditModeTarget('/geometry');
   const [searchParams] = useSearchParams();
   const isNew = id === 'new';
   const geometryId = isNew ? NaN : Number(id);
@@ -398,7 +400,7 @@ export function GeometryEdit() {
   }, [isNew, hydrated, geometryId]);
 
   function handleExit() {
-    navigate('/geometry');
+    navigate(exitTarget);
   }
 
   return (

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Tip } from '@/components/common/list/Tip';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
+import { formatDateTime } from '@/lib/utils';
 import { type Calculation, type CalculationStatus } from '@/data/calculations';
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -176,13 +177,13 @@ export function CalculationRow({ item }: CalculationRowProps) {
       <td className="w-[260px] px-3 py-4 align-top text-[14px] font-medium leading-5 text-[#0a0a0a]">
         {item.name}
       </td>
+      <td className="px-3 py-4 align-top text-[14px] leading-5 text-[#6b7280]">{item.description}</td>
       <td className="w-[180px] px-3 py-4 align-top">
         <StatusBadge status={item.status} timestamp={item.timestamp} />
       </td>
       <td className="w-[200px] px-3 py-4 align-top text-[14px] leading-5 text-[#6b7280]">
-        {item.timestamp || '–'}
+        {formatDateTime(item.lastUpdated)}
       </td>
-      <td className="px-3 py-4 align-top text-[14px] leading-5 text-[#6b7280]">{item.description}</td>
       <td className="w-[148px] px-3 py-4 align-top" onClick={(e) => e.stopPropagation()}>
         <RowActions item={item} />
       </td>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
 import { Input } from '@/components/ui/input';
@@ -57,6 +58,7 @@ function RadioGroup({ value, onChange }: RadioGroupProps) {
 
 export function LayupNew() {
   const navigate = useNavigate();
+  const exitTarget = useExitEditModeTarget('/layup');
   const { id } = useParams<{ id: string }>();
   const existing = id ? LAYUPS.find((l) => l.id === id) : undefined;
 
@@ -88,7 +90,7 @@ export function LayupNew() {
     } else if (name.trim()) {
       createLayup(name, description);
     }
-    navigate('/layup');
+    navigate(exitTarget);
   }
 
   return (

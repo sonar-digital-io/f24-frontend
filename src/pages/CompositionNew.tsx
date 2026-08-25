@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
 import { toast } from 'sonner';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { CompositionEditToolbar, type CompositionTab } from '@/components/composition/CompositionEditToolbar';
@@ -35,6 +36,7 @@ import { geometryKeys, useGeometryTopView } from '@/hooks/api/useGeometry';
 
 export function CompositionNew() {
   const navigate = useNavigate();
+  const exitTarget = useExitEditModeTarget('/composition');
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const isEditing = Boolean(id);
@@ -375,7 +377,7 @@ export function CompositionNew() {
   }
 
   function handleExit() {
-    navigate('/composition');
+    navigate(exitTarget);
   }
 
   function addUpper() {

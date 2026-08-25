@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
@@ -26,6 +27,7 @@ const LOAD_GROUP_TABS = [
 
 export function LoadGroupNew() {
   const navigate = useNavigate();
+  const exitTarget = useExitEditModeTarget('/load-group');
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const isNew = !id || id === 'new';
@@ -187,7 +189,7 @@ export function LoadGroupNew() {
   }, [name, description, date, isNew, baseline]);
 
   function handleExit() {
-    navigate('/load-group');
+    navigate(exitTarget);
   }
 
   // ── Toolbar save-status indicator, per tab — every tab autosaves, so this
