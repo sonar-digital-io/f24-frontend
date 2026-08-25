@@ -158,8 +158,8 @@ export function computeProfilesBoundingRect(profiles: ControlPoint[][], paddingR
 /**
  * Linearly interpolates a sampled edge curve's y at a given x — used to find
  * where the leading/trailing edge sits at an arbitrary spanwise position
- * (e.g. a spar's profile position) instead of only at the sampled points
- * themselves. Points must be sorted by x ascending. Falls back to the
+ * instead of only at the sampled points themselves. Points must be sorted
+ * by x ascending. Falls back to the
  * nearest endpoint's y when x is outside the sampled range.
  */
 export function interpolateEdgeY(points: ControlPoint[], x: number): number {

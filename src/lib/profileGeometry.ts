@@ -1,7 +1,7 @@
 import type { ControlPoint } from '@/types';
 
 /**
- * A profile's "position" (as sent to/from the spars endpoint) is a global
+ * A profile's "position" is a global
  * arc-length fraction along its ENTIRE closed 2D contour — 0 at the first
  * sampled point (the trailing edge), increasing around the upper surface,
  * reaching the leading-edge (minimum-x) vertex at some profile-specific
@@ -69,29 +69,6 @@ export function arcFractionNearestTo(points: [number, number][], target: Control
   return bestT;
 }
 
-/**
- * The arc-length fraction where the contour crosses y = 0 near the leading
- * edge — the boundary between "upper" (y >= 0) and "lower" (y < 0)
- * positions. Verified against real profile data: for one profile this comes
- * out to ~0.551165, not the leading edge's minimum-x vertex (~0.53 for that
- * same profile) — the two are close but not the same point, so this must be
- * derived from the actual zero-crossing, per profile, not assumed as 0.5.
- */
-export function leadingEdgeFraction(points: [number, number][]): number {
-  const pts = toControlPoints(points);
-  if (pts.length === 0) return 0.5;
-  const fracs = arcLengthFractions(pts);
-  for (let i = 1; i < pts.length; i++) {
-    const prev = pts[i - 1];
-    const cur = pts[i];
-    if (prev.y >= 0 && cur.y < 0) {
-      const t = prev.y === cur.y ? 0 : prev.y / (prev.y - cur.y);
-      return fracs[i - 1] + (fracs[i] - fracs[i - 1]) * t;
-    }
-  }
-  return 0.5;
-}
-
 export interface ProfileDomain {
   domainXMin: number;
   domainXMax: number;
@@ -117,18 +94,4 @@ export function profileDomainFromPoints(points: [number, number][]): ProfileDoma
     domainYMin: yMin - yPad,
     domainYMax: yMax + yPad,
   };
-}
-
-/** Chordwise fraction (0 = leading edge / min x, 1 = trailing edge / max x)
- *  of a local profile-space x — used to place a spar point on the main
- *  spanwise canvas by interpolating between the leading/trailing edge at
- *  that profile's span position (which only knows chordwise position, not
- *  arc-length around the contour). */
-export function chordFractionForLocalX(points: [number, number][], localX: number): number {
-  if (points.length === 0) return 0;
-  const xs = points.map(([x]) => x);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  if (maxX === minX) return 0;
-  return Math.max(0, Math.min(1, (localX - minX) / (maxX - minX)));
 }

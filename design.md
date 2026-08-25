@@ -354,7 +354,7 @@ Figma: `600:22786` (list), `600:22858` (grid)
 
 ### `GeometryEdit` (`src/pages/GeometryEdit.tsx`)
 
-Full-bleed 3D canvas + floating overlays. 5 tab: Global properties, Profile distribution, Profiles, Stacking, Spars.
+Full-bleed 3D canvas + floating overlays. 5 tab: Global properties, Profile distribution, Profiles, Stacking, 3D view.
 
 - `BladeScene` `absolute inset-0` (canvas háttér)
 - Sub-toolbar `absolute inset-x-0 top-0 z-30 h-[52px]` — **transparent háttér** (canvas látszik mögötte)
@@ -673,7 +673,7 @@ Click a sidebar item-en → `window.scrollTo({ top: targetY - 100, behavior: 'sm
 | `/material` | `Material` | Data table accordion-szerű soros expand-dal (Figma 576:19313) |
 | `/material/new` | `MaterialNew` | 3-tab edit (Figma 584:15600 / 596:2160 / 584:15789) |
 | `/geometry` | `Geometry` | List + grid view toggle (Figma 600:22786 / 600:22858) |
-| `/geometry/:id` | `GeometryEdit` | Full-bleed Three.js + floating panel. Tabs: Global properties / Profile distribution / Profiles / Stacking / Spars (Figma 596:22661 + 596:19816 + 596:19631 + 596:20399) |
+| `/geometry/:id` | `GeometryEdit` | Full-bleed Three.js + floating panel. Tabs: Global properties / Profile distribution / Profiles / Stacking / 3D view (Figma 596:22661 + 596:19816 + 596:19631 + 596:20399) |
 | `/layup` | `Layup` | Layup list page (table) — Figma 600:23689 |
 | `/layup/new` | `LayupNew` | New layup edit, 2 tabs (General + Layup building) — Figma 600:27124 + 600:24328 |
 | `/composition` | `Composition` | Composition list page (table) — Figma 600:27699 |

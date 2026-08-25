@@ -5,7 +5,7 @@ interface GeometryResultPanelProps {
   error: string | null;
 }
 
-/** "Spars" tab panel — currently just the result-generation trigger + error state. */
+/** "3D view" tab panel — currently just the result-generation trigger + error state. */
 export function GeometryResultPanel({ onGenerate, requested, status, error }: GeometryResultPanelProps) {
   return (
     <div className="flex w-full max-w-[404px] flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
