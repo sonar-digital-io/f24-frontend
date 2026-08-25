@@ -64,6 +64,18 @@ export function niceStep(range: number, targetTicks = 8): number {
   return nice * mag;
 }
 
+/**
+ * Widens `step` (if needed) to a "nice" step so that plotting `[min, max]`
+ * with it never draws more than `maxTicks` gridlines. Callers sometimes pass
+ * a fixed step for a range that's user-editable (e.g. chart Y bounds) — once
+ * the range grows, that fixed step alone can flood the chart with gridlines.
+ */
+export function capStepForTicks(min: number, max: number, step: number, maxTicks = 10): number {
+  if (!(max > min) || !(step > 0)) return step;
+  const range = max - min;
+  return range / step <= maxTicks ? step : niceStep(range, maxTicks);
+}
+
 /** SVG `<polygon points="...">` string for a set of data points, mapped through `dataToPx`. */
 export function pointsToPolygonString(
   points: ControlPoint[],

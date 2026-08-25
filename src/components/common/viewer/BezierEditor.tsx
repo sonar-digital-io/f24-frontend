@@ -18,6 +18,7 @@ import {
   clamp,
   computeTicks,
   decimalsForStep,
+  capStepForTicks,
   catmullRomPath,
 } from '@/lib/bezierMath';
 
@@ -60,6 +61,7 @@ export interface BezierEditorProps {
   /** Fewest points the curve may shrink to via double-click delete — callers
    *  vary (e.g. 2 for load limits, more where a curve needs extra shape). */
   minPoints?: number;
+  xUnit?: string;
   yUnit?: string;
   className?: string;
 }
@@ -77,6 +79,7 @@ export function BezierEditor({
   rootX = 0.05,
   showRootIndicator = true,
   minPoints = 2,
+  xUnit = '',
   yUnit = '',
   className,
 }: BezierEditorProps) {
@@ -133,10 +136,14 @@ export function BezierEditor({
     );
   }
 
-  const yTicks = computeTicks(yMin, yMax, yStep);
-  const xTicks = computeTicks(xMin, xMax, xStep);
-  const yDecimals = decimalsForStep(yStep);
-  const xDecimals = decimalsForStep(xStep);
+  // Cap gridlines at 10 per axis — a caller-fixed step (e.g. a user-editable
+  // Y range) can otherwise flood the chart once the range grows.
+  const effectiveYStep = capStepForTicks(yMin, yMax, yStep);
+  const effectiveXStep = capStepForTicks(xMin, xMax, xStep);
+  const yTicks = computeTicks(yMin, yMax, effectiveYStep);
+  const xTicks = computeTicks(xMin, xMax, effectiveXStep);
+  const yDecimals = decimalsForStep(effectiveYStep);
+  const xDecimals = decimalsForStep(effectiveXStep);
   const rootPx = dataToPx({ x: rootX, y: 0 }, xMin, xMax, yMin, yMax).cx;
 
   return (
@@ -169,6 +176,12 @@ export function BezierEditor({
         {yUnit && (
           <text x="6" y="12" fontSize="10" fill="#6b7280">
             [{yUnit}]
+          </text>
+        )}
+
+        {xUnit && (
+          <text x={VB_WIDTH - PAD_RIGHT} y={VB_HEIGHT - 4} fontSize="10" fill="#6b7280" textAnchor="end">
+            [{xUnit}]
           </text>
         )}
 
