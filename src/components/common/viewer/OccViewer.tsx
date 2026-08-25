@@ -59,6 +59,12 @@ export interface OccViewerProps {
    *  the solid object — unlike `wireframe`, this doesn't hide the solid fill underneath
    *  it. Defaults to false. */
   showWebView?: boolean;
+  /** Skips the by-name blade/layup check for a 3MF result and treats every part as the
+   *  blade — for callers with no blade/layup distinction at all (the plain Geometry page,
+   *  whose single object is named after the geometry itself, e.g. "wing"). Leave unset for
+   *  Composition preview, where a part actually needs telling apart from the blade shell.
+   *  Defaults to false. Ignored for STL/IGES, which have no per-part names to begin with. */
+  treatAsBlade?: boolean;
 }
 
 export function OccViewer({
@@ -71,6 +77,7 @@ export function OccViewer({
   showBlade = true,
   showLayups = true,
   showWebView = false,
+  treatAsBlade = false,
 }: OccViewerProps) {
   const containerRef  = useRef<HTMLDivElement>(null);
   const meshesRef     = useRef<THREE.Mesh[]>([]);
@@ -301,8 +308,13 @@ export function OccViewer({
         // Composition preview 3MF packages name each object (e.g. "Blade",
         // per-layup names) — group by that so callers can toggle visibility,
         // and so layups render in a visibly different color from the blade
-        // shell they're mapped onto instead of blending into it.
-        const isBlade = /blade/i.test(obj.name);
+        // shell they're mapped onto instead of blending into it. The plain
+        // Geometry page has no such distinction (its one object is named after
+        // the geometry itself, e.g. "wing") — `treatAsBlade` opts it out of the
+        // by-name check entirely instead of guessing from the part count, which
+        // would wrongly relabel an actual composition layup as the blade
+        // whenever it happens to be the only part in that particular preview.
+        const isBlade = treatAsBlade || /blade/i.test(obj.name);
 
         const mat = new THREE.MeshPhysicalMaterial({
           color: isBlade ? 0x94a3b8 : 0xf59e0b,
