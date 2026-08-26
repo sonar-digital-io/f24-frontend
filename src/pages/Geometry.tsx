@@ -17,12 +17,10 @@ import {
   sortItems,
   toggleSort,
 } from '@/lib/listTable';
-import type { SortState, ViewMode, GeometrySortKey } from '@/types';
-import { ViewModeToggle } from '@/components/common/list/ViewModeToggle';
+import type { SortState, GeometrySortKey } from '@/types';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { formatDateTime } from '@/lib/utils';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
-import { GeometryCard } from '@/components/common/card/GeometryCard';
 import { type Geometry as GeometryItem, type BladeType } from '@/data/geometries';
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
 import { useDeleteGeometry, useGeometryList } from '@/hooks/api/useGeometry';
@@ -47,7 +45,6 @@ function toUiGeometry(g: BackendGeometry): GeometryItem {
 export function Geometry() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [view, setView] = useState<ViewMode>('list');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortState<GeometrySortKey>>({
     key: 'lastUpdated',
@@ -145,84 +142,62 @@ export function Geometry() {
                 />
               ) : undefined
             }
-            trailing={<ViewModeToggle value={view} onChange={setView} />}
             pagination={{ page, totalPages, onChange: setPage }}
           >
-            {/* List view */}
-            {view === 'list' && (
-              <ListTable>
-                <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
-                <ListTableBody
-                  colSpan={4}
-                  isLoading={isLoading}
-                  isError={isError}
-                  loadingLabel="Loading geometries…"
-                  errorLabel="Failed to load geometries from the server."
-                  rows={pageRows}
-                  renderRow={(g) => (
-                    <tr
-                      key={g.id}
-                      {...rowInteractionProps(() => navigate(`/geometry/${g.id}`))}
-                      className="group cursor-pointer border-b border-[#e5e7eb] bg-white hover:bg-[#f9fafb]"
-                    >
-                      <td className="px-3 py-4 text-[14px] font-medium leading-5 text-[#0a0a0a]">
-                        {g.name}
-                      </td>
-                      <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-                        {g.description}
-                      </td>
-                      <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-                        {formatDateTime(g.lastUpdated)}
-                      </td>
-                      <td className="px-3 py-4">
-                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                          <RowIconButton
-                            label="Edit geometry"
-                            icon={Pencil}
-                            onClick={() => navigate(`/geometry/${g.id}`)}
-                          />
-                          <RowIconButton
-                            label="Export geometry"
-                            icon={Download}
-                            onClick={() => {}}
-                          />
-                          <RowIconButton
-                            label="Duplicate geometry"
-                            icon={Copy}
-                            onClick={() => navigate(`/geometry/new?duplicateFrom=${g.id}`)}
-                          />
-                          <RowIconButton
-                            label="Delete geometry"
-                            icon={Trash2}
-                            onClick={() => setPendingDelete({ id: g.id, name: g.name })}
-                            variant="danger"
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  emptyLabel="No geometries match your search."
-                />
-              </ListTable>
-            )}
-
-            {/* Grid view */}
-            {view === 'grid' && (
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                {pageRows.map((g) => (
-                  <GeometryCard
+            <ListTable>
+              <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
+              <ListTableBody
+                colSpan={4}
+                isLoading={isLoading}
+                isError={isError}
+                loadingLabel="Loading geometries…"
+                errorLabel="Failed to load geometries from the server."
+                rows={pageRows}
+                renderRow={(g) => (
+                  <tr
                     key={g.id}
-                    geometry={g}
-                    onClick={() => navigate(`/geometry/${g.id}`)}
-                  />
-                ))}
-                {pageRows.length === 0 && (
-                  <div className="col-span-full py-8 text-center text-[14px] text-[#6b7280]">
-                    No geometries match your search.
-                  </div>
+                    {...rowInteractionProps(() => navigate(`/geometry/${g.id}`))}
+                    className="group cursor-pointer border-b border-[#e5e7eb] bg-white hover:bg-[#f9fafb]"
+                  >
+                    <td className="px-3 py-4 text-[14px] font-medium leading-5 text-[#0a0a0a]">
+                      {g.name}
+                    </td>
+                    <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
+                      {g.description}
+                    </td>
+                    <td className="px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
+                      {formatDateTime(g.lastUpdated)}
+                    </td>
+                    <td className="px-3 py-4">
+                      <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <RowIconButton
+                          label="Edit geometry"
+                          icon={Pencil}
+                          onClick={() => navigate(`/geometry/${g.id}`)}
+                        />
+                        <RowIconButton
+                          label="Export geometry"
+                          icon={Download}
+                          onClick={() => {}}
+                        />
+                        <RowIconButton
+                          label="Duplicate geometry"
+                          icon={Copy}
+                          onClick={() => navigate(`/geometry/new?duplicateFrom=${g.id}`)}
+                        />
+                        <RowIconButton
+                          label="Delete geometry"
+                          icon={Trash2}
+                          onClick={() => setPendingDelete({ id: g.id, name: g.name })}
+                          variant="danger"
+                        />
+                      </div>
+                    </td>
+                  </tr>
                 )}
-              </div>
-            )}
+                emptyLabel="No geometries match your search."
+              />
+            </ListTable>
           </ListPageCard>
         </div>
       </main>

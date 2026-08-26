@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Info, Plus, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Info, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { INITIAL_PROFILES, type Profile } from '@/data/profiles';
@@ -13,13 +13,13 @@ export interface ProfilesPanelProps {
   geometryId: number;
   /** Prefill from the backend (GET /geometry/:id/ nested `profiles`) instead of the mock defaults. */
   initialProfiles?: Profile[];
-  /** When provided, a Save button appears that calls this with the current profile list. */
-  onSave?: (profiles: Profile[]) => void;
-  saving?: boolean;
+  /** Autosaves on every add/delete and every field blur inside the detail popover. */
+  onCommit?: (profiles: Profile[]) => void;
+  committing?: boolean;
   saveError?: boolean;
 }
 
-export function ProfilesPanel({ geometryId, initialProfiles, onSave, saving, saveError }: ProfilesPanelProps) {
+export function ProfilesPanel({ geometryId, initialProfiles, onCommit, committing, saveError }: ProfilesPanelProps) {
   const [bannerVisible, setBannerVisible] = useState(
     () => localStorage.getItem(HIDE_BANNER_KEY) !== 'true'
   );
@@ -27,6 +27,19 @@ export function ProfilesPanel({ geometryId, initialProfiles, onSave, saving, sav
   const [selectedId, setSelectedId] = useState<string | null>(
     (initialProfiles ?? INITIAL_PROFILES)[0]?.id ?? null
   );
+
+  // Points are edited well before a commit is due — `requestCommit` just marks one
+  // pending; the effect below reads the settled state once React has actually applied
+  // it, so a commit requested mid-update never reads a stale pre-update value.
+  const [commitTick, setCommitTick] = useState(0);
+  function requestCommit() {
+    setCommitTick((t) => t + 1);
+  }
+  useEffect(() => {
+    if (commitTick === 0) return;
+    onCommit?.(profiles);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commitTick]);
 
   function handleUpdate(next: Profile) {
     setProfiles((current) => current.map((p) => (p.id === next.id ? next : p)));
@@ -40,6 +53,7 @@ export function ProfilesPanel({ geometryId, initialProfiles, onSave, saving, sav
     e.stopPropagation();
     setProfiles((current) => current.filter((p) => p.id !== id));
     if (selectedId === id) setSelectedId(null);
+    requestCommit();
   }
 
   function handleAdd() {
@@ -51,10 +65,10 @@ export function ProfilesPanel({ geometryId, initialProfiles, onSave, saving, sav
       maxCamber: 4,
       maxCamberPosition: 40,
       thickness: 12,
-      show2D: true,
     };
     setProfiles((current) => [...current, newProfile]);
     setSelectedId(newProfile.id);
+    requestCommit();
   }
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
@@ -163,15 +177,11 @@ export function ProfilesPanel({ geometryId, initialProfiles, onSave, saving, sav
             <Plus className="h-4 w-4" strokeWidth={2} />
             Add new profile
           </button>
-          {onSave && (
-            <button
-              type="button"
-              onClick={() => onSave(profiles)}
-              disabled={saving}
-              className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+          {committing && (
+            <div className="flex items-center gap-[6px]">
+              <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
+              <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
+            </div>
           )}
         </div>
         {saveError && (
@@ -184,8 +194,9 @@ export function ProfilesPanel({ geometryId, initialProfiles, onSave, saving, sav
           geometryId={geometryId}
           profile={selected}
           onChange={handleUpdate}
-          onClose={() => { sortByPosition(); setSelectedId(null); }}
+          onClose={() => { sortByPosition(); setSelectedId(null); requestCommit(); }}
           onSort={sortByPosition}
+          onCommit={requestCommit}
         />
       )}
     </>

@@ -29,6 +29,8 @@ interface SysconfigFieldRowProps {
    *  skips the marker since it'd be on every field. */
   helperAsTooltip?: boolean;
   hideRequiredMarker?: boolean;
+  /** Forces the error state on regardless of this field's own touched state. */
+  forceShowErrors?: boolean;
 }
 
 /** A backend-driven sysconfig field: label + input, with required/range/fixed/type
@@ -41,6 +43,7 @@ export function SysconfigFieldRow({
   onChange,
   helperAsTooltip,
   hideRequiredMarker,
+  forceShowErrors,
 }: SysconfigFieldRowProps) {
   const isSelection = field.type === 'selection' && !!field.options?.length;
   const isMultiSelection = field.type === 'multi_selection' && !!field.options?.length;
@@ -65,8 +68,13 @@ export function SysconfigFieldRow({
 
   // Validate on blur, not on every keystroke — an in-progress value (e.g. "-" before
   // typing the rest of a negative number) shouldn't flash an error while still typing.
+  // `forceShowErrors` bypasses that — used to surface everything missing at once after
+  // the user opts to stay past the exit-confirm warning.
   const [touched, setTouched] = useState(false);
-  const outOfRange = touched && !isFieldInRange(value, field);
+  const showFieldErrors = touched || forceShowErrors;
+  const missingRequired = showFieldErrors && !!field.required && !value;
+  const outOfRange = showFieldErrors && !isFieldInRange(value, field);
+  const invalid = missingRequired || outOfRange;
   const isNumeric = field.type === 'float' || field.type === 'integer';
   const example = exampleValue(field);
   const placeholder = example !== undefined ? `Enter value (e.g. ${example})` : 'Enter value';
@@ -80,8 +88,8 @@ export function SysconfigFieldRow({
           {field.label}
           {!hideRequiredMarker && field.required && <span className="text-[#0a0a0a]">*</span>}
           {helperAsTooltip && field.helper && (
-            <Tip label={field.helper}>
-              <Info className="h-3.5 w-3.5 text-[#6b7280]" strokeWidth={2} />
+            <Tip label={field.helper} placement="bottom">
+              <Info className="h-3.5 w-3.5 text-[#006496]" strokeWidth={2} />
             </Tip>
           )}
         </Label>
@@ -132,15 +140,21 @@ export function SysconfigFieldRow({
             inputMode={isNumeric ? 'decimal' : 'text'}
             placeholder={placeholder}
             disabled={field.fixed}
-            aria-invalid={outOfRange}
+            aria-invalid={invalid}
             className={`h-9 rounded-md bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:bg-[#f8fafc] disabled:opacity-60 ${
-              outOfRange ? 'border-[#dc2626] focus-visible:ring-[#dc2626]' : 'border-[#e2e8f0]'
+              invalid ? 'border-[#dc2626] focus-visible:ring-[#dc2626]' : 'border-[#e2e8f0]'
             }`}
           />
         )}
-        {!isSelection && !isMultiSelection && !isBoolean && outOfRange && (
+        {invalid && (
           <p className="text-[13px] leading-4 text-[#dc2626]">
-            Value must be between {field.min ?? '…'} and {field.max ?? '…'}.
+            {missingRequired
+              ? 'This field is required.'
+              : field.min !== undefined && field.max !== undefined
+                ? `Value must be between ${field.min} and ${field.max}.`
+                : field.min !== undefined
+                  ? `Value must be larger than ${field.min}.`
+                  : `Value must be smaller than ${field.max}.`}
           </p>
         )}
       </div>

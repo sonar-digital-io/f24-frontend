@@ -9,9 +9,18 @@ interface PropertyFormTabProps {
   onChange: (name: string, value: string) => void;
   /** Fires when focus leaves a field (blur) or the form itself (click-out). */
   onBlur?: () => void;
+  /** Forces every field's error state on regardless of its own touched state — used to
+   *  surface missing required fields after the user opts to stay past the exit-confirm warning. */
+  forceShowErrors?: boolean;
 }
 
-export function PropertyFormTab({ sections, values, onChange, onBlur }: PropertyFormTabProps) {
+export function PropertyFormTab({
+  sections,
+  values,
+  onChange,
+  onBlur,
+  forceShowErrors,
+}: PropertyFormTabProps) {
   const sectionIds = useMemo(() => sections.map((s) => s.id), [sections]);
   const {
     activeId: activeSectionId,
@@ -82,6 +91,7 @@ export function PropertyFormTab({ sections, values, onChange, onBlur }: Property
                     field={field}
                     value={values[field.name] ?? ''}
                     onChange={(v) => onChange(field.name, v)}
+                    forceShowErrors={forceShowErrors}
                   />
                 ))}
               </div>

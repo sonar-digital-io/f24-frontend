@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
@@ -144,6 +144,9 @@ export function GeometryEdit() {
   const [baseline, setBaseline] = useState<{ name: string; date: string; description: string } | null>(
     null
   );
+  // Blur can fire again while a create is still in flight (e.g. tabbing through several
+  // fields quickly) — this guards against firing a second, duplicate create.
+  const creatingRef = useRef(false);
 
   // When Create is clicked, navigate replaces /geometry/new → /geometry/:id without
   // remounting (same route pattern). Switch to Global properties once isNew turns false.
@@ -211,38 +214,43 @@ export function GeometryEdit() {
     setProps((p) => ({ ...p, [key]: value }));
   }
 
-  async function handleCreate() {
+  // Autosave the Project configuration tab on every blur, same as Material's General
+  // tab — creates the geometry on the first valid blur while new, PUTs on later ones.
+  async function handleCreatePanelBlur() {
     if (!newName.trim() || !newDate || !newDescription.trim()) return;
+    if (isNew) {
+      if (creatingRef.current) return;
+      creatingRef.current = true;
+      try {
+        const result = await createMutation.mutateAsync({
+          name: newName.trim(),
+          created_at: toIsoDateTime(newDate),
+          description: newDescription.trim(),
+        });
+        // /geometry/new and /geometry/:id share a route, so this navigate does NOT
+        // remount the component — switching the URL just flips isNew to false.
+        navigate(`/geometry/${result.id}`, { replace: true });
+      } catch {
+        // createMutation.isError already surfaces the failure in the UI — stay on this tab.
+      } finally {
+        creatingRef.current = false;
+      }
+      return;
+    }
+    if (!baseline) return;
+    if (newName === baseline.name && newDate === baseline.date && newDescription === baseline.description) {
+      return;
+    }
     try {
-      const result = await createMutation.mutateAsync({
+      await updateGeneralMutation.mutateAsync({
         name: newName.trim(),
         created_at: toIsoDateTime(newDate),
         description: newDescription.trim(),
       });
-      // /geometry/new and /geometry/:id share a route, so this navigate does NOT
-      // remount the component — leave the create tab and clear the form explicitly,
-      // otherwise the create panel stays up and a second click creates a duplicate.
-      setActiveTab('global-properties');
-      setNewName('');
-      setNewDate(todayISO());
-      setNewDescription('');
-      navigate(`/geometry/${result.id}`, { replace: true });
+      setBaseline({ name: newName, date: newDate, description: newDescription });
     } catch {
-      // createMutation.isError already surfaces the failure in the UI — stay on this tab.
+      // updateGeneralMutation.isError already surfaces the failure in the UI.
     }
-  }
-
-  async function handleUpdateGeneral() {
-    if (!newName.trim() || !newDate || !newDescription.trim() || !baseline) return;
-    if (newName === baseline.name && newDate === baseline.date && newDescription === baseline.description) {
-      return;
-    }
-    await updateGeneralMutation.mutateAsync({
-      name: newName.trim(),
-      created_at: toIsoDateTime(newDate),
-      description: newDescription.trim(),
-    });
-    setBaseline({ name: newName, date: newDate, description: newDescription });
   }
 
   // Every field here is mandatory, so — unlike Material's Mechanical/Fatigue tabs —
@@ -383,6 +391,7 @@ export function GeometryEdit() {
           showBlade={resultShowBlade}
           showWebView={resultShowWireframe}
           treatAsBlade
+          showResetButton
         />
 
         <GeometryEditToolbar
@@ -420,10 +429,7 @@ export function GeometryEdit() {
               description={newDescription}
               onDescriptionChange={setNewDescription}
               hasError={createMutation.isError || updateGeneralMutation.isError}
-              onCreate={handleCreate}
-              creating={createMutation.isPending}
-              onUpdate={handleUpdateGeneral}
-              updating={updateGeneralMutation.isPending}
+              onBlur={handleCreatePanelBlur}
             />
           )}
 
@@ -452,8 +458,8 @@ export function GeometryEdit() {
             <ProfilesPanel
               geometryId={geometryId}
               initialProfiles={hydratedProfiles ?? undefined}
-              onSave={handleSaveProfiles}
-              saving={updateProfilesMutation.isPending}
+              onCommit={handleSaveProfiles}
+              committing={updateProfilesMutation.isPending}
               saveError={updateProfilesMutation.isError}
             />
           )}
@@ -464,8 +470,8 @@ export function GeometryEdit() {
               initialEdges={edgesQuery.data?.edges}
               rootRadiusPercent={props.root_radius}
               nominalRadius={Number(props.nominal_radius) || 1}
-              onSave={handleSaveEdges}
-              saving={updateEdgesMutation.isPending}
+              onCommit={handleSaveEdges}
+              committing={updateEdgesMutation.isPending}
               saveError={updateEdgesMutation.isError}
             />
           )}

@@ -259,6 +259,10 @@ export function ProfileDistributionPanel({
         onInputChange={(idx, field, raw) => handleInputChange(key, idx, field, raw)}
         onInputBlur={(idx, field) => handleInputBlur(key, idx, field)}
         onAddPoint={() => addPoint(key)}
+        onRemovePoint={(idx) => {
+          handleCurveChange(key, sectionPoints[key].filter((_, i) => i !== idx));
+          requestCommit();
+        }}
       />
     );
   }
@@ -310,7 +314,7 @@ export function ProfileDistributionPanel({
             <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
             <span className="text-[14px] leading-5 text-[#737373]">Profiles updated</span>
             <Tip label="Profiles were regenerated from the current settings and distribution curves.">
-              <Info className="h-3.5 w-3.5 text-[#6b7280]" strokeWidth={2} />
+              <Info className="h-3.5 w-3.5 text-[#006496]" strokeWidth={2} />
             </Tip>
           </>
         ) : null}

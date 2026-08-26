@@ -27,6 +27,29 @@ export function useCalculationLoadGroupState(ensureProjectId: (fallbackName?: st
   const [lgSearch, setLgSearch] = useState('');
   const [lgSort, setLgSort] = useState<SortState<CalcLoadGroupSortKey>>({ key: 'last_modified', direction: 'desc' });
   const [lgPage, setLgPage] = useState(1);
+  // Which groups' load-case preview is expanded, and within that, which single
+  // load case's own value grid is expanded — lets someone look inside a group
+  // before committing to selecting it.
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<number>>(new Set());
+  const [expandedCaseIds, setExpandedCaseIds] = useState<Set<number>>(new Set());
+
+  function handleToggleGroupPreview(groupId: number) {
+    setExpandedGroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }
+
+  function handleToggleCasePreview(caseId: number) {
+    setExpandedCaseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(caseId)) next.delete(caseId);
+      else next.add(caseId);
+      return next;
+    });
+  }
 
   const loadGroupItems = useMemo(
     () => (loadGroupsQuery.data ?? []).map(toLoadGroupListItem),
@@ -76,5 +99,9 @@ export function useCalculationLoadGroupState(ensureProjectId: (fallbackName?: st
     setLgPage,
     handleSelectGroup,
     selectedLoadGroup,
+    expandedGroupIds,
+    handleToggleGroupPreview,
+    expandedCaseIds,
+    handleToggleCasePreview,
   };
 }

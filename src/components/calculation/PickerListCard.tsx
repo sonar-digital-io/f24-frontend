@@ -12,6 +12,8 @@ interface PickerListCardProps<K extends string> {
   columns: ListTableHeadColumn<K>[];
   sort: SortState<K>;
   onSort: (key: K) => void;
+  /** Leading empty column — for an accordion expand-toggle, e.g. Load group's preview chevron. */
+  leadingWidthClassName?: string;
   actionsWidthClassName?: string;
   isLoading: boolean;
   isError: boolean;
@@ -38,6 +40,7 @@ export function PickerListCard<K extends string>({
   columns,
   sort,
   onSort,
+  leadingWidthClassName,
   actionsWidthClassName,
   isLoading,
   isError,
@@ -48,7 +51,7 @@ export function PickerListCard<K extends string>({
   onPageChange,
   children,
 }: PickerListCardProps<K>) {
-  const colSpan = columns.length + 1;
+  const colSpan = columns.length + 1 + (leadingWidthClassName ? 1 : 0);
   return (
     <div className="w-full">
       <div className="overflow-hidden rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
@@ -59,7 +62,13 @@ export function PickerListCard<K extends string>({
 
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[14px]">
-            <ListTableHead columns={columns} sort={sort} onSort={onSort} actionsWidthClassName={actionsWidthClassName} />
+            <ListTableHead
+              columns={columns}
+              sort={sort}
+              onSort={onSort}
+              leadingWidthClassName={leadingWidthClassName}
+              actionsWidthClassName={actionsWidthClassName}
+            />
             <tbody>
               {isLoading && <TableStatusRow colSpan={colSpan}>Loading {entityLabelPlural}…</TableStatusRow>}
               {isError && (

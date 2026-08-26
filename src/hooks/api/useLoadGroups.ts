@@ -62,11 +62,11 @@ export function useUpdateLoadGroupLimits(loadGroupId: number) {
   });
 }
 
-export function useLoadCases(loadGroupId: number) {
+export function useLoadCases(loadGroupId: number, enabled = true) {
   return useQuery({
     queryKey: loadGroupKeys.loadCases(loadGroupId),
     queryFn: () => loadGroupsApi.getLoadCases(loadGroupId),
-    enabled: Number.isFinite(loadGroupId),
+    enabled: Number.isFinite(loadGroupId) && enabled,
   });
 }
 

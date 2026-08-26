@@ -8,10 +8,6 @@ export interface ControlPoint {
   y: number; // data units
 }
 
-// ─── List/grid toggle ─────────────────────────────────────────────────────────
-
-export type ViewMode = 'list' | 'grid';
-
 // ─── Table sorting ────────────────────────────────────────────────────────────
 
 export type SortDirection = 'asc' | 'desc';

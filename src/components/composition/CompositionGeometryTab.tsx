@@ -1,8 +1,6 @@
-import { CheckCircle2, LayoutGrid, List as ListIcon, Search, XCircle } from 'lucide-react';
+import { CheckCircle2, Search, XCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { formatDateTime } from '@/lib/utils';
-import { GeometryCard } from '@/components/common/card/GeometryCard';
-import { type Geometry as GeometryItem, type BladeType } from '@/data/geometries';
 import { useGeometryList, useFetchGeometryTopView } from '@/hooks/api/useGeometry';
 import { useFetchCompositionIntersections, useUpdateCompositionGeometry } from '@/hooks/api/useComposition';
 import type { Geometry as BackendGeometry } from '@/api/types/geometry';
@@ -11,30 +9,15 @@ export interface CompositionGeometryTabProps {
   compositionId: number;
   geomQuery: string;
   onGeomQueryChange: (v: string) => void;
-  geomView: 'list' | 'grid';
-  onGeomViewChange: (v: 'list' | 'grid') => void;
   selectedGeometryId: string | null;
   onSelectGeometry: (id: string) => void;
   onAfterSelect: () => void;
-}
-
-function toUiGeometry(g: BackendGeometry): GeometryItem {
-  return {
-    id: String(g.id),
-    name: g.name,
-    description: g.description ?? '',
-    nominalRadius: 0,
-    type: '—' as BladeType,
-    lastUpdated: g.last_modified,
-  };
 }
 
 export function CompositionGeometryTab({
   compositionId,
   geomQuery,
   onGeomQueryChange,
-  geomView,
-  onGeomViewChange,
   selectedGeometryId,
   onSelectGeometry,
   onAfterSelect,
@@ -63,37 +46,7 @@ export function CompositionGeometryTab({
 
   return (
     <div className="pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Geometries</h2>
-        <div className="flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white p-1 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
-          <button
-            type="button"
-            onClick={() => onGeomViewChange('list')}
-            aria-label="List view"
-            aria-pressed={geomView === 'list'}
-            className={`flex h-7 w-7 items-center justify-center rounded ${
-              geomView === 'list'
-                ? 'bg-[#eef9ff] text-[#171717]'
-                : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-            }`}
-          >
-            <ListIcon className="h-4 w-4" strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onGeomViewChange('grid')}
-            aria-label="Grid view"
-            aria-pressed={geomView === 'grid'}
-            className={`flex h-7 w-7 items-center justify-center rounded ${
-              geomView === 'grid'
-                ? 'bg-[#eef9ff] text-[#171717]'
-                : 'text-[#6b7280] hover:bg-[#f1f5f9]'
-            }`}
-          >
-            <LayoutGrid className="h-4 w-4" strokeWidth={2} />
-          </button>
-        </div>
-      </div>
+      <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Geometries</h2>
 
       <div className="mt-4 max-w-[384px]">
         <div className="relative">
@@ -111,21 +64,7 @@ export function CompositionGeometryTab({
         <p className="mt-3 text-[13px] text-[#dc2626]">Failed to select geometry. Please try again.</p>
       )}
 
-      {geomView === 'grid' ? (
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {filteredGeometries.map(toUiGeometry).map((g) => (
-            <GeometryCard
-              key={g.id}
-              geometry={g}
-              onClick={() => onSelectGeometry(g.id)}
-              selected={selectedGeometryId === g.id}
-              showMenu={false}
-              hoverActionLabel="Select"
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="mt-4 overflow-hidden rounded-md border border-[#e5e7eb]">
+      <div className="mt-4 overflow-hidden rounded-md border border-[#e5e7eb]">
           <table className="w-full border-separate border-spacing-0 text-[14px]">
             <thead>
               <tr>
@@ -211,7 +150,6 @@ export function CompositionGeometryTab({
             </tbody>
           </table>
         </div>
-      )}
     </div>
   );
 }

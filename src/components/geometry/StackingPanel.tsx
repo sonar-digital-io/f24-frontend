@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { FoldHorizontal } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { FoldHorizontal, Loader2 } from 'lucide-react';
 import type { ControlPoint } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
@@ -78,9 +78,10 @@ interface StackingPanelProps {
   /** Global properties' root radius, as a percentage (e.g. "10" for 10%) —
    *  same value as Profile distribution's Start position, as a fraction. */
   rootRadiusPercent?: string;
-  /** PUT /geometry/:id/edges/ — persist the current sweep/dihedral/twist/chord curves. */
-  onSave?: (edges: GeometryEdgeInput[]) => void;
-  saving?: boolean;
+  /** Autosaves on every field blur and every completed bezier point move/add/remove:
+   *  PUT /geometry/:id/edges/ with the current sweep/dihedral/twist/chord curves. */
+  onCommit?: (edges: GeometryEdgeInput[]) => void;
+  committing?: boolean;
   saveError?: boolean;
   /** Global properties' nominal radius (m) — sweep/dihedral/chord's ymin/ymax
    *  are sent to the backend as a fraction of this; twist (degrees) is not. */
@@ -98,7 +99,7 @@ function radiusDivisor(key: SectionKey, nominalRadius?: number): number {
   return key !== 'twist' && nominalRadius ? nominalRadius : 1;
 }
 
-export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPercent, onSave, saving, saveError, nominalRadius }: StackingPanelProps) {
+export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPercent, onCommit, committing, saveError, nominalRadius }: StackingPanelProps) {
   const rootXPercent = parseFloat((rootRadiusPercent ?? '').replace(',', '.'));
   const rootX = Number.isFinite(rootXPercent) ? rootXPercent / 100 : DEFAULT_ROOT_X;
   const [subTab, setSubTab] = useState<SectionKey>('sweep');
@@ -129,6 +130,15 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     };
   });
 
+  // Points are edited (dragged, deleted, typed, added) well before a commit is due —
+  // `requestCommit` just marks one pending; the effect below reads the settled state
+  // once React has actually applied it, so a commit requested mid-update (e.g. from
+  // the same handler that just added a point) never reads a stale pre-update value.
+  const [commitTick, setCommitTick] = useState(0);
+  function requestCommit() {
+    setCommitTick((t) => t + 1);
+  }
+
   const {
     sectionPoints,
     setPointsForSection,
@@ -148,7 +158,8 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     })(),
     (key) => yBounds[key],
     5,
-    () => rootX
+    () => rootX,
+    requestCommit
   );
 
   function toggleSection(key: SectionKey) {
@@ -198,6 +209,7 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
       key,
       sectionPoints[key].map((p) => ({ ...p, y: clamp(p.y, min, max) }))
     );
+    requestCommit();
   }
 
   function buildEdges(): GeometryEdgeInput[] {
@@ -213,9 +225,18 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     });
   }
 
-  // Points can be deleted down to 0 in the chart — block saving until every
+  // Points can be deleted down to 0 in the chart — block autosaving until every
   // curve has at least the 2 points a bezier curve needs.
   const hasEnoughPoints = SECTION_KEYS.every((key) => sectionPoints[key].length >= 2);
+
+  // Fires once per requested commit, after the triggering state change (a moved/
+  // deleted/added point, or a bound's new value) has actually been applied — never
+  // on every keystroke/drag-step in between.
+  useEffect(() => {
+    if (commitTick === 0) return;
+    if (hasEnoughPoints) onCommit?.(buildEdges());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commitTick]);
 
   function renderSectionBody(key: SectionKey) {
     return (
@@ -224,6 +245,7 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
         sectionKey={key}
         points={sectionPoints[key]}
         onChange={(next) => setPointsForSection(key, next)}
+        onCommit={requestCommit}
         yMin={yBounds[key].min}
         yMax={yBounds[key].max}
         yStep={SECTION_Y_STEP[key]}
@@ -236,6 +258,10 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
         onInputChange={(idx, field, raw) => handleInputChange(key, idx, field, raw)}
         onInputBlur={(idx, field) => handleInputBlur(key, idx, field)}
         onAddPoint={() => addPoint(key)}
+        onRemovePoint={(idx) => {
+          setPointsForSection(key, sectionPoints[key].filter((_, i) => i !== idx));
+          requestCommit();
+        }}
       />
     );
   }
@@ -249,15 +275,11 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
           <div />
         )}
         <div className="flex items-center gap-2">
-          {onSave && (
-            <button
-              type="button"
-              onClick={() => onSave(buildEdges())}
-              disabled={saving || !hasEnoughPoints}
-              className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+          {committing && (
+            <div className="flex items-center gap-[6px]">
+              <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
+              <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
+            </div>
           )}
           <button
             type="button"

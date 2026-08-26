@@ -23,7 +23,13 @@ function buildField(sysconfig: SysconfigResponse, entry: SysconfigParamEntry): F
   const paramDef = sysconfig.parameters.find((p) => p.id === entry.reference);
   const label = (paramDef?.name ?? entry.reference) + unitSuffix(sysconfig, paramDef?.unit);
   const helper =
-    entry.minimum || entry.maximum ? `Range: ${entry.minimum ?? '…'} – ${entry.maximum ?? '…'}` : undefined;
+    entry.minimum !== undefined && entry.maximum !== undefined
+      ? `Value must be between ${entry.minimum} and ${entry.maximum}.`
+      : entry.minimum !== undefined
+        ? `Value must be larger than ${entry.minimum}.`
+        : entry.maximum !== undefined
+          ? `Value must be smaller than ${entry.maximum}.`
+          : undefined;
   return {
     name: entry.reference,
     label,
@@ -36,6 +42,21 @@ function buildField(sysconfig: SysconfigResponse, entry: SysconfigParamEntry): F
     value: entry.value,
     options: paramDef?.options,
   };
+}
+
+/**
+ * Restricts a values map to just the fields `sections` currently lists as active.
+ * A dependency can drop a field to `active: false` — per the config's own contract that
+ * means "gone", not "disabled": the frontend must never resubmit that field's now-stale
+ * value once it happens (e.g. a Mechanical property that only applied to the ply type the
+ * material just switched away from).
+ */
+export function pickActiveFields(
+  values: Record<string, string>,
+  sections: FormSection[]
+): Record<string, string> {
+  const activeNames = new Set(sections.flatMap((s) => s.fields.map((f) => f.name)));
+  return Object.fromEntries(Object.entries(values).filter(([name]) => activeNames.has(name)));
 }
 
 /**

@@ -58,9 +58,6 @@ export function useDeleteMaterial() {
 
 interface UpdateMechanicalPropertiesVariables {
   payload: MaterialMechanicalPropertiesPayload;
-  /** Only a mech_prop_type change can affect which fields sysconfig resolves as
-   *  active/fixed — set this for that call so plain value edits skip the refetch. */
-  typeChanged?: boolean;
 }
 
 export function useUpdateMechanicalProperties(materialId: number) {
@@ -68,13 +65,13 @@ export function useUpdateMechanicalProperties(materialId: number) {
   return useMutation({
     mutationFn: ({ payload }: UpdateMechanicalPropertiesVariables) =>
       materialsApi.updateMechanicalProperties(materialId, payload),
-    onSuccess: (_data, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) });
       // Also refresh the list — `type` lives on this endpoint and is shown there.
       queryClient.invalidateQueries({ queryKey: materialKeys.list() });
-      if (variables.typeChanged) {
-        queryClient.invalidateQueries({ queryKey: materialSysconfigKeys.detail(materialId) });
-      }
+      // Any mechanical value, not just Type, can change which fields sysconfig resolves
+      // as active/fixed for this material — same reasoning as useUpdateFatigueProperties.
+      queryClient.invalidateQueries({ queryKey: materialSysconfigKeys.detail(materialId) });
     },
   });
 }

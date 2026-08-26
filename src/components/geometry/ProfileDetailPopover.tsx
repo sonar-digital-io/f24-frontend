@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { AirfoilPreview } from '@/components/common/AirfoilPreview';
 import { PROFILE_TYPES, UI_TO_API_PROFILE_TYPE, type Profile } from '@/data/profiles';
@@ -16,10 +15,12 @@ export interface ProfileDetailPopoverProps {
   onChange: (next: Profile) => void;
   onClose: () => void;
   onSort: () => void;
+  /** Fires when focus leaves a field (blur) or the form itself (click-out) — autosaves. */
+  onCommit?: () => void;
 }
 
 /** Draggable floating popover for editing a single profile's parameters. */
-export function ProfileDetailPopover({ geometryId, profile, onChange, onClose, onSort }: ProfileDetailPopoverProps) {
+export function ProfileDetailPopover({ geometryId, profile, onChange, onClose, onSort, onCommit }: ProfileDetailPopoverProps) {
   const { pos, startDrag } = useDraggablePosition(() => ({
     x: window.innerWidth / 2,
     y: window.innerHeight / 2,
@@ -61,6 +62,7 @@ export function ProfileDetailPopover({ geometryId, profile, onChange, onClose, o
           if ((e.target as HTMLElement).closest('button, input, textarea, select, [role="listbox"]')) return;
           startDrag(e);
         }}
+        onBlur={onCommit}
       >
         <DialogHeader
           title={profile.name}
@@ -68,22 +70,6 @@ export function ProfileDetailPopover({ geometryId, profile, onChange, onClose, o
           containerClassName="flex cursor-move items-start justify-between gap-4"
           titleClassName="text-[18px] font-semibold leading-7 text-[#0a0a0a]"
         />
-
-        {/* Show 2D checkbox */}
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id={`show-2d-${profile.id}`}
-            checked={profile.show2D}
-            onCheckedChange={(checked) => update('show2D', Boolean(checked))}
-            className="size-4 rounded border-[#e2e8f0] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
-          />
-          <Label
-            htmlFor={`show-2d-${profile.id}`}
-            className="cursor-pointer text-[14px] font-medium text-[#0a0a0a]"
-          >
-            Show 2D
-          </Label>
-        </div>
 
         {/* Body: form + airfoil preview */}
         <div className="grid grid-cols-[320px_minmax(0,1fr)] gap-6">
