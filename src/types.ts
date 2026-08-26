@@ -8,10 +8,6 @@ export interface ControlPoint {
   y: number; // data units
 }
 
-// ─── 3D viewer ────────────────────────────────────────────────────────────────
-
-export type RenderMode = 'solid' | 'wireframe';
-
 // ─── List/grid toggle ─────────────────────────────────────────────────────────
 
 export type ViewMode = 'list' | 'grid';
