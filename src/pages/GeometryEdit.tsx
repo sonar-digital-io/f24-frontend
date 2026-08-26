@@ -92,6 +92,9 @@ export function GeometryEdit() {
   // generate a result — lets the effect below tell "still nothing changed" apart from "this
   // is new/different", instead of re-requesting on every GET /geometry/:id/ refetch.
   const [lastResultSignature, setLastResultSignature] = useState<string | null>(null);
+  // The signature of the most recently *requested* generation — lets a resolving
+  // response tell whether it's still the latest one or a stale, superseded request.
+  const latestResultRequestRef = useRef<string | null>(null);
   const [resultShowBlade, setResultShowBlade] = useState(true);
   const [resultShowWireframe, setResultShowWireframe] = useState(false);
 
@@ -329,16 +332,26 @@ export function GeometryEdit() {
   // unitless: vertices are fractions of nominal_radius). Fetched as an
   // ArrayBuffer and handed to OccViewer, which sniffs the actual format and
   // scales the result by the geometry's nominal_radius.
-  async function handleGenerateResult() {
+  // Only the response for the most recently *requested* signature is ever applied —
+  // firing two generations in a row (e.g. two quick autosaves) must not let the first,
+  // now-stale one overwrite the viewer if it resolves after the second.
+  async function handleGenerateResult(signature: string) {
+    latestResultRequestRef.current = signature;
     try {
       // CAD kernel generation can take a while — well past the default 10s timeout.
       const { data } = await apiClient.get<ArrayBuffer>(`/geometry/${geometryId}/result/`, {
         responseType: 'arraybuffer',
         timeout: 120_000,
       });
+      if (latestResultRequestRef.current !== signature) return;
       setResultScale(Number(props.nominal_radius) || 1);
       setResultStl(data);
+      // Only recorded on success — a failed generation leaves this stale, so the next
+      // detailQuery refetch (tab switch, another autosave, …) retries automatically
+      // instead of being permanently skipped for data that never actually generated.
+      setLastResultSignature(signature);
     } catch (err) {
+      if (latestResultRequestRef.current !== signature) return;
       // getApiErrorMessage decodes the arraybuffer error body back to
       // text/JSON, so the backend's own message is used when it has one —
       // the per-status fallback below only covers a body it can't parse.
@@ -369,8 +382,7 @@ export function GeometryEdit() {
     if (!ready) return;
     const signature = JSON.stringify([g.settings, g.profile_generator_parameters, g.profiles, g.edges]);
     if (signature === lastResultSignature) return;
-    setLastResultSignature(signature);
-    handleGenerateResult();
+    handleGenerateResult(signature);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, detailQuery.data]);
 
@@ -389,7 +401,7 @@ export function GeometryEdit() {
           stlData={resultStl}
           stlScale={resultScale}
           showBlade={resultShowBlade}
-          showWebView={resultShowWireframe}
+          wireframe={resultShowWireframe}
           treatAsBlade
           showResetButton
         />

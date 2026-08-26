@@ -92,6 +92,9 @@ export function GeometryCreatePanel({
         <div className="flex items-center justify-end pt-1">
           <Link
             to="/geometry"
+            // Blur fires (and autosave-creates) before click otherwise — a mousedown that
+            // never shifts focus away from the field being edited means no blur, no race.
+            onMouseDown={(e) => e.preventDefault()}
             className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
           >
             Cancel

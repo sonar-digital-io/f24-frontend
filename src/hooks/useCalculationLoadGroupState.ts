@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useLoadGroupList } from '@/hooks/api/useLoadGroups';
 import { useUpdateProjectLoad } from '@/hooks/api/useProjects';
-import { matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
+import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
 import { formatDateTime } from '@/lib/utils';
 import type { LoadGroup } from '@/api/types/loadGroups';
 import type { LoadGroupListItem } from '@/components/calculation/CalculationLoadGroupTab';
@@ -34,21 +34,11 @@ export function useCalculationLoadGroupState(ensureProjectId: (fallbackName?: st
   const [expandedCaseIds, setExpandedCaseIds] = useState<Set<number>>(new Set());
 
   function handleToggleGroupPreview(groupId: number) {
-    setExpandedGroupIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
+    setExpandedGroupIds((prev) => toggleSetMember(prev, groupId));
   }
 
   function handleToggleCasePreview(caseId: number) {
-    setExpandedCaseIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(caseId)) next.delete(caseId);
-      else next.add(caseId);
-      return next;
-    });
+    setExpandedCaseIds((prev) => toggleSetMember(prev, caseId));
   }
 
   const loadGroupItems = useMemo(

@@ -19,17 +19,20 @@ function unitSuffix(sysconfig: SysconfigResponse, unitId: string | undefined): s
   return unit && unit.group !== 'unitless' && unit.symbol ? ` (${unit.symbol})` : '';
 }
 
+/** "Value must be between X and Y." / "...larger than X." / "...smaller than Y." —
+ *  whichever bounds are actually defined. Shared by this file's static helper text and
+ *  SysconfigFieldRow's live inline validation error, so the wording only lives once. */
+export function formatRangeMessage(min: string | undefined, max: string | undefined): string | undefined {
+  if (min !== undefined && max !== undefined) return `Value must be between ${min} and ${max}.`;
+  if (min !== undefined) return `Value must be larger than ${min}.`;
+  if (max !== undefined) return `Value must be smaller than ${max}.`;
+  return undefined;
+}
+
 function buildField(sysconfig: SysconfigResponse, entry: SysconfigParamEntry): FormField {
   const paramDef = sysconfig.parameters.find((p) => p.id === entry.reference);
   const label = (paramDef?.name ?? entry.reference) + unitSuffix(sysconfig, paramDef?.unit);
-  const helper =
-    entry.minimum !== undefined && entry.maximum !== undefined
-      ? `Value must be between ${entry.minimum} and ${entry.maximum}.`
-      : entry.minimum !== undefined
-        ? `Value must be larger than ${entry.minimum}.`
-        : entry.maximum !== undefined
-          ? `Value must be smaller than ${entry.maximum}.`
-          : undefined;
+  const helper = formatRangeMessage(entry.minimum, entry.maximum);
   return {
     name: entry.reference,
     label,

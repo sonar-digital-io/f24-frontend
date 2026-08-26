@@ -394,9 +394,15 @@ export function MaterialNew() {
   }
 
   // Only "Saving…"/"Saved" is shown here — an incomplete-but-persisted tab still reads
-  // as "Saved" (its missing required fields are surfaced separately, via the exit-confirm flow).
-  const generalStatus: SaveStatus =
-    createMaterialMutation.isPending || updateGeneralMutation.isPending ? 'saving' : 'saved';
+  // as "Saved" (its missing required fields are surfaced separately, via the exit-confirm
+  // flow). Hidden entirely (undefined) until something has actually been persisted —
+  // a blank, not-yet-created material has nothing to call "Saved".
+  const generalStatus: SaveStatus | undefined =
+    createMaterialMutation.isPending || updateGeneralMutation.isPending
+      ? 'saving'
+      : baseline
+        ? 'saved'
+        : undefined;
 
   // Autosave the General tab once every required field is filled — fires when focus
   // leaves a field (blur) or the form itself (click-out), not on every keystroke. Gates
@@ -504,8 +510,10 @@ export function MaterialNew() {
   }
 
   // Only meaningful once the material actually exists — a blank/in-progress draft that
-  // was never created has nothing incomplete to warn about.
-  const isIncomplete = isEditing && (!mechanicalValid || !fatigueValid);
+  // was never created has nothing incomplete to warn about. Includes General so a
+  // required field cleared there (which can't autosave — handleGeneralBlur requires
+  // generalValid) doesn't silently slip past Exit with no warning.
+  const isIncomplete = isEditing && (!generalValid || !mechanicalValid || !fatigueValid);
 
   function handleExit() {
     if (isIncomplete) {

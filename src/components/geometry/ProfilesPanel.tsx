@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Info, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { INITIAL_PROFILES, type Profile } from '@/data/profiles';
 import { nextLocalId } from '@/lib/utils';
 import { ProfileDetailPopover } from '@/components/geometry/ProfileDetailPopover';
+import { useDeferredCommit } from '@/hooks/useDeferredCommit';
 
 const HIDE_BANNER_KEY = 'f24_profiles_mode_hide';
 
@@ -28,18 +29,9 @@ export function ProfilesPanel({ geometryId, initialProfiles, onCommit, committin
     (initialProfiles ?? INITIAL_PROFILES)[0]?.id ?? null
   );
 
-  // Points are edited well before a commit is due — `requestCommit` just marks one
-  // pending; the effect below reads the settled state once React has actually applied
-  // it, so a commit requested mid-update never reads a stale pre-update value.
-  const [commitTick, setCommitTick] = useState(0);
-  function requestCommit() {
-    setCommitTick((t) => t + 1);
-  }
-  useEffect(() => {
-    if (commitTick === 0) return;
+  const requestCommit = useDeferredCommit(() => {
     onCommit?.(profiles);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commitTick]);
+  });
 
   function handleUpdate(next: Profile) {
     setProfiles((current) => current.map((p) => (p.id === next.id ? next : p)));

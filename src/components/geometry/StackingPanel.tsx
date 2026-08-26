@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { FoldHorizontal, Loader2 } from 'lucide-react';
 import type { ControlPoint } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
 import { StackingSectionBody } from '@/components/geometry/StackingSectionBody';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
+import { useDeferredCommit } from '@/hooks/useDeferredCommit';
 import { clamp } from '@/lib/bezierMath';
 import type { GeometryEdge, GeometryEdgeInput } from '@/api/types/geometry';
 
@@ -130,14 +131,9 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     };
   });
 
-  // Points are edited (dragged, deleted, typed, added) well before a commit is due —
-  // `requestCommit` just marks one pending; the effect below reads the settled state
-  // once React has actually applied it, so a commit requested mid-update (e.g. from
-  // the same handler that just added a point) never reads a stale pre-update value.
-  const [commitTick, setCommitTick] = useState(0);
-  function requestCommit() {
-    setCommitTick((t) => t + 1);
-  }
+  const requestCommit = useDeferredCommit(() => {
+    if (hasEnoughPoints) onCommit?.(buildEdges());
+  });
 
   const {
     sectionPoints,
@@ -228,15 +224,6 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
   // Points can be deleted down to 0 in the chart — block autosaving until every
   // curve has at least the 2 points a bezier curve needs.
   const hasEnoughPoints = SECTION_KEYS.every((key) => sectionPoints[key].length >= 2);
-
-  // Fires once per requested commit, after the triggering state change (a moved/
-  // deleted/added point, or a bound's new value) has actually been applied — never
-  // on every keystroke/drag-step in between.
-  useEffect(() => {
-    if (commitTick === 0) return;
-    if (hasEnoughPoints) onCommit?.(buildEdges());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commitTick]);
 
   function renderSectionBody(key: SectionKey) {
     return (

@@ -7,6 +7,7 @@ import { TagSelect } from '@/components/common/form/TagSelect';
 import { Tip } from '@/components/common/list/Tip';
 import type { FormField } from '@/data/materialFormFields';
 import { isFieldInRange } from '@/lib/sysconfigFormValidation';
+import { formatRangeMessage } from '@/lib/sysconfigMapping';
 
 /** An in-range example value for the placeholder — 0 when that's within min/max,
  *  otherwise whichever bound is actually defined. */
@@ -93,68 +94,66 @@ export function SysconfigFieldRow({
             </Tip>
           )}
         </Label>
-        {isSelection ? (
-          <DropdownSelect
-            id={`field-${field.name}`}
-            value={labelById.get(value) ?? ''}
-            onChange={(label) => onChange(field.options!.find((o) => labelById.get(o.id) === label)?.id ?? value)}
-            options={field.options!.map((o) => labelById.get(o.id) ?? '')}
-            disabled={field.fixed || !!onlyOption}
-          />
-        ) : isMultiSelection ? (
-          <TagSelect
-            options={field.options!.map((o) => labelById.get(o.id) ?? '')}
-            value={value
-              .split(',')
-              .filter(Boolean)
-              .map((id) => labelById.get(id) ?? id)}
-            onChange={(labels) =>
-              onChange(
-                labels
-                  .map((label) => field.options!.find((o) => labelById.get(o.id) === label)?.id ?? label)
-                  .join(',')
-              )
-            }
-          />
-        ) : isBoolean ? (
-          <label htmlFor={`field-${field.name}`} className="flex h-9 items-center">
-            <input
+        {/* Blur bubbles from whichever control is actually rendered — DropdownSelect/
+            TagSelect/the checkbox don't expose their own onBlur, so it's caught here
+            instead of duplicated per-branch (matches Input's own onBlur below). */}
+        <div onBlur={() => setTouched(true)}>
+          {isSelection ? (
+            <DropdownSelect
               id={`field-${field.name}`}
-              type="checkbox"
-              checked={value === 'true'}
-              disabled={field.fixed}
-              onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
-              className="h-4 w-4 rounded border-[#e2e8f0] accent-[#006496] disabled:cursor-not-allowed"
+              value={labelById.get(value) ?? ''}
+              onChange={(label) => onChange(field.options!.find((o) => labelById.get(o.id) === label)?.id ?? value)}
+              options={field.options!.map((o) => labelById.get(o.id) ?? '')}
+              disabled={field.fixed || !!onlyOption}
             />
-          </label>
-        ) : (
-          <Input
-            id={`field-${field.name}`}
-            value={value}
-            onChange={(e) => {
-              const withDot = e.target.value.replace(',', '.');
-              // Allow scientific notation (e.g. "1e-6") — float fields like CTE need it.
-              onChange(isNumeric ? withDot.replace(/[^0-9.\-eE+]/g, '') : withDot);
-            }}
-            onBlur={() => setTouched(true)}
-            inputMode={isNumeric ? 'decimal' : 'text'}
-            placeholder={placeholder}
-            disabled={field.fixed}
-            aria-invalid={invalid}
-            className={`h-9 rounded-md bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:bg-[#f8fafc] disabled:opacity-60 ${
-              invalid ? 'border-[#dc2626] focus-visible:ring-[#dc2626]' : 'border-[#e2e8f0]'
-            }`}
-          />
-        )}
+          ) : isMultiSelection ? (
+            <TagSelect
+              options={field.options!.map((o) => labelById.get(o.id) ?? '')}
+              value={value
+                .split(',')
+                .filter(Boolean)
+                .map((id) => labelById.get(id) ?? id)}
+              onChange={(labels) =>
+                onChange(
+                  labels
+                    .map((label) => field.options!.find((o) => labelById.get(o.id) === label)?.id ?? label)
+                    .join(',')
+                )
+              }
+            />
+          ) : isBoolean ? (
+            <label htmlFor={`field-${field.name}`} className="flex h-9 items-center">
+              <input
+                id={`field-${field.name}`}
+                type="checkbox"
+                checked={value === 'true'}
+                disabled={field.fixed}
+                onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
+                className="h-4 w-4 rounded border-[#e2e8f0] accent-[#006496] disabled:cursor-not-allowed"
+              />
+            </label>
+          ) : (
+            <Input
+              id={`field-${field.name}`}
+              value={value}
+              onChange={(e) => {
+                const withDot = e.target.value.replace(',', '.');
+                // Allow scientific notation (e.g. "1e-6") — float fields like CTE need it.
+                onChange(isNumeric ? withDot.replace(/[^0-9.\-eE+]/g, '') : withDot);
+              }}
+              inputMode={isNumeric ? 'decimal' : 'text'}
+              placeholder={placeholder}
+              disabled={field.fixed}
+              aria-invalid={invalid}
+              className={`h-9 rounded-md bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:bg-[#f8fafc] disabled:opacity-60 ${
+                invalid ? 'border-[#dc2626] focus-visible:ring-[#dc2626]' : 'border-[#e2e8f0]'
+              }`}
+            />
+          )}
+        </div>
         {invalid && (
           <p className="text-[13px] leading-4 text-[#dc2626]">
-            {missingRequired
-              ? 'This field is required.'
-              : field.min !== undefined && field.max !== undefined
-                ? `Value must be between ${field.min} and ${field.max}.`
-                : field.min !== undefined
-                  ? `Value must be larger than ${field.min}.`
-                  : `Value must be smaller than ${field.max}.`}
+            {missingRequired ? 'This field is required.' : formatRangeMessage(field.min, field.max)}
           </p>
         )}
       </div>

@@ -4,7 +4,7 @@ import { rowInteractionProps, toggleSetMember } from '@/lib/listTable';
 import { formatDateTime } from '@/lib/utils';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { ExpandToggleCell } from '@/components/common/list/ExpandToggleCell';
-import { LoadCasesPreviewList } from '@/components/load-group/LoadCasesPreviewList';
+import { LoadCasesPreviewList } from '@/components/common/list/LoadCasesPreviewList';
 import { useLoadCases } from '@/hooks/api/useLoadGroups';
 import { type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
 
