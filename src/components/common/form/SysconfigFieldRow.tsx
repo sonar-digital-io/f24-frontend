@@ -7,6 +7,7 @@ import { TagSelect } from '@/components/common/form/TagSelect';
 import { Tip } from '@/components/common/list/Tip';
 import type { FormField } from '@/data/materialFormFields';
 import { isFieldInRange } from '@/lib/sysconfigFormValidation';
+import { formatRangeMessage } from '@/lib/sysconfigMapping';
 
 /** An in-range example value for the placeholder — 0 when that's within min/max,
  *  otherwise whichever bound is actually defined. */
@@ -29,6 +30,8 @@ interface SysconfigFieldRowProps {
    *  skips the marker since it'd be on every field. */
   helperAsTooltip?: boolean;
   hideRequiredMarker?: boolean;
+  /** Forces the error state on regardless of this field's own touched state. */
+  forceShowErrors?: boolean;
 }
 
 /** A backend-driven sysconfig field: label + input, with required/range/fixed/type
@@ -41,6 +44,7 @@ export function SysconfigFieldRow({
   onChange,
   helperAsTooltip,
   hideRequiredMarker,
+  forceShowErrors,
 }: SysconfigFieldRowProps) {
   const isSelection = field.type === 'selection' && !!field.options?.length;
   const isMultiSelection = field.type === 'multi_selection' && !!field.options?.length;
@@ -65,8 +69,13 @@ export function SysconfigFieldRow({
 
   // Validate on blur, not on every keystroke — an in-progress value (e.g. "-" before
   // typing the rest of a negative number) shouldn't flash an error while still typing.
+  // `forceShowErrors` bypasses that — used to surface everything missing at once after
+  // the user opts to stay past the exit-confirm warning.
   const [touched, setTouched] = useState(false);
-  const outOfRange = touched && !isFieldInRange(value, field);
+  const showFieldErrors = touched || forceShowErrors;
+  const missingRequired = showFieldErrors && !!field.required && !value;
+  const outOfRange = showFieldErrors && !isFieldInRange(value, field);
+  const invalid = missingRequired || outOfRange;
   const isNumeric = field.type === 'float' || field.type === 'integer';
   const example = exampleValue(field);
   const placeholder = example !== undefined ? `Enter value (e.g. ${example})` : 'Enter value';
@@ -80,67 +89,71 @@ export function SysconfigFieldRow({
           {field.label}
           {!hideRequiredMarker && field.required && <span className="text-[#0a0a0a]">*</span>}
           {helperAsTooltip && field.helper && (
-            <Tip label={field.helper}>
-              <Info className="h-3.5 w-3.5 text-[#6b7280]" strokeWidth={2} />
+            <Tip label={field.helper} placement="bottom">
+              <Info className="h-3.5 w-3.5 text-[#006496]" strokeWidth={2} />
             </Tip>
           )}
         </Label>
-        {isSelection ? (
-          <DropdownSelect
-            id={`field-${field.name}`}
-            value={labelById.get(value) ?? ''}
-            onChange={(label) => onChange(field.options!.find((o) => labelById.get(o.id) === label)?.id ?? value)}
-            options={field.options!.map((o) => labelById.get(o.id) ?? '')}
-            disabled={field.fixed || !!onlyOption}
-          />
-        ) : isMultiSelection ? (
-          <TagSelect
-            options={field.options!.map((o) => labelById.get(o.id) ?? '')}
-            value={value
-              .split(',')
-              .filter(Boolean)
-              .map((id) => labelById.get(id) ?? id)}
-            onChange={(labels) =>
-              onChange(
-                labels
-                  .map((label) => field.options!.find((o) => labelById.get(o.id) === label)?.id ?? label)
-                  .join(',')
-              )
-            }
-          />
-        ) : isBoolean ? (
-          <label htmlFor={`field-${field.name}`} className="flex h-9 items-center">
-            <input
+        {/* Blur bubbles from whichever control is actually rendered — DropdownSelect/
+            TagSelect/the checkbox don't expose their own onBlur, so it's caught here
+            instead of duplicated per-branch (matches Input's own onBlur below). */}
+        <div onBlur={() => setTouched(true)}>
+          {isSelection ? (
+            <DropdownSelect
               id={`field-${field.name}`}
-              type="checkbox"
-              checked={value === 'true'}
-              disabled={field.fixed}
-              onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
-              className="h-4 w-4 rounded border-[#e2e8f0] accent-[#006496] disabled:cursor-not-allowed"
+              value={labelById.get(value) ?? ''}
+              onChange={(label) => onChange(field.options!.find((o) => labelById.get(o.id) === label)?.id ?? value)}
+              options={field.options!.map((o) => labelById.get(o.id) ?? '')}
+              disabled={field.fixed || !!onlyOption}
             />
-          </label>
-        ) : (
-          <Input
-            id={`field-${field.name}`}
-            value={value}
-            onChange={(e) => {
-              const withDot = e.target.value.replace(',', '.');
-              // Allow scientific notation (e.g. "1e-6") — float fields like CTE need it.
-              onChange(isNumeric ? withDot.replace(/[^0-9.\-eE+]/g, '') : withDot);
-            }}
-            onBlur={() => setTouched(true)}
-            inputMode={isNumeric ? 'decimal' : 'text'}
-            placeholder={placeholder}
-            disabled={field.fixed}
-            aria-invalid={outOfRange}
-            className={`h-9 rounded-md bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:bg-[#f8fafc] disabled:opacity-60 ${
-              outOfRange ? 'border-[#dc2626] focus-visible:ring-[#dc2626]' : 'border-[#e2e8f0]'
-            }`}
-          />
-        )}
-        {!isSelection && !isMultiSelection && !isBoolean && outOfRange && (
+          ) : isMultiSelection ? (
+            <TagSelect
+              options={field.options!.map((o) => labelById.get(o.id) ?? '')}
+              value={value
+                .split(',')
+                .filter(Boolean)
+                .map((id) => labelById.get(id) ?? id)}
+              onChange={(labels) =>
+                onChange(
+                  labels
+                    .map((label) => field.options!.find((o) => labelById.get(o.id) === label)?.id ?? label)
+                    .join(',')
+                )
+              }
+            />
+          ) : isBoolean ? (
+            <label htmlFor={`field-${field.name}`} className="flex h-9 items-center">
+              <input
+                id={`field-${field.name}`}
+                type="checkbox"
+                checked={value === 'true'}
+                disabled={field.fixed}
+                onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
+                className="h-4 w-4 rounded border-[#e2e8f0] accent-[#006496] disabled:cursor-not-allowed"
+              />
+            </label>
+          ) : (
+            <Input
+              id={`field-${field.name}`}
+              value={value}
+              onChange={(e) => {
+                const withDot = e.target.value.replace(',', '.');
+                // Allow scientific notation (e.g. "1e-6") — float fields like CTE need it.
+                onChange(isNumeric ? withDot.replace(/[^0-9.\-eE+]/g, '') : withDot);
+              }}
+              inputMode={isNumeric ? 'decimal' : 'text'}
+              placeholder={placeholder}
+              disabled={field.fixed}
+              aria-invalid={invalid}
+              className={`h-9 rounded-md bg-white px-3 py-1 text-[14px] text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:bg-[#f8fafc] disabled:opacity-60 ${
+                invalid ? 'border-[#dc2626] focus-visible:ring-[#dc2626]' : 'border-[#e2e8f0]'
+              }`}
+            />
+          )}
+        </div>
+        {invalid && (
           <p className="text-[13px] leading-4 text-[#dc2626]">
-            Value must be between {field.min ?? '…'} and {field.max ?? '…'}.
+            {missingRequired ? 'This field is required.' : formatRangeMessage(field.min, field.max)}
           </p>
         )}
       </div>

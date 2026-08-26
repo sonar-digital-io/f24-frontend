@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useLoadGroupList } from '@/hooks/api/useLoadGroups';
 import { useUpdateProjectLoad } from '@/hooks/api/useProjects';
-import { matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
+import { matchesQuery, paginate, sortItems, toggleSetMember, toggleSort } from '@/lib/listTable';
 import { formatDateTime } from '@/lib/utils';
 import type { LoadGroup } from '@/api/types/loadGroups';
 import type { LoadGroupListItem } from '@/components/calculation/CalculationLoadGroupTab';
@@ -27,6 +27,19 @@ export function useCalculationLoadGroupState(ensureProjectId: (fallbackName?: st
   const [lgSearch, setLgSearch] = useState('');
   const [lgSort, setLgSort] = useState<SortState<CalcLoadGroupSortKey>>({ key: 'last_modified', direction: 'desc' });
   const [lgPage, setLgPage] = useState(1);
+  // Which groups' load-case preview is expanded, and within that, which single
+  // load case's own value grid is expanded — lets someone look inside a group
+  // before committing to selecting it.
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<number>>(new Set());
+  const [expandedCaseIds, setExpandedCaseIds] = useState<Set<number>>(new Set());
+
+  function handleToggleGroupPreview(groupId: number) {
+    setExpandedGroupIds((prev) => toggleSetMember(prev, groupId));
+  }
+
+  function handleToggleCasePreview(caseId: number) {
+    setExpandedCaseIds((prev) => toggleSetMember(prev, caseId));
+  }
 
   const loadGroupItems = useMemo(
     () => (loadGroupsQuery.data ?? []).map(toLoadGroupListItem),
@@ -76,5 +89,9 @@ export function useCalculationLoadGroupState(ensureProjectId: (fallbackName?: st
     setLgPage,
     handleSelectGroup,
     selectedLoadGroup,
+    expandedGroupIds,
+    handleToggleGroupPreview,
+    expandedCaseIds,
+    handleToggleCasePreview,
   };
 }

@@ -57,7 +57,6 @@ export function CompositionNew() {
 
   // Geometry pick
   const [geomQuery, setGeomQuery] = useState('');
-  const [geomView, setGeomView] = useState<'list' | 'grid'>('list');
   const [selectedGeometryId, setSelectedGeometryId] = useState<string | null>(null);
 
   // The top-view data (blade planform, used by the layup mapping charts) has
@@ -507,8 +506,6 @@ export function CompositionNew() {
             compositionId={compositionId}
             geomQuery={geomQuery}
             onGeomQueryChange={setGeomQuery}
-            geomView={geomView}
-            onGeomViewChange={setGeomView}
             selectedGeometryId={selectedGeometryId}
             onSelectGeometry={setSelectedGeometryId}
             onAfterSelect={() => setActiveTab('layup')}

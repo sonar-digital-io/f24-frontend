@@ -9,6 +9,7 @@ interface StackingSectionBodyProps extends PointsTableEditCallbacks {
   sectionKey: string;
   points: ControlPoint[];
   onChange: (next: ControlPoint[]) => void;
+  onCommit?: () => void;
   yMin: number;
   yMax: number;
   yStep: number;
@@ -25,6 +26,7 @@ export function StackingSectionBody({
   sectionKey,
   points,
   onChange,
+  onCommit,
   yMin,
   yMax,
   yStep,
@@ -37,6 +39,7 @@ export function StackingSectionBody({
   onInputChange,
   onInputBlur,
   onAddPoint,
+  onRemovePoint,
 }: StackingSectionBodyProps) {
   return (
     <div className={folded ? 'flex flex-col gap-4' : 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]'}>
@@ -71,7 +74,7 @@ export function StackingSectionBody({
             />
           </div>
         </div>
-        <BezierEditor points={points} onChange={onChange} yMin={yMin} yMax={yMax} yStep={yStep} rootX={rootX} />
+        <BezierEditor points={points} onChange={onChange} onCommit={onCommit} yMin={yMin} yMax={yMax} yStep={yStep} rootX={rootX} />
       </div>
       <BezierPointsTable
         points={points}
@@ -81,6 +84,7 @@ export function StackingSectionBody({
         onChange={onInputChange}
         onBlur={onInputBlur}
         onAddPoint={onAddPoint}
+        onRemovePoint={onRemovePoint}
       />
     </div>
   );

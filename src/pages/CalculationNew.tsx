@@ -202,6 +202,10 @@ export function CalculationNew() {
     setLgPage,
     handleSelectGroup,
     selectedLoadGroup,
+    expandedGroupIds: expandedGroupPreviewIds,
+    handleToggleGroupPreview,
+    expandedCaseIds: expandedGroupCaseIds,
+    handleToggleCasePreview,
   } = useCalculationLoadGroupState(ensureProjectId);
 
   // ── Fatigue profile tab ───────────────────────────────────────────────────
@@ -357,6 +361,10 @@ export function CalculationNew() {
               onPageChange={setLgPage}
               selectedGroupId={selectedGroupId}
               onSelectGroup={handleSelectGroup}
+              expandedGroupIds={expandedGroupPreviewIds}
+              onTogglePreview={handleToggleGroupPreview}
+              expandedCaseIds={expandedGroupCaseIds}
+              onToggleCasePreview={handleToggleCasePreview}
             />
           )}
 

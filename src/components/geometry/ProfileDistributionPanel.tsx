@@ -7,6 +7,7 @@ import { ProfileGeneratorTopRow } from '@/components/geometry/ProfileGeneratorTo
 import { ProfileDistributionSectionBody } from '@/components/geometry/ProfileDistributionSectionBody';
 import { Tip } from '@/components/common/list/Tip';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
+import { useDeferredCommit } from '@/hooks/useDeferredCommit';
 import type { ProfileGeneratorParameters } from '@/api/types/geometry';
 
 // Only NACA 4 digit is supported by the backend right now.
@@ -132,14 +133,9 @@ export function ProfileDistributionPanel({
 
   const rootX = Number.isFinite(parseFloat(startPos)) ? parseFloat(startPos) : DEFAULT_START_POSITION;
 
-  // Points are edited (dragged, deleted, typed, added) well before a commit is due —
-  // `requestCommit` just marks one pending; the effect below reads the settled state
-  // once React has actually applied it, so a commit requested mid-update (e.g. from
-  // the same handler that just added a point) never reads a stale pre-update value.
-  const [commitTick, setCommitTick] = useState(0);
-  function requestCommit() {
-    setCommitTick((t) => t + 1);
-  }
+  const requestCommit = useDeferredCommit(() => {
+    if (hasEnoughPoints) onCommit(buildParams());
+  });
 
   // This panel unmounts/remounts on tab switch, so mounting == opening the tab —
   // save immediately rather than waiting for the first field blur/point edit.
@@ -222,15 +218,6 @@ export function ProfileDistributionPanel({
   // curve has at least the 2 points a bezier curve needs.
   const hasEnoughPoints = SECTION_KEYS.every((key) => sectionPoints[key].length >= 2);
 
-  // Fires once per requested commit, after the triggering state change (a moved/
-  // deleted/added point, or a field's new value) has actually been applied — never
-  // on every keystroke/drag-step in between.
-  useEffect(() => {
-    if (commitTick === 0) return;
-    if (hasEnoughPoints) onCommit(buildParams());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commitTick]);
-
   // A single section's chart + table BODY (no heading). Heading is rendered
   // by the accordion item in folded mode, and is hidden in expanded mode
   // because sub-tabs already name the section.
@@ -259,6 +246,10 @@ export function ProfileDistributionPanel({
         onInputChange={(idx, field, raw) => handleInputChange(key, idx, field, raw)}
         onInputBlur={(idx, field) => handleInputBlur(key, idx, field)}
         onAddPoint={() => addPoint(key)}
+        onRemovePoint={(idx) => {
+          handleCurveChange(key, sectionPoints[key].filter((_, i) => i !== idx));
+          requestCommit();
+        }}
       />
     );
   }
@@ -310,7 +301,7 @@ export function ProfileDistributionPanel({
             <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
             <span className="text-[14px] leading-5 text-[#737373]">Profiles updated</span>
             <Tip label="Profiles were regenerated from the current settings and distribution curves.">
-              <Info className="h-3.5 w-3.5 text-[#6b7280]" strokeWidth={2} />
+              <Info className="h-3.5 w-3.5 text-[#006496]" strokeWidth={2} />
             </Tip>
           </>
         ) : null}

@@ -28,6 +28,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { RotateCcw } from 'lucide-react';
 import * as THREE from 'three';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { getOcc } from '@/lib/occ-init';
@@ -65,6 +66,9 @@ export interface OccViewerProps {
    *  Composition preview, where a part actually needs telling apart from the blade shell.
    *  Defaults to false. Ignored for STL/IGES, which have no per-part names to begin with. */
   treatAsBlade?: boolean;
+  /** Shows a floating "Reset view" button that re-fits the camera to the loaded
+   *  geometry's bounding box — the same fit that runs automatically on load. */
+  showResetButton?: boolean;
 }
 
 export function OccViewer({
@@ -78,9 +82,11 @@ export function OccViewer({
   showLayups = true,
   showWebView = false,
   treatAsBlade = false,
+  showResetButton = false,
 }: OccViewerProps) {
   const containerRef  = useRef<HTMLDivElement>(null);
   const meshesRef     = useRef<THREE.Mesh[]>([]);
+  const resetViewRef  = useRef<(() => void) | null>(null);
   const wireLineRef   = useRef<THREE.LineSegments[]>([]);
   const webLineRef    = useRef<THREE.LineSegments[]>([]);
   const wireframeRef  = useRef(wireframe);
@@ -147,6 +153,14 @@ export function OccViewer({
     controls.minDistance = 0.1;
     controls.maxDistance = 5000;
     controls.target.set(0, 0, 0);
+
+    // Set once the mesh loads — the reset button re-runs the same auto-fit
+    // against these, so it's a no-op (and disabled, via `status`) until then.
+    let loadedRoots: THREE.Object3D[] = [];
+    resetViewRef.current = () => {
+      if (loadedRoots.length === 0) return;
+      fitMaxDim = fitViewerSceneToBounds(loadedRoots, camera, controls, ground);
+    };
 
     // ── Animate ─────────────────────────────────────────────────────────────
     let animId = 0;
@@ -382,6 +396,7 @@ export function OccViewer({
           if (disposed) return;
 
           // ── Auto-fit camera + ground to loaded geometry ─────────────────────
+          loadedRoots = roots;
           fitMaxDim = fitViewerSceneToBounds(roots, camera, controls, ground);
 
           meshesRef.current   = newMeshes;
@@ -405,6 +420,7 @@ export function OccViewer({
     // ── Cleanup ─────────────────────────────────────────────────────────────
     return () => {
       disposed = true;
+      resetViewRef.current = null;
       ro.disconnect();
       window.removeEventListener('resize', onResize);
       cancelAnimationFrame(animId);
@@ -440,6 +456,19 @@ export function OccViewer({
           <span className="rounded-md bg-white/80 px-2.5 py-1 text-[12px] font-medium text-[#dc2626] backdrop-blur-sm">
             Geometry load failed — check console
           </span>
+        </div>
+      )}
+      {showResetButton && (
+        <div className="absolute bottom-4 right-4 z-10">
+          <button
+            type="button"
+            onClick={() => resetViewRef.current?.()}
+            disabled={status !== 'ready'}
+            aria-label="Reset view"
+            className="flex h-9 w-9 items-center justify-center rounded-md bg-white/95 text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <RotateCcw className="h-4 w-4" strokeWidth={2} />
+          </button>
         </div>
       )}
     </div>

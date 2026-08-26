@@ -4,6 +4,7 @@ import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
+import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
 import { PropertyFormTab } from '@/components/material/PropertyFormTab';
 import { MaterialGeneralTab } from '@/components/material/MaterialGeneralTab';
 import {
@@ -25,23 +26,26 @@ import {
   buildSysconfigSections,
   getMechPropTypeParameter,
   getMechPropTypeEntry,
+  pickActiveFields,
 } from '@/lib/sysconfigMapping';
 import { isFormValid, isFormRangeValid } from '@/lib/sysconfigFormValidation';
 import type { MaterialPayload } from '@/api/types/materials';
 import type { FormSection } from '@/data/materialFormFields';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 
-/** A fixed field's value is backend-locked to sysconfig's own `entry.value` rather than
- *  anything the material has saved — fills it in for any field that doesn't already have
- *  a saved value of its own. Already-present values (saved or in-progress) are untouched. */
+/** A fixed field's value is entirely backend-controlled, via sysconfig's own resolved
+ *  `entry.value` — always snapped to it, never left at whatever was there before, since a
+ *  dependency on some *other* field (e.g. a formula-driven modulus) can recompute it any
+ *  time sysconfig re-resolves. Returns `values` itself, unchanged, when nothing needs it. */
 function withFixedDefaults(
   values: Record<string, string>,
   sections: FormSection[],
 ): Record<string, string> {
-  const next = { ...values };
+  let next = values;
   sections.forEach((section) =>
     section.fields.forEach((field) => {
-      if (field.fixed && field.value !== undefined && next[field.name] === undefined) {
+      if (field.fixed && field.value !== undefined && next[field.name] !== field.value) {
+        if (next === values) next = { ...values };
         next[field.name] = field.value;
       }
     }),
@@ -100,6 +104,10 @@ export function MaterialNew() {
   });
   const [fatigueValues, setFatigueValues] = useState<Record<string, string>>({});
   const [baseline, setBaseline] = useState<Baseline | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  // Set once the user chooses to stay after the exit-confirm warning — forces every
+  // missing required field on the Mechanical/Fatigue tabs into its error state.
+  const [showMissingFieldErrors, setShowMissingFieldErrors] = useState(false);
   // Set right after the blur-autosave creates the material, so the loading state below
   // doesn't flash "Loading material…" over the tab the user is actively filling in —
   // we already have its data locally; the background refetch is just React Query's habit.
@@ -144,20 +152,22 @@ export function MaterialNew() {
     [sysconfigQuery.data],
   );
 
-  // Seed fixed fields' sysconfig defaults as soon as sections load, same pattern as
-  // GeometryEdit's global properties.
+  // Re-sync fixed fields to sysconfig's resolved value every time sysconfig itself
+  // changes — including right after a blur-autosave, now that saving mechanical/fatigue
+  // properties always invalidates sysconfig too. Patches `baseline` alongside the values
+  // so this backend-driven sync is never mistaken for an in-progress user edit.
   useEffect(() => {
-    setMechValues((prev) => {
-      const next = withFixedDefaults(prev, mechanicalSections);
-      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
-    });
+    setMechValues((prev) => withFixedDefaults(prev, mechanicalSections));
+    setBaseline((prev) =>
+      prev ? { ...prev, mechValues: withFixedDefaults(prev.mechValues, mechanicalSections) } : prev,
+    );
   }, [mechanicalSections]);
 
   useEffect(() => {
-    setFatigueValues((prev) => {
-      const next = withFixedDefaults(prev, fatigueSections);
-      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
-    });
+    setFatigueValues((prev) => withFixedDefaults(prev, fatigueSections));
+    setBaseline((prev) =>
+      prev ? { ...prev, fatigueValues: withFixedDefaults(prev.fatigueValues, fatigueSections) } : prev,
+    );
   }, [fatigueSections]);
 
   // Values (including Type) always come from GET /material/:id/ — the direct,
@@ -365,8 +375,8 @@ export function MaterialNew() {
         name,
         date: toIsoDateTime(date),
         description,
-        mechanical_properties: toKeyValueList(mechValues),
-        fatigue_properties: toKeyValueList(fatigueValues),
+        mechanical_properties: toKeyValueList(pickActiveFields(mechValues, mechanicalSections)),
+        fatigue_properties: toKeyValueList(pickActiveFields(fatigueValues, fatigueSections)),
       };
       const created = await createMaterialMutation.mutateAsync(payload);
       setBaseline({ name, description, date, mechValues, fatigueValues });
@@ -383,13 +393,16 @@ export function MaterialNew() {
     }
   }
 
-  const generalSaved = generalValid && !hasUnsavedGeneral;
-  const generalStatus: SaveStatus =
+  // Only "Saving…"/"Saved" is shown here — an incomplete-but-persisted tab still reads
+  // as "Saved" (its missing required fields are surfaced separately, via the exit-confirm
+  // flow). Hidden entirely (undefined) until something has actually been persisted —
+  // a blank, not-yet-created material has nothing to call "Saved".
+  const generalStatus: SaveStatus | undefined =
     createMaterialMutation.isPending || updateGeneralMutation.isPending
       ? 'saving'
-      : generalSaved
+      : baseline
         ? 'saved'
-        : 'not-saved';
+        : undefined;
 
   // Autosave the General tab once every required field is filled — fires when focus
   // leaves a field (blur) or the form itself (click-out), not on every keystroke. Gates
@@ -429,7 +442,6 @@ export function MaterialNew() {
         payload: {
           mechanical_properties: [{ reference: MECH_PROP_TYPE_REFERENCE, value: newType }],
         },
-        typeChanged: true,
       }),
     ]);
     pendingSaveRef.current = savePromise;
@@ -453,19 +465,16 @@ export function MaterialNew() {
   const mechanicalRangeValid = isFormRangeValid(mechanicalSections, mechValues);
   const mechanicalUnsaved =
     keyValueSignature(mechValues) !== keyValueSignature(baseline?.mechValues ?? {});
-  const mechanicalSaved = mechanicalValid && !mechanicalUnsaved;
-  const mechanicalStatus: SaveStatus = updateMechanicalMutation.isPending
-    ? 'saving'
-    : mechanicalSaved
-      ? 'saved'
-      : 'not-saved';
+  const mechanicalStatus: SaveStatus = updateMechanicalMutation.isPending ? 'saving' : 'saved';
 
   // Autosave the Mechanical tab on every blur, even before all mandatory fields are
   // filled — same PUT as before, just no longer gated on completeness.
   async function handleMechanicalBlur() {
     if (!mechanicalRangeValid || !mechanicalUnsaved || updateMechanicalMutation.isPending) return;
     const savePromise = updateMechanicalMutation.mutateAsync({
-      payload: { mechanical_properties: toKeyValueList(mechValues) },
+      payload: {
+        mechanical_properties: toKeyValueList(pickActiveFields(mechValues, mechanicalSections)),
+      },
     });
     pendingSaveRef.current = savePromise;
     try {
@@ -482,19 +491,14 @@ export function MaterialNew() {
   const fatigueRangeValid = isFormRangeValid(fatigueSections, fatigueValues);
   const fatigueUnsaved =
     keyValueSignature(fatigueValues) !== keyValueSignature(baseline?.fatigueValues ?? {});
-  const fatigueSaved = fatigueValid && !fatigueUnsaved;
-  const fatigueStatus: SaveStatus = updateFatigueMutation.isPending
-    ? 'saving'
-    : fatigueSaved
-      ? 'saved'
-      : 'not-saved';
+  const fatigueStatus: SaveStatus = updateFatigueMutation.isPending ? 'saving' : 'saved';
 
   // Autosave the Fatigue tab on every blur, even before all mandatory fields are
   // filled — same structure as Mechanical above.
   async function handleFatigueBlur() {
     if (!fatigueRangeValid || !fatigueUnsaved || updateFatigueMutation.isPending) return;
     const savePromise = updateFatigueMutation.mutateAsync({
-      fatigue_properties: toKeyValueList(fatigueValues),
+      fatigue_properties: toKeyValueList(pickActiveFields(fatigueValues, fatigueSections)),
     });
     pendingSaveRef.current = savePromise;
     try {
@@ -505,16 +509,31 @@ export function MaterialNew() {
     }
   }
 
+  // Only meaningful once the material actually exists — a blank/in-progress draft that
+  // was never created has nothing incomplete to warn about. Includes General so a
+  // required field cleared there (which can't autosave — handleGeneralBlur requires
+  // generalValid) doesn't silently slip past Exit with no warning.
+  const isIncomplete = isEditing && (!generalValid || !mechanicalValid || !fatigueValid);
+
   function handleExit() {
-    // `baseline` is only set once something has actually been persisted — before that,
-    // an incomplete/blank draft has nothing to lose. Once it exists, any of the three
-    // tabs' current values drifting from it (including an out-of-range edit that
-    // never autosaved) is a real unsaved change.
-    const hasUnsavedChanges =
-      Boolean(baseline) && (hasUnsavedGeneral || mechanicalUnsaved || fatigueUnsaved);
-    if (hasUnsavedChanges && !window.confirm('You have unsaved changes. Exit without saving?'))
+    if (isIncomplete) {
+      setShowExitConfirm(true);
       return;
+    }
     navigate(exitTarget);
+  }
+
+  // Everything already autosaves on blur — exiting anyway just means leaving with
+  // whatever's already persisted, incomplete or not.
+  function handleExitAnyway() {
+    setShowExitConfirm(false);
+    navigate(exitTarget);
+  }
+
+  // Staying surfaces exactly what's missing, on whichever tab it's on.
+  function handleStayAndReview() {
+    setShowExitConfirm(false);
+    setShowMissingFieldErrors(true);
   }
 
   const isDuplicating = !isEditing && Number.isFinite(duplicateSourceId);
@@ -544,7 +563,7 @@ export function MaterialNew() {
         tabs={[
           { value: 'general', label: 'General' },
           { value: 'mechanical', label: 'Mechanical properties', disabled: !isSaved },
-          { value: 'fatigue', label: 'Fatigue properties', disabled: !isSaved || !mechanicalSaved },
+          { value: 'fatigue', label: 'Fatigue properties', disabled: !isSaved },
         ]}
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -606,6 +625,7 @@ export function MaterialNew() {
                 values={mechValues}
                 onChange={(name, value) => setMechValues((prev) => ({ ...prev, [name]: value }))}
                 onBlur={handleMechanicalBlur}
+                forceShowErrors={showMissingFieldErrors}
               />
             )}
           </>
@@ -623,11 +643,22 @@ export function MaterialNew() {
                 values={fatigueValues}
                 onChange={(name, value) => setFatigueValues((prev) => ({ ...prev, [name]: value }))}
                 onBlur={handleFatigueBlur}
+                forceShowErrors={showMissingFieldErrors}
               />
             )}
           </>
         )}
       </main>
+
+      <ConfirmDialog
+        open={showExitConfirm}
+        title="Exit without finishing?"
+        message="Not all required fields are filled in. You can exit anyway — your data is saved, but this material won't be usable in a layup until it's complete."
+        confirmLabel="Exit anyway"
+        cancelLabel="Stay and review"
+        onConfirm={handleExitAnyway}
+        onCancel={handleStayAndReview}
+      />
     </div>
   );
 }

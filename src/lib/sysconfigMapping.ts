@@ -19,11 +19,20 @@ function unitSuffix(sysconfig: SysconfigResponse, unitId: string | undefined): s
   return unit && unit.group !== 'unitless' && unit.symbol ? ` (${unit.symbol})` : '';
 }
 
+/** "Value must be between X and Y." / "...larger than X." / "...smaller than Y." —
+ *  whichever bounds are actually defined. Shared by this file's static helper text and
+ *  SysconfigFieldRow's live inline validation error, so the wording only lives once. */
+export function formatRangeMessage(min: string | undefined, max: string | undefined): string | undefined {
+  if (min !== undefined && max !== undefined) return `Value must be between ${min} and ${max}.`;
+  if (min !== undefined) return `Value must be larger than ${min}.`;
+  if (max !== undefined) return `Value must be smaller than ${max}.`;
+  return undefined;
+}
+
 function buildField(sysconfig: SysconfigResponse, entry: SysconfigParamEntry): FormField {
   const paramDef = sysconfig.parameters.find((p) => p.id === entry.reference);
   const label = (paramDef?.name ?? entry.reference) + unitSuffix(sysconfig, paramDef?.unit);
-  const helper =
-    entry.minimum || entry.maximum ? `Range: ${entry.minimum ?? '…'} – ${entry.maximum ?? '…'}` : undefined;
+  const helper = formatRangeMessage(entry.minimum, entry.maximum);
   return {
     name: entry.reference,
     label,
@@ -36,6 +45,21 @@ function buildField(sysconfig: SysconfigResponse, entry: SysconfigParamEntry): F
     value: entry.value,
     options: paramDef?.options,
   };
+}
+
+/**
+ * Restricts a values map to just the fields `sections` currently lists as active.
+ * A dependency can drop a field to `active: false` — per the config's own contract that
+ * means "gone", not "disabled": the frontend must never resubmit that field's now-stale
+ * value once it happens (e.g. a Mechanical property that only applied to the ply type the
+ * material just switched away from).
+ */
+export function pickActiveFields(
+  values: Record<string, string>,
+  sections: FormSection[]
+): Record<string, string> {
+  const activeNames = new Set(sections.flatMap((s) => s.fields.map((f) => f.name)));
+  return Object.fromEntries(Object.entries(values).filter(([name]) => activeNames.has(name)));
 }
 
 /**

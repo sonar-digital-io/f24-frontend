@@ -11,7 +11,6 @@ export function toUiProfile(p: GeometryProfile): Profile {
     maxCamber: Number(params.get('max_camber') ?? 0),
     maxCamberPosition: Number(params.get('max_camber_position') ?? 0),
     thickness: Number(params.get('max_thickness') ?? 0),
-    show2D: true,
   };
 }
 

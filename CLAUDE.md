@@ -42,7 +42,6 @@ src/
 │   │   ├── viewer/               # 3D / bézier szerkesztő komponensek
 │   │   │   ├── OccViewer.tsx        # OpenCascade.js IGES viewer — GeometryEdit + CompositionNew 3D háttere
 │   │   │   ├── CoordinateGizmo.tsx  # XYZ tengely-indikátor overlay a 3D viewport felett
-│   │   │   ├── RenderToggle.tsx     # Solid/wireframe render mode váltó overlay
 │   │   │   ├── BezierEditor.tsx     # Interaktív cubic Bézier editor (drag + zoom + pan + yMin/yMax) — Geometry/Composition/LoadGroup megosztja
 │   │   │   └── BezierZoomControls.tsx # BezierEditor zoom in/out gombpár
 │   │   ├── card/                 # Grid-kártya komponensek
@@ -130,7 +129,7 @@ src/
 | `/material` | `Material` | Material data table accordion-szerű expand-dal — Figma 576:19313 |
 | `/material/new` | `MaterialNew` | Új material létrehozás 3 tab-bal — Figma 584:15600 |
 | `/geometry` | `Geometry` | Geometry list + grid view toggle — Figma 600:22786 / 600:22858 |
-| `/geometry/:id` | `GeometryEdit` | Geometry edit full-bleed OccViewer canvas-szal. Sub-tabs: Create geometry (csak `/geometry/new`), Global properties (596:22661), Profile distribution (596:19816), Profiles (596:19631), Stacking (596:20399), 3D view (result generálás) |
+| `/geometry/:id` | `GeometryEdit` | Geometry edit full-bleed OccViewer canvas-szal. Sub-tabs: Create geometry (csak `/geometry/new`), Global properties (596:22661), Profile distribution (596:19816), Profiles (596:19631), Stacking (596:20399). A result (3D mesh) automatikusan generálódik a háttérben, amint a settings/profile_generator_parameters/profiles/edges mind megvan — nincs saját tab-ja, csak a Blade/Wireframe checkbox overlay a viewer felett |
 | `/geometry/new` | `GeometryEdit` | Új geometria inline létrehozás (a `/geometry?new=1` link ide redirectel) |
 | `/layup` | `Layup` | Layup list page (table) — Figma 600:23689 |
 | `/layup/new` | `LayupNew` | New layup (General + Layup building) — Figma 600:27124 / 600:24328 |

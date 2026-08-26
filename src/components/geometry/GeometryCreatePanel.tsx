@@ -12,13 +12,13 @@ interface GeometryCreatePanelProps {
   description: string;
   onDescriptionChange: (v: string) => void;
   hasError: boolean;
-  onCreate: () => void;
-  creating: boolean;
-  onUpdate: () => void;
-  updating: boolean;
+  /** Fires when focus leaves a field (blur) or the form itself (click-out) — creates the
+   *  geometry on the first valid blur while new, autosaves it afterwards. */
+  onBlur: () => void;
 }
 
-/** "Project configuration" tab panel — create-new form, or edit-general form when editing. */
+/** "Project configuration" tab panel — create-new form, or edit-general form when editing.
+ *  Autosaves on blur, same as Material's General tab — no explicit Save/Create button. */
 export function GeometryCreatePanel({
   isNew,
   name,
@@ -28,15 +28,13 @@ export function GeometryCreatePanel({
   description,
   onDescriptionChange,
   hasError,
-  onCreate,
-  creating,
-  onUpdate,
-  updating,
+  onBlur,
 }: GeometryCreatePanelProps) {
-  const disabled = !name.trim() || !date || !description.trim();
-
   return (
-    <div className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+    <div
+      onBlur={onBlur}
+      className="flex flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm"
+    >
       <div className="flex flex-col gap-1">
         <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">
           Project configuration
@@ -90,33 +88,17 @@ export function GeometryCreatePanel({
         </p>
       )}
 
-      {isNew ? (
-        <div className="flex items-center justify-end gap-2 pt-1">
+      {isNew && (
+        <div className="flex items-center justify-end pt-1">
           <Link
             to="/geometry"
+            // Blur fires (and autosave-creates) before click otherwise — a mousedown that
+            // never shifts focus away from the field being edited means no blur, no race.
+            onMouseDown={(e) => e.preventDefault()}
             className="inline-flex h-9 items-center justify-center rounded-md border border-[#e2e8f0] bg-white px-3 py-2 text-[14px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
           >
             Cancel
           </Link>
-          <button
-            type="button"
-            onClick={onCreate}
-            disabled={disabled || creating}
-            className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
-          >
-            {creating ? 'Creating…' : 'Create'}
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center justify-end gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onUpdate}
-            disabled={disabled || updating}
-            className="inline-flex h-9 items-center justify-center rounded-md bg-[#006496] px-4 py-2 text-[14px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#006496]"
-          >
-            {updating ? 'Updating…' : 'Update'}
-          </button>
         </div>
       )}
     </div>

@@ -6,7 +6,6 @@ export interface Profile {
   maxCamber: number; // %
   maxCamberPosition: number;
   thickness: number; // %
-  show2D: boolean;
 }
 
 export const PROFILE_TYPES = ['NACA 4 digit', 'NACA 5 digit', 'Custom airfoil'];
@@ -32,7 +31,6 @@ export const INITIAL_PROFILES: Profile[] = [
     maxCamber: 4,
     maxCamberPosition: 40,
     thickness: 12,
-    show2D: true,
   },
   {
     id: 'p1',
@@ -42,7 +40,6 @@ export const INITIAL_PROFILES: Profile[] = [
     maxCamber: 10,
     maxCamberPosition: 18.431236,
     thickness: 19.681555,
-    show2D: true,
   },
   {
     id: 'p2',
@@ -52,7 +49,6 @@ export const INITIAL_PROFILES: Profile[] = [
     maxCamber: 8,
     maxCamberPosition: 30,
     thickness: 17,
-    show2D: true,
   },
   {
     id: 'p3',
@@ -62,7 +58,6 @@ export const INITIAL_PROFILES: Profile[] = [
     maxCamber: 6,
     maxCamberPosition: 40,
     thickness: 15,
-    show2D: true,
   },
   {
     id: 'p4',
@@ -72,7 +67,6 @@ export const INITIAL_PROFILES: Profile[] = [
     maxCamber: 4,
     maxCamberPosition: 50,
     thickness: 12,
-    show2D: true,
   },
   {
     id: 'p5',
@@ -82,6 +76,5 @@ export const INITIAL_PROFILES: Profile[] = [
     maxCamber: 2,
     maxCamberPosition: 50,
     thickness: 9,
-    show2D: true,
   },
 ];

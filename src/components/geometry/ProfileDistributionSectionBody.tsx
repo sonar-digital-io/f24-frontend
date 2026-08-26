@@ -37,6 +37,7 @@ export function ProfileDistributionSectionBody({
   onInputChange,
   onInputBlur,
   onAddPoint,
+  onRemovePoint,
 }: ProfileDistributionSectionBodyProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -65,6 +66,7 @@ export function ProfileDistributionSectionBody({
               onChange={onInputChange}
               onBlur={onInputBlur}
               onAddPoint={onAddPoint}
+              onRemovePoint={onRemovePoint}
             />
           )}
         </div>

@@ -1,6 +1,6 @@
 import type { ListTableHeadColumn } from '@/components/common/list/ListTableHead';
 import { PickerListCard } from '@/components/calculation/PickerListCard';
-import { SelectButton } from '@/components/common/list/SelectButton';
+import { CalculationLoadGroupRow } from '@/components/calculation/CalculationLoadGroupRow';
 import type { SortState, CalcLoadGroupSortKey } from '@/types';
 
 export interface LoadGroupListItem {
@@ -24,6 +24,10 @@ interface CalculationLoadGroupTabProps {
   onPageChange: (page: number) => void;
   selectedGroupId: number | null;
   onSelectGroup: (id: number) => void;
+  expandedGroupIds: Set<number>;
+  onTogglePreview: (id: number) => void;
+  expandedCaseIds: Set<number>;
+  onToggleCasePreview: (id: number) => void;
 }
 
 const COLUMNS: ListTableHeadColumn<CalcLoadGroupSortKey>[] = [
@@ -46,6 +50,10 @@ export function CalculationLoadGroupTab({
   onPageChange,
   selectedGroupId,
   onSelectGroup,
+  expandedGroupIds,
+  onTogglePreview,
+  expandedCaseIds,
+  onToggleCasePreview,
 }: CalculationLoadGroupTabProps) {
   return (
     <PickerListCard
@@ -55,6 +63,7 @@ export function CalculationLoadGroupTab({
       columns={COLUMNS}
       sort={sort}
       onSort={onSort}
+      leadingWidthClassName="w-[52px]"
       actionsWidthClassName="w-[100px]"
       isLoading={isLoading}
       isError={isError}
@@ -64,25 +73,18 @@ export function CalculationLoadGroupTab({
       totalPages={totalPages}
       onPageChange={onPageChange}
     >
-      {pageRows.map((group) => {
-        const isSelected = selectedGroupId === group.id;
-        return (
-          <tr
-            key={group.id}
-            className={`border-b border-[#e5e7eb] transition-colors last:border-b-0 ${
-              isSelected ? 'bg-[#eef9ff] shadow-[inset_2px_0_0_#006496]' : 'hover:bg-[#f9fafb]'
-            }`}
-          >
-            <td className="px-3 py-3 text-[#0a0a0a]">{group.lastUpdated}</td>
-            <td className="px-3 py-3 font-medium text-[#0a0a0a]">{group.name}</td>
-            <td className="px-3 py-3 text-[#6b7280]">{group.user}</td>
-            <td className="px-3 py-3 text-[#6b7280]">{group.description}</td>
-            <td className="px-3 py-3">
-              <SelectButton selected={isSelected} onClick={() => onSelectGroup(group.id)} />
-            </td>
-          </tr>
-        );
-      })}
+      {pageRows.map((group) => (
+        <CalculationLoadGroupRow
+          key={group.id}
+          group={group}
+          isSelected={selectedGroupId === group.id}
+          onSelectGroup={onSelectGroup}
+          isExpanded={expandedGroupIds.has(group.id)}
+          onTogglePreview={onTogglePreview}
+          expandedCaseIds={expandedCaseIds}
+          onToggleCasePreview={onToggleCasePreview}
+        />
+      ))}
     </PickerListCard>
   );
 }

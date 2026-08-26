@@ -1,25 +1,23 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, Download, Pencil, Trash2 } from 'lucide-react';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { ListPageCard } from '@/components/common/list/ListPageCard';
 import { ListTable } from '@/components/common/list/ListTable';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
 import { ListTableBody } from '@/components/common/list/ListTableBody';
-import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { LoadGroupListRow } from '@/components/load-group/LoadGroupListRow';
 import {
   matchesDateRange,
   matchesQuery,
   paginate,
-  rowInteractionProps,
   sortItems,
+  toggleSetMember,
   toggleSort,
 } from '@/lib/listTable';
-import { formatDateTime } from '@/lib/utils';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
 import type { SortState, LoadGroupSortKey } from '@/types';
 import { type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
@@ -41,41 +39,6 @@ function toUiLoadGroup(g: BackendLoadGroup): LoadGroupItem {
   };
 }
 
-interface LoadGroupRowProps {
-  item: LoadGroupItem;
-  onEdit: () => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
-}
-
-function LoadGroupRow({ item, onEdit, onDuplicate, onDelete }: LoadGroupRowProps) {
-  return (
-    <tr
-      {...rowInteractionProps(onEdit)}
-      className="group cursor-pointer border-b border-[#e5e7eb] bg-white transition-colors hover:bg-[#f9fafb]"
-    >
-      <td className="px-3 py-4 text-[14px] font-medium leading-5 text-[#0a0a0a]">{item.name}</td>
-      <td className="px-3 py-4 text-[14px] leading-5 text-[#6b7280]">{item.description}</td>
-      <td className="w-[160px] px-3 py-4 text-[14px] leading-5 text-[#0a0a0a]">
-        {formatDateTime(item.lastUpdated)}
-      </td>
-      <td className="px-3 py-4">
-        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <RowIconButton label="Edit load group" icon={Pencil} onClick={onEdit} />
-          <RowIconButton label="Export load group" icon={Download} onClick={() => {}} />
-          <RowIconButton label="Duplicate load group" icon={Copy} onClick={onDuplicate} />
-          <RowIconButton
-            label="Delete load group"
-            icon={Trash2}
-            onClick={onDelete}
-            variant="danger"
-          />
-        </div>
-      </td>
-    </tr>
-  );
-}
-
 export function LoadGroup() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -95,6 +58,11 @@ export function LoadGroup() {
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useDeleteLoadGroup();
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => toggleSetMember(prev, id));
+  }
 
   async function handleConfirmDelete() {
     if (!pendingDelete) return;
@@ -170,18 +138,25 @@ export function LoadGroup() {
             pagination={{ page, totalPages, onChange: setPage }}
           >
             <ListTable>
-              <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />
+              <ListTableHead
+                columns={COLUMNS}
+                sort={sort}
+                onSort={handleSort}
+                leadingWidthClassName="w-[52px]"
+              />
               <ListTableBody
-                colSpan={4}
+                colSpan={5}
                 isLoading={isLoading}
                 isError={isError}
                 loadingLabel="Loading load groups…"
                 errorLabel="Failed to load load groups from the server."
                 rows={pageRows}
                 renderRow={(item) => (
-                  <LoadGroupRow
+                  <LoadGroupListRow
                     key={item.id}
                     item={item}
+                    expanded={expandedIds.has(item.id)}
+                    onToggle={() => toggleExpand(item.id)}
                     onEdit={() => navigate(`/load-group/${item.id}`)}
                     onDuplicate={() => navigate(`/load-group/new?duplicateFrom=${item.id}`)}
                     onDelete={() => setPendingDelete({ id: item.id, name: item.name })}

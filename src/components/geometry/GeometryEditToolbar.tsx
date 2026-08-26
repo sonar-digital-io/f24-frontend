@@ -7,22 +7,16 @@ const TABS = [
   { value: 'profile-distribution', label: 'Profile distribution' },
   { value: 'profiles', label: 'Profiles' },
   { value: 'stacking', label: 'Stacking' },
-  { value: '3d-view', label: '3D view' },
 ];
 
 /** These tabs build on the global properties (e.g. nominal/root radius), so they stay
  *  unreachable until that tab's mandatory fields are filled in and autosaved. */
-const GATED_UNTIL_GLOBAL_PROPERTIES_SAVED = ['profile-distribution', 'profiles', 'stacking', '3d-view'];
+const GATED_UNTIL_GLOBAL_PROPERTIES_SAVED = ['profile-distribution', 'profiles', 'stacking'];
 
 /** These tabs build on the profile list, so they stay unreachable until PUT
  *  /geometry/:id/profiles/ has saved at least one profile (or GET /geometry/:id/
  *  already had a non-empty nested `profiles` array). */
-const GATED_UNTIL_PROFILES_SAVED = ['stacking', '3d-view'];
-
-/** Result generation builds on the stacking edges, so 3D view stays unreachable
- *  until PUT /geometry/:id/edges/ has saved at least one edge (or GET /geometry/:id/
- *  already had a non-empty nested `edges` array). */
-const GATED_UNTIL_EDGES_SAVED = ['3d-view'];
+const GATED_UNTIL_PROFILES_SAVED = ['stacking'];
 
 interface GeometryEditToolbarProps {
   activeTab: string;
@@ -30,7 +24,6 @@ interface GeometryEditToolbarProps {
   isNew: boolean;
   globalPropertiesSaved: boolean;
   profilesSaved: boolean;
-  edgesSaved: boolean;
   /** Omitted (e.g. while isNew) hides the indicator entirely rather than falsely claiming a status. */
   status?: SaveStatus;
   onExit: () => void;
@@ -43,7 +36,6 @@ export function GeometryEditToolbar({
   isNew,
   globalPropertiesSaved,
   profilesSaved,
-  edgesSaved,
   status,
   onExit,
 }: GeometryEditToolbarProps) {
@@ -59,8 +51,7 @@ export function GeometryEditToolbar({
                 disabled={
                   (isNew && tab.value !== 'create') ||
                   (!globalPropertiesSaved && GATED_UNTIL_GLOBAL_PROPERTIES_SAVED.includes(tab.value)) ||
-                  (!profilesSaved && GATED_UNTIL_PROFILES_SAVED.includes(tab.value)) ||
-                  (!edgesSaved && GATED_UNTIL_EDGES_SAVED.includes(tab.value))
+                  (!profilesSaved && GATED_UNTIL_PROFILES_SAVED.includes(tab.value))
                 }
                 className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] disabled:pointer-events-none disabled:opacity-40"
               >
