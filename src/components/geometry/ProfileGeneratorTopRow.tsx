@@ -45,7 +45,7 @@ export function ProfileGeneratorTopRow({
             Profile count
           </Label>
           <Info className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={2} />
-          <div className="pointer-events-none absolute left-0 top-full z-50 mt-2 w-[280px] rounded-md bg-[#171717] px-3 py-2 text-[13px] leading-5 text-white opacity-0 shadow-md transition-opacity group-hover/tip:opacity-100">
+          <div className="pointer-events-none absolute left-0 top-full z-50 mt-2 w-[280px] rounded-md bg-[#006496] px-4 py-3 text-[13px] leading-5 text-white opacity-0 shadow-md transition-opacity group-hover/tip:opacity-100">
             Sets the initial number of generated profiles. You can add, delete, or modify individual profiles in the &apos;Profiles&apos; step.
           </div>
         </div>

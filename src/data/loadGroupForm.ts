@@ -9,30 +9,30 @@ export type LimitsSubTab = 'thrust' | 'torque' | 'power';
 
 export const INITIAL_LOAD_LIMITS: Record<LimitsSubTab, LoadLimitRange> = {
   thrust: {
-    x_min: 0,
-    x_max: 12000,
+    x_min: -20000,
+    x_max: 20000,
     y_min: 0,
-    y_max: 12000,
+    y_max: 20000,
     curve: [
       { rpm: 0, value: 10000 },
       { rpm: 10000, value: 10000 },
     ],
   },
   torque: {
-    x_min: 0,
-    x_max: 12000,
+    x_min: -20000,
+    x_max: 20000,
     y_min: 0,
-    y_max: 12000,
+    y_max: 20000,
     curve: [
       { rpm: 0, value: 10000 },
       { rpm: 10000, value: 10000 },
     ],
   },
   power: {
-    x_min: 0,
-    x_max: 12000,
+    x_min: -20000,
+    x_max: 20000,
     y_min: 0,
-    y_max: 12000,
+    y_max: 20000,
     curve: [
       { rpm: 0, value: 10000 },
       { rpm: 10000, value: 10000 },

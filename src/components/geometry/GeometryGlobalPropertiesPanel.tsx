@@ -7,6 +7,9 @@ interface GeometryGlobalPropertiesPanelProps {
   onFieldChange: (name: string, value: string) => void;
   /** Fires when focus leaves a field (blur) or the panel itself (click-out) — triggers autosave. */
   onBlur: () => void;
+  /** Forces every field's error state on regardless of its own touched state — used to
+   *  surface missing required fields after the user opts to stay past the exit-confirm warning. */
+  forceShowErrors?: boolean;
   loading: boolean;
   loadError: boolean;
 }
@@ -16,6 +19,7 @@ export function GeometryGlobalPropertiesPanel({
   values,
   onFieldChange,
   onBlur,
+  forceShowErrors,
   loading,
   loadError,
 }: GeometryGlobalPropertiesPanelProps) {
@@ -36,6 +40,7 @@ export function GeometryGlobalPropertiesPanel({
               onChange={(v) => onFieldChange(field.name, v)}
               helperAsTooltip
               hideRequiredMarker
+              forceShowErrors={forceShowErrors}
             />
           ))}
         </div>

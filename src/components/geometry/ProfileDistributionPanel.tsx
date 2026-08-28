@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
-import { FoldHorizontal, Info, Loader2, Check } from 'lucide-react';
+import { FoldHorizontal } from 'lucide-react';
 import type { ControlPoint } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
 import { ProfileGeneratorTopRow } from '@/components/geometry/ProfileGeneratorTopRow';
 import { ProfileDistributionSectionBody } from '@/components/geometry/ProfileDistributionSectionBody';
-import { Tip } from '@/components/common/list/Tip';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
 import { useDeferredCommit } from '@/hooks/useDeferredCommit';
 import type { ProfileGeneratorParameters } from '@/api/types/geometry';
@@ -78,10 +77,6 @@ interface ProfileDistributionPanelProps {
    *  parameters (same as the old "Save parameters" button), then — only once that
    *  succeeds — POSTs to regenerate the profiles (same as the old "Generate" button). */
   onCommit: (params: ProfileGeneratorParameters) => void;
-  /** Either half of the commit (save or generate) is in flight. */
-  committing?: boolean;
-  /** The last commit's generate step succeeded, and nothing has been edited since. */
-  profilesUpdated?: boolean;
 }
 
 export function ProfileDistributionPanel({
@@ -90,8 +85,6 @@ export function ProfileDistributionPanel({
   rootRadiusPercent,
   initialParameters,
   onCommit,
-  committing,
-  profilesUpdated,
 }: ProfileDistributionPanelProps) {
   const [type, setType] = useState('NACA 4 digit');
   const [startPos, setStartPos] = useState(String(DEFAULT_START_POSITION));
@@ -289,24 +282,6 @@ export function ProfileDistributionPanel({
         onEndPosChange={setEndPos}
         onFieldBlur={requestCommit}
       />
-
-      <div className="flex min-h-5 items-center gap-[6px]">
-        {committing ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
-            <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
-          </>
-        ) : profilesUpdated ? (
-          <>
-            <Check className="h-4 w-4 text-[#737373]" strokeWidth={2} />
-            <span className="text-[14px] leading-5 text-[#737373]">Profiles updated</span>
-            <Tip label="Profiles were regenerated from the current settings and distribution curves.">
-              <Info className="h-3.5 w-3.5 text-[#006496]" strokeWidth={2} />
-            </Tip>
-          </>
-        ) : null}
-        {!hasEnoughPoints && <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>}
-      </div>
 
       <p className="pt-2 text-[16px] font-semibold leading-none text-[#0a0a0a]">Distribution curves</p>
 

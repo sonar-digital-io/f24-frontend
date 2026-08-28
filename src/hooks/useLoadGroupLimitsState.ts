@@ -20,7 +20,7 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
 
   function markDirty() {
     setDirty(true);
-    setStatus('not-saved');
+    setStatus(undefined);
   }
 
   function markSaved() {
@@ -95,7 +95,7 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
       setDirty(false);
       setStatus('saved');
     } catch {
-      setStatus('not-saved');
+      setStatus(undefined);
     } finally {
       if (retrySaveRef.current) {
         retrySaveRef.current = false;

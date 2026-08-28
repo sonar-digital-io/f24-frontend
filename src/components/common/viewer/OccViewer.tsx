@@ -38,7 +38,6 @@ import { createViewerScene, fitViewerSceneToBounds, updateGroundFade } from '@/l
 import { createDampedOrbitControls, createWireframeOverlay, disposeSceneObjects } from '@/lib/threeViewerSetup';
 
 export interface OccViewerProps {
-  wireframe?: boolean;
   className?: string;
   /** URL of an IGES file to load when there's no `stlData` yet — opt-in only:
    *  with no `igesUrl`, an unset `stlData` just shows the loading ring instead
@@ -55,10 +54,10 @@ export interface OccViewerProps {
   showBlade?: boolean;
   /** Show/hide every other named 3MF object (layups). Composition preview only. Defaults to true. */
   showLayups?: boolean;
-  /** Overlay the mesh's true wireframe (every triangle edge of the actual geometry,
-   *  via THREE.WireframeGeometry — the same object, just with no face fill) on top of
-   *  the solid object — unlike `wireframe`, this doesn't hide the solid fill underneath
-   *  it. Defaults to false. */
+  /** Overlay the mesh's true wireframe (every triangle edge of the actual geometry, via
+   *  THREE.WireframeGeometry) on top of the solid object — independent of showBlade/
+   *  showLayups, so it stays visible even with the solid fill toggled off. Defaults to
+   *  false. */
   showWebView?: boolean;
   /** Skips the by-name blade/layup check for a 3MF result and treats every part as the
    *  blade — for callers with no blade/layup distinction at all (the plain Geometry page,
@@ -72,7 +71,6 @@ export interface OccViewerProps {
 }
 
 export function OccViewer({
-  wireframe = false,
   className = 'absolute inset-0 w-full h-full',
   igesUrl,
   stlData,
@@ -87,9 +85,7 @@ export function OccViewer({
   const containerRef  = useRef<HTMLDivElement>(null);
   const meshesRef     = useRef<THREE.Mesh[]>([]);
   const resetViewRef  = useRef<(() => void) | null>(null);
-  const wireLineRef   = useRef<THREE.LineSegments[]>([]);
   const webLineRef    = useRef<THREE.LineSegments[]>([]);
-  const wireframeRef  = useRef(wireframe);
   const showWebViewRef = useRef(showWebView);
   const bladeObjectsRef  = useRef<THREE.Object3D[]>([]);
   const layupObjectsRef  = useRef<THREE.Object3D[]>([]);
@@ -113,20 +109,8 @@ export function OccViewer({
     onStatusChangeRef.current?.(next);
   }
 
-  // Wireframe toggle without scene re-creation
-  useEffect(() => {
-    wireframeRef.current = wireframe; // async OCC load reads the latest value from here
-    meshesRef.current.forEach((m) => {
-      const mat = m.material as THREE.MeshPhysicalMaterial;
-      mat.opacity = wireframe ? 0 : (mat.userData.baseOpacity as number ?? 1);
-      mat.needsUpdate = true;
-    });
-    wireLineRef.current.forEach((l) => { l.visible = wireframe; });
-  }, [wireframe]);
-
-  // Web view toggle — the structural wireframe overlay on top of the still-solid
-  // object. Independent of `wireframe` above (which hides the solid fill instead);
-  // never touches mesh opacity.
+  // Wireframe (web view) toggle — an overlay on top of the solid object, independent
+  // of showBlade/showLayups; never touches mesh opacity.
   useEffect(() => {
     showWebViewRef.current = showWebView;
     webLineRef.current.forEach((l) => { l.visible = showWebView; });
@@ -203,7 +187,7 @@ export function OccViewer({
     // an object whose own world matrix it can (re)compute — calling it on a
     // deeply-nested child directly would use its parent's possibly-stale
     // matrixWorld instead of freshly computing it top-down.
-    async function loadStl(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+    async function loadStl(): Promise<{ newMeshes: THREE.Mesh[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
       let positions: Float32Array;
       if (typeof stlData === 'string') {
         positions = parseAsciiStl(stlData);
@@ -227,7 +211,6 @@ export function OccViewer({
         side: THREE.DoubleSide,
       });
       mat.userData.baseOpacity = 1;
-      if (wireframeRef.current) mat.opacity = 0;
 
       const mesh = new THREE.Mesh(geo, mat);
       mesh.scale.setScalar(stlScale);
@@ -235,22 +218,15 @@ export function OccViewer({
       mesh.receiveShadow = true;
       scene.add(mesh);
 
-      const edgeGeo = new THREE.EdgesGeometry(geo, 15);
-      const edgeMat = new THREE.LineBasicMaterial({ color: 0x475569, opacity: 0.55, transparent: true });
-      const lines = new THREE.LineSegments(edgeGeo, edgeMat);
-      lines.scale.setScalar(stlScale);
-      lines.visible = wireframeRef.current;
-      scene.add(lines);
-
       const webLines = createWireframeOverlay(geo);
       webLines.scale.setScalar(stlScale);
       webLines.visible = showWebViewRef.current;
       scene.add(webLines);
 
-      return { newMeshes: [mesh], newLines: [lines], newWebLines: [webLines], roots: [mesh] };
+      return { newMeshes: [mesh], newWebLines: [webLines], roots: [mesh] };
     }
 
-    async function loadIges(url: string): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+    async function loadIges(url: string): Promise<{ newMeshes: THREE.Mesh[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
       const oc = await getOcc();
 
       // Load IGES file
@@ -258,7 +234,6 @@ export function OccViewer({
 
       // Tessellate shapes
       const newMeshes: THREE.Mesh[]         = [];
-      const newLines:  THREE.LineSegments[] = [];
       const newWebLines: THREE.LineSegments[] = [];
 
       for (const { shape, color, opacity } of occShapes) {
@@ -266,22 +241,10 @@ export function OccViewer({
 
           const mesh = tessellate(oc, shape, color, opacity);
           if (!mesh) continue;
-          (mesh.material as THREE.MeshPhysicalMaterial).userData.baseOpacity = opacity;
-          if (wireframeRef.current) (mesh.material as THREE.MeshPhysicalMaterial).opacity = 0;
+          const mat = mesh.material as THREE.MeshPhysicalMaterial;
+          mat.userData.baseOpacity = opacity;
           scene.add(mesh);
           newMeshes.push(mesh);
-
-          // Edge overlay for wireframe mode
-          const edgeGeo = new THREE.EdgesGeometry(mesh.geometry, 15);
-          const edgeMat = new THREE.LineBasicMaterial({
-            color: 0x475569,
-            opacity: 0.55,
-            transparent: true,
-          });
-          const lines = new THREE.LineSegments(edgeGeo, edgeMat);
-          lines.visible = wireframeRef.current;
-          scene.add(lines);
-          newLines.push(lines);
 
           const webLines = createWireframeOverlay(mesh.geometry);
           webLines.visible = showWebViewRef.current;
@@ -295,17 +258,16 @@ export function OccViewer({
         }
       }
 
-      return { newMeshes, newLines, newWebLines, roots: newMeshes };
+      return { newMeshes, newWebLines, roots: newMeshes };
     }
 
-    async function load3mf(): Promise<{ newMeshes: THREE.Mesh[]; newLines: THREE.LineSegments[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+    async function load3mf(): Promise<{ newMeshes: THREE.Mesh[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
       const loader = new ThreeMFLoader();
       const group = loader.parse(stlData as ArrayBuffer);
       group.scale.setScalar(stlScale);
       scene.add(group);
 
       const newMeshes: THREE.Mesh[] = [];
-      const newLines:  THREE.LineSegments[] = [];
       const newWebLines: THREE.LineSegments[] = [];
 
       group.traverse((obj) => {
@@ -337,7 +299,6 @@ export function OccViewer({
           side: THREE.DoubleSide,
         });
         mat.userData.baseOpacity = 1;
-        if (wireframeRef.current) mat.opacity = 0;
 
         // Dispose the loader-built material (and any texture it holds) before
         // replacing it — otherwise it's simply orphaned, leaking GPU memory on
@@ -355,15 +316,6 @@ export function OccViewer({
         (isBlade ? bladeObjectsRef : layupObjectsRef).current.push(obj);
         obj.visible = isBlade ? showBladeRef.current : showLayupsRef.current;
 
-        // Parented to the mesh itself so it inherits the mesh's own local
-        // transform automatically (3MF build items can each carry their own).
-        const edgeGeo = new THREE.EdgesGeometry(obj.geometry, 15);
-        const edgeMat = new THREE.LineBasicMaterial({ color: 0x475569, opacity: 0.55, transparent: true });
-        const lines = new THREE.LineSegments(edgeGeo, edgeMat);
-        lines.visible = wireframeRef.current;
-        obj.add(lines);
-        newLines.push(lines);
-
         // Sibling of `obj`, not a child of it — a child would inherit `obj.visible`
         // (see the showBlade/showLayups line above) and disappear along with the
         // solid mesh, even though the wireframe should stay visible on its own.
@@ -376,7 +328,7 @@ export function OccViewer({
         newWebLines.push(webLines);
       });
 
-      return { newMeshes, newLines, newWebLines, roots: [group] };
+      return { newMeshes, newWebLines, roots: [group] };
     }
 
     // No backend result yet — keep the loading ring spinning instead of
@@ -392,16 +344,15 @@ export function OccViewer({
 
     if (loadPromise) {
       loadPromise
-        .then(({ newMeshes, newLines, newWebLines, roots }) => {
+        .then(({ newMeshes, newWebLines, roots }) => {
           if (disposed) return;
 
           // ── Auto-fit camera + ground to loaded geometry ─────────────────────
           loadedRoots = roots;
           fitMaxDim = fitViewerSceneToBounds(roots, camera, controls, ground);
 
-          meshesRef.current   = newMeshes;
-          wireLineRef.current = newLines;
-          webLineRef.current  = newWebLines;
+          meshesRef.current  = newMeshes;
+          webLineRef.current = newWebLines;
 
           scene.remove(ring);
           ringGeo.dispose();
@@ -435,9 +386,8 @@ export function OccViewer({
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
-      meshesRef.current   = [];
-      wireLineRef.current = [];
-      webLineRef.current  = [];
+      meshesRef.current  = [];
+      webLineRef.current = [];
     };
 
   }, [igesUrl, stlData, stlScale]);

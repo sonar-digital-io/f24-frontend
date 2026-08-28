@@ -10,8 +10,8 @@ import { matchSavedRows } from '@/lib/mergeSavedRows';
  * Fatigue profiles tab state: 0 by default until the user adds one, hydrated
  * from the backend for edit/duplicate, autosaved via a dedicated PUT
  * /load/:id/fatigue-profiles/ once focus leaves a field — only while
- * every profile validates (an invalid case just leaves the status at "not
- * saved"). Extracted from LoadGroupNew.
+ * every profile validates (an invalid case just leaves the save indicator
+ * hidden). Extracted from LoadGroupNew.
  */
 export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boolean) {
   const fatigueProfilesQuery = useFatigueProfiles(loadGroupId);
@@ -47,7 +47,7 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
 
   function markDirty() {
     setDirty(true);
-    setStatus('not-saved');
+    setStatus(undefined);
   }
 
   function toggleFatigueProfile(profileKey: string) {
@@ -180,7 +180,7 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
       setDirty(false);
       setStatus('saved');
     } catch {
-      setStatus('not-saved');
+      setStatus(undefined);
     } finally {
       if (queuedSaveRef.current) {
         const next = queuedSaveRef.current;

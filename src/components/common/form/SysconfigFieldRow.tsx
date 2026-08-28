@@ -90,7 +90,7 @@ export function SysconfigFieldRow({
           {!hideRequiredMarker && field.required && <span className="text-[#0a0a0a]">*</span>}
           {helperAsTooltip && field.helper && (
             <Tip label={field.helper} placement="bottom">
-              <Info className="h-3.5 w-3.5 text-[#006496]" strokeWidth={2} />
+              <Info className="h-3.5 w-3.5 text-[#6b7280]" strokeWidth={2} />
             </Tip>
           )}
         </Label>

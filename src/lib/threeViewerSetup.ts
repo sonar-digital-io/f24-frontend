@@ -46,8 +46,8 @@ export function disposeSceneObjects(scene: THREE.Scene): void {
 /** The true wireframe of `geometry` (every triangle edge, via `THREE.WireframeGeometry`) as
  *  a standalone `LineSegments` — unlike an edges-only overlay, this doesn't hide the solid
  *  fill underneath it and shows every facet, not just hard edges. */
-export function createWireframeOverlay(geometry: THREE.BufferGeometry): THREE.LineSegments {
+export function createWireframeOverlay(geometry: THREE.BufferGeometry, color = 0x9ca3af): THREE.LineSegments {
   const webGeo = new THREE.WireframeGeometry(geometry);
-  const webMat = new THREE.LineBasicMaterial({ color: 0x6b7280 });
+  const webMat = new THREE.LineBasicMaterial({ color });
   return new THREE.LineSegments(webGeo, webMat);
 }

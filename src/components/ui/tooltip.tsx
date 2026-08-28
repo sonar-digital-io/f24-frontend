@@ -16,10 +16,10 @@ export function TooltipContent({
       <TooltipPrimitive.Content
         side={side}
         sideOffset={6}
-        className="z-50 rounded-md bg-[#0a0a0a] px-2 py-1 text-[12px] leading-4 text-white shadow-md animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+        className="z-50 rounded-md bg-[#006496] px-3 py-2 text-[12px] leading-4 text-white shadow-md animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
       >
         {children}
-        <TooltipPrimitive.Arrow className="fill-[#0a0a0a]" />
+        <TooltipPrimitive.Arrow className="fill-[#006496]" />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   );

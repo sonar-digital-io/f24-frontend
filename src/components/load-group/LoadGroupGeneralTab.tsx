@@ -9,6 +9,9 @@ interface LoadGroupGeneralTabProps {
   onDescriptionChange: (value: string) => void;
   date: string;
   onDateChange: (value: string) => void;
+  /** Fires when focus leaves a field (blur) or the form itself (click-out) —
+   *  autosaves the general tab, same as GeometryCreatePanel. */
+  onBlur: () => void;
 }
 
 export function LoadGroupGeneralTab({
@@ -18,9 +21,13 @@ export function LoadGroupGeneralTab({
   onDescriptionChange,
   date,
   onDateChange,
+  onBlur,
 }: LoadGroupGeneralTabProps) {
   return (
-    <div className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+    <div
+      onBlur={onBlur}
+      className="flex w-full max-w-[468px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
+    >
       <div className="flex flex-col gap-2">
         <Label
           htmlFor="load-group-name"
@@ -49,6 +56,7 @@ export function LoadGroupGeneralTab({
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="Describe the load group"
           rows={4}
+          required
           className="rounded-md border-[#e2e8f0] px-3 py-2 text-[14px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
         />
       </div>

@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import { Check, Loader2, X } from 'lucide-react';
 
-export type SaveStatus = 'saved' | 'saving' | 'not-saved';
+export type SaveStatus = 'saved' | 'saving';
 
-/** Saving…/Not saved/Saved indicator shared by every edit-page toolbar. */
+/** Saving…/Saved indicator shared by every edit-page toolbar — hidden entirely
+ *  (status undefined) rather than showing anything for the not-yet-saved state. */
 export function SaveStatusIndicator({ status }: { status?: SaveStatus }) {
   return (
     <div className="flex items-center gap-[6px]">
@@ -11,11 +12,6 @@ export function SaveStatusIndicator({ status }: { status?: SaveStatus }) {
         <>
           <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
           <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
-        </>
-      ) : status === 'not-saved' ? (
-        <>
-          <X className="h-4 w-4 text-[#dc2626]" strokeWidth={2} />
-          <span className="text-[14px] leading-5 text-[#dc2626]">Not saved</span>
         </>
       ) : status === 'saved' ? (
         <>
@@ -57,7 +53,7 @@ interface SaveStatusAndExitProps {
   children?: ReactNode;
 }
 
-/** Saved/Saving/Not saved indicator + Exit button, always rendered together —
+/** Saved/Saving indicator + Exit button, always rendered together —
  *  shared by every edit-page toolbar (`EditPageToolbar`, `CalculationSubToolbar`,
  *  `CompositionEditToolbar`, `GeometryEditToolbar`). */
 export function SaveStatusAndExit({ status, onExit, floating, children }: SaveStatusAndExitProps) {
@@ -80,7 +76,7 @@ interface EditPageToolbarActionsProps {
 }
 
 /**
- * Centered title + right-side Saved/Saving/Not saved indicator / Exit button group
+ * Centered title + right-side Saved/Saving indicator / Exit button group
  * shared by all edit-page sub-toolbars (`EditPageToolbar`, `CalculationSubToolbar`).
  * Each caller renders its own tabs on the left, since those differ too much
  * (disabled states, tooltips) to share.

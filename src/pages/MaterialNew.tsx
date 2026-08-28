@@ -4,7 +4,8 @@ import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { EditPageToolbar } from '@/components/common/layout/EditPageToolbar';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
-import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { ExitConfirmDialog } from '@/components/common/dialog/ExitConfirmDialog';
+import { useExitConfirm } from '@/hooks/useExitConfirm';
 import { PropertyFormTab } from '@/components/material/PropertyFormTab';
 import { MaterialGeneralTab } from '@/components/material/MaterialGeneralTab';
 import {
@@ -104,10 +105,6 @@ export function MaterialNew() {
   });
   const [fatigueValues, setFatigueValues] = useState<Record<string, string>>({});
   const [baseline, setBaseline] = useState<Baseline | null>(null);
-  const [showExitConfirm, setShowExitConfirm] = useState(false);
-  // Set once the user chooses to stay after the exit-confirm warning — forces every
-  // missing required field on the Mechanical/Fatigue tabs into its error state.
-  const [showMissingFieldErrors, setShowMissingFieldErrors] = useState(false);
   // Set right after the blur-autosave creates the material, so the loading state below
   // doesn't flash "Loading material…" over the tab the user is actively filling in —
   // we already have its data locally; the background refetch is just React Query's habit.
@@ -514,27 +511,8 @@ export function MaterialNew() {
   // required field cleared there (which can't autosave — handleGeneralBlur requires
   // generalValid) doesn't silently slip past Exit with no warning.
   const isIncomplete = isEditing && (!generalValid || !mechanicalValid || !fatigueValid);
-
-  function handleExit() {
-    if (isIncomplete) {
-      setShowExitConfirm(true);
-      return;
-    }
-    navigate(exitTarget);
-  }
-
-  // Everything already autosaves on blur — exiting anyway just means leaving with
-  // whatever's already persisted, incomplete or not.
-  function handleExitAnyway() {
-    setShowExitConfirm(false);
-    navigate(exitTarget);
-  }
-
-  // Staying surfaces exactly what's missing, on whichever tab it's on.
-  function handleStayAndReview() {
-    setShowExitConfirm(false);
-    setShowMissingFieldErrors(true);
-  }
+  const { showExitConfirm, showMissingFieldErrors, handleExit, handleExitAnyway, handleStayAndReview } =
+    useExitConfirm(exitTarget, isIncomplete);
 
   const isDuplicating = !isEditing && Number.isFinite(duplicateSourceId);
   const showLoadingState =
@@ -650,14 +628,12 @@ export function MaterialNew() {
         )}
       </main>
 
-      <ConfirmDialog
+      <ExitConfirmDialog
         open={showExitConfirm}
-        title="Exit without finishing?"
-        message="Not all required fields are filled in. You can exit anyway — your data is saved, but this material won't be usable in a layup until it's complete."
-        confirmLabel="Exit anyway"
-        cancelLabel="Stay and review"
-        onConfirm={handleExitAnyway}
-        onCancel={handleStayAndReview}
+        entityLabel="material"
+        usedInLabel="a layup"
+        onExitAnyway={handleExitAnyway}
+        onStayAndReview={handleStayAndReview}
       />
     </div>
   );

@@ -10,7 +10,7 @@ import type { LoadCase } from '@/api/types/loadGroups';
  * Load cases tab state: 0 by default until the user adds one, hydrated from
  * the backend for edit/duplicate, autosaved via a dedicated PUT
  * /load/:id/load-cases/ once focus leaves a field (only while every row
- * validates — an invalid row just leaves the status at "not saved"). Extracted
+ * validates — an invalid row just leaves the save indicator hidden). Extracted
  * from LoadGroupNew — the fatigue profiles tab also needs the resulting
  * `pickableLoadCases`/`loadCaseNamesById`.
  */
@@ -45,7 +45,7 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
 
   function markDirty() {
     setDirty(true);
-    setStatus('not-saved');
+    setStatus(undefined);
   }
 
   function updateLoadCase<K extends keyof LoadCase>(key: string, field: K, val: LoadCase[K]) {
@@ -120,7 +120,7 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
       setDirty(false);
       setStatus('saved');
     } catch {
-      setStatus('not-saved');
+      setStatus(undefined);
     } finally {
       if (retryBlurRef.current) {
         retryBlurRef.current = false;

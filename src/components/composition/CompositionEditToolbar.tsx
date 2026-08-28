@@ -30,13 +30,11 @@ interface CompositionEditToolbarProps {
   onTabChange: (tab: CompositionTab) => void;
   titleText: string;
   onExit: () => void;
-  saveStatus: SaveStatus;
+  saveStatus?: SaveStatus;
   /** Only 'general' is available until the composition has been saved at least once. */
   isSaved: boolean;
   layupsSaved: boolean;
   geometrySelected: boolean;
-  onSaveLayupMapping: () => void;
-  layupMappingSavePending: boolean;
 }
 
 /** Floating sub-toolbar shared by every CompositionNew tab — same tab-pill/title/
@@ -50,8 +48,6 @@ export function CompositionEditToolbar({
   isSaved,
   layupsSaved,
   geometrySelected,
-  onSaveLayupMapping,
-  layupMappingSavePending,
 }: CompositionEditToolbarProps) {
   return (
     <div className="absolute inset-x-0 top-0 z-40 h-[52px] border-b border-[#e5e7eb]/70">
@@ -81,18 +77,7 @@ export function CompositionEditToolbar({
       </h1>
 
       <div className="absolute inset-y-0 right-4 flex items-center">
-        <SaveStatusAndExit status={saveStatus} onExit={onExit} floating>
-          {activeTab === 'layup-mapping' && (
-            <button
-              type="button"
-              onClick={onSaveLayupMapping}
-              disabled={layupMappingSavePending}
-              className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 py-2 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {layupMappingSavePending ? 'Saving…' : 'Save'}
-            </button>
-          )}
-        </SaveStatusAndExit>
+        <SaveStatusAndExit status={saveStatus} onExit={onExit} floating />
       </div>
     </div>
   );

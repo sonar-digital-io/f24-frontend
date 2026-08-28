@@ -41,8 +41,11 @@ export function useUpdateLoadGroup(loadGroupId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: LoadGroupPayload) => loadGroupsApi.updateLoadGroup(loadGroupId, payload),
+    // Don't invalidate the detail query here — it stays mounted on the General tab for
+    // the whole edit session, so invalidating would immediately refetch it after every
+    // autosave. It's fetched fresh on mount instead (staleTime: 0, refetchOnMount: 'always'),
+    // i.e. when actually navigating to this edit page.
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: loadGroupKeys.detail(loadGroupId) });
       queryClient.invalidateQueries({ queryKey: loadGroupKeys.list() });
     },
   });

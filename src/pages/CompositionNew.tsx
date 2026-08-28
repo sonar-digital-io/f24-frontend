@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
@@ -34,6 +34,12 @@ import { updateCompositionSettings } from '@/api/composition';
 import { getGeometryProfile } from '@/api/geometry';
 import { geometryKeys, useGeometryTopView } from '@/hooks/api/useGeometry';
 
+/** Identifies an upper/lower mapping state for the autosave debounce and the
+ *  transversal-mapping "is this already computed" check below. */
+function mappingsSnapshotKey(upper: LayupMapping[], lower: LayupMapping[]): string {
+  return JSON.stringify({ upper, lower });
+}
+
 export function CompositionNew() {
   const navigate = useNavigate();
   const exitTarget = useExitEditModeTarget('/composition');
@@ -52,6 +58,14 @@ export function CompositionNew() {
   const updateMappingLongitudinalMutation = useUpdateCompositionMappingLongitudinal(compositionId);
   const fetchIntersectionsMutation = useFetchCompositionIntersections();
   const fetchMappingTransversalMutation = useFetchCompositionMappingTransversal();
+  const layupMappingSavePending =
+    updateMappingLongitudinalMutation.isPending ||
+    fetchIntersectionsMutation.isPending ||
+    fetchMappingTransversalMutation.isPending;
+  const layupMappingSaveError =
+    updateMappingLongitudinalMutation.isError ||
+    fetchIntersectionsMutation.isError ||
+    fetchMappingTransversalMutation.isError;
   const layupOptions = detailQuery.data?.layups ?? [];
   const materialsQuery = useMaterialList();
 
@@ -127,8 +141,19 @@ export function CompositionNew() {
   // tabs (see CompositionEditToolbar) until one exists, either hydrated from the
   // backend or just saved via CompositionLayupTab's "Save" button.
   const [layupsSaved, setLayupsSaved] = useState(false);
+  const [layupSaveState, setLayupSaveState] = useState({ pending: false, error: false });
+  const handleLayupSaveStatusChange = useCallback(
+    (status: { pending: boolean; error: boolean }) => setLayupSaveState(status),
+    []
+  );
   function addLayup(name: string) {
     setLayups((arr) => [...arr, { id: nextLocalId('layup'), name, plies: [] }]);
+  }
+  function renameLayup(layupId: string, name: string) {
+    setLayups((arr) => arr.map((l) => (l.id === layupId ? { ...l, name } : l)));
+  }
+  function deleteLayup(layupId: string) {
+    setLayups((arr) => arr.filter((l) => l.id !== layupId));
   }
   function updateLayupPlies(layupId: string, updater: (current: Ply[]) => Ply[]) {
     setLayups((arr) => arr.map((l) => (l.id === layupId ? { ...l, plies: updater(l.plies) } : l)));
@@ -166,12 +191,21 @@ export function CompositionNew() {
   // Layup mapping — no mapping rows by default; the user adds them explicitly.
   const [upperMappings, setUpperMappings] = useState<LayupMapping[]>([]);
   const [lowerMappings, setLowerMappings] = useState<LayupMapping[]>([]);
+  // Snapshot of the last-persisted upper/lower mapping state — drives the
+  // autosave debounce below and is kept in sync with hydration so loading an
+  // existing composition doesn't immediately re-save it.
+  const [savedMappingsSnapshot, setSavedMappingsSnapshot] = useState(() =>
+    mappingsSnapshotKey(upperMappings, lowerMappings)
+  );
+  // Tracks which mapping snapshot the transversal-mapping tab's intersection
+  // data was last computed for — recomputed only when the mapping changes.
+  const [transversalReadySnapshot, setTransversalReadySnapshot] = useState<string | null>(null);
 
   // Hydrate saved layup mapping rows (upper/lower side) from the backend.
   // Waits on the top-view fetch too — the API stores longitudinal/transversal
   // position as a fraction of nominal_radius; the bezier editor works in that
   // same absolute scale (see the matching /nominalRadius conversion in
-  // handleSaveLayupMapping below).
+  // saveLayupMappingData below).
   useHydrateOnce(
     isEditing &&
       !detailQuery.isFetching &&
@@ -190,8 +224,11 @@ export function CompositionNew() {
       });
       const longitudinalMapping = c.longitudinal_mapping;
       if (longitudinalMapping) {
-        setUpperMappings(longitudinalMapping.upper_side.map(toLayupMapping));
-        setLowerMappings(longitudinalMapping.lower_side.map(toLayupMapping));
+        const upper = longitudinalMapping.upper_side.map(toLayupMapping);
+        const lower = longitudinalMapping.lower_side.map(toLayupMapping);
+        setUpperMappings(upper);
+        setLowerMappings(lower);
+        setSavedMappingsSnapshot(mappingsSnapshotKey(upper, lower));
       }
     }
   );
@@ -295,11 +332,12 @@ export function CompositionNew() {
 
   const generalSavePending = createMutation.isPending || updateMutation.isPending || settingsSaving;
   const saveError = createMutation.isError || updateMutation.isError || settingsError;
-  const saveStatus: SaveStatus = generalSavePending
+  const anyAutosavePending = generalSavePending || layupSaveState.pending || layupMappingSavePending;
+  const saveStatus: SaveStatus | undefined = anyAutosavePending
     ? 'saving'
     : generalValid && !hasUnsavedGeneralFields && !hasUnsavedTargetWeight
       ? 'saved'
-      : 'not-saved';
+      : undefined;
 
   async function saveTargetWeightSetting(id: number) {
     setSettingsSaving(true);
@@ -350,14 +388,24 @@ export function CompositionNew() {
   // Autosave name/description/date once all are filled — debounced so it
   // fires after the user pauses typing, not on every keystroke. Target
   // weight is intentionally excluded: it only saves on blur (see below).
+  // Retries once per distinct value: a failed save doesn't get silently
+  // retried in a loop — the same (name, description, date) combination is
+  // only attempted again once the user actually changes something.
+  const generalMutationError = createMutation.isError || updateMutation.isError;
+  const lastGeneralAttemptRef = useRef<string | null>(null);
   useEffect(() => {
     if (!generalValid || generalSavePending || !hasUnsavedGeneralFields) return;
-    const timer = setTimeout(() => { saveGeneralFields(); }, 800);
+    const key = `${name}|${description}|${date}`;
+    if (generalMutationError && lastGeneralAttemptRef.current === key) return;
+    const timer = setTimeout(() => {
+      lastGeneralAttemptRef.current = key;
+      saveGeneralFields();
+    }, 800);
     return () => clearTimeout(timer);
     // saveGeneralFields is a fresh closure every render; only the tracked
     // values below should gate the debounce.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, date, generalValid, generalSavePending, hasUnsavedGeneralFields]);
+  }, [name, description, date, generalValid, generalSavePending, hasUnsavedGeneralFields, generalMutationError]);
 
   // Target weight saves only when the field loses focus, not on every
   // keystroke — avoids a PUT /composition/:id/settings/ per character typed.
@@ -406,21 +454,15 @@ export function CompositionNew() {
     setUpperMappings(lowerMappings.map((m) => ({ ...m, id: nextLocalId('u-copy'), name: m.name ? `${m.name} copy` : '' })));
   }
 
-  const layupMappingSavePending =
-    updateMappingLongitudinalMutation.isPending ||
-    fetchIntersectionsMutation.isPending ||
-    fetchMappingTransversalMutation.isPending;
-  const layupMappingSaveError =
-    updateMappingLongitudinalMutation.isError ||
-    fetchIntersectionsMutation.isError ||
-    fetchMappingTransversalMutation.isError;
+  const mappingsKey = mappingsSnapshotKey(upperMappings, lowerMappings);
+  const hasUnsavedMappings = mappingsKey !== savedMappingsSnapshot;
 
-  async function handleSaveLayupMapping() {
-    // The bezier editor works in the blade's absolute (real) scale; the API
-    // expects longitudinal/transversal position as a fraction of nominal_radius.
-    // A row's id is only a real backend id once hydrated (String(entry.id), a
-    // plain digit string) — rows added locally get nextLocalId's prefixed id
-    // (e.g. "u-kx3f2a1-4") and must not send one, so the backend creates it.
+  // The bezier editor works in the blade's absolute (real) scale; the API
+  // expects longitudinal/transversal position as a fraction of nominal_radius.
+  // A row's id is only a real backend id once hydrated (String(entry.id), a
+  // plain digit string) — rows added locally get nextLocalId's prefixed id
+  // (e.g. "u-kx3f2a1-4") and must not send one, so the backend creates it.
+  async function saveLayupMappingData() {
     const toEntries = (mappings: LayupMapping[]) =>
       mappings
         .filter((m) => m.layupId)
@@ -438,9 +480,37 @@ export function CompositionNew() {
       upper_side: toEntries(upperMappings),
       lower_side: toEntries(lowerMappings),
     });
+    setSavedMappingsSnapshot(mappingsKey);
+  }
+
+  // Autosave the layup mapping — debounced so it fires after the user pauses
+  // editing rather than on every drag/keystroke. A failed save is attempted
+  // once per distinct mapping state — it does not retry in a loop; it tries
+  // again only once the user changes the mapping further.
+  const lastMappingsAttemptRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hasUnsavedMappings || updateMappingLongitudinalMutation.isPending) return;
+    if (updateMappingLongitudinalMutation.isError && lastMappingsAttemptRef.current === mappingsKey) return;
+    const timer = setTimeout(() => {
+      lastMappingsAttemptRef.current = mappingsKey;
+      saveLayupMappingData();
+    }, 800);
+    return () => clearTimeout(timer);
+    // saveLayupMappingData is a fresh closure every render; only the tracked
+    // values below should gate the debounce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mappingsKey, hasUnsavedMappings, updateMappingLongitudinalMutation.isPending, updateMappingLongitudinalMutation.isError]);
+
+  // The mapping data feeds the transversal-mapping tab's intersection
+  // computation — make sure it's persisted and the intersections are fresh
+  // before switching into that tab (replaces the old manual "Save" button,
+  // which used to trigger this same sequence).
+  async function ensureTransversalMappingReady() {
+    if (hasUnsavedMappings) await saveLayupMappingData();
+    if (transversalReadySnapshot === mappingsKey) return;
     const intersections = await fetchIntersectionsMutation.mutateAsync(compositionId);
-    setActiveTab('transversal-mapping');
     await fetchMappingTransversalMutation.mutateAsync(compositionId);
+    setTransversalReadySnapshot(mappingsKey);
 
     if (Number.isFinite(geometryId)) {
       await Promise.all(
@@ -454,6 +524,12 @@ export function CompositionNew() {
     }
   }
 
+  async function handleTabChange(tab: CompositionTab) {
+    setBezierFor(null);
+    if (tab === 'transversal-mapping') await ensureTransversalMappingReady();
+    setActiveTab(tab);
+  }
+
   return (
     <div className="flex min-h-screen w-full flex-col">
       <MainNav />
@@ -461,19 +537,22 @@ export function CompositionNew() {
       <main className="relative flex-1 overflow-hidden bg-[#f8fafc]">
       <CompositionEditToolbar
         activeTab={activeTab}
-        onTabChange={(v) => { setActiveTab(v); setBezierFor(null); }}
+        onTabChange={handleTabChange}
         titleText={titleText}
         onExit={handleExit}
         saveStatus={saveStatus}
         isSaved={isEditing}
         layupsSaved={layupsSaved}
         geometrySelected={Number.isFinite(geometryId)}
-        onSaveLayupMapping={handleSaveLayupMapping}
-        layupMappingSavePending={layupMappingSavePending}
       />
       {saveError && (
         <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
           Failed to {isEditing ? 'update' : 'create'} composition. Please try again.
+        </div>
+      )}
+      {layupSaveState.error && (
+        <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
+          Failed to save layups. Please try again.
         </div>
       )}
       {layupMappingSaveError && (
@@ -517,8 +596,11 @@ export function CompositionNew() {
             compositionId={compositionId}
             layups={layups}
             onAddLayup={addLayup}
+            onRenameLayup={renameLayup}
+            onDeleteLayup={deleteLayup}
             onUpdateLayupPlies={updateLayupPlies}
-            onSaved={() => { setLayupsSaved(true); setActiveTab('layup-mapping'); }}
+            onSaved={() => setLayupsSaved(true)}
+            onSaveStatusChange={handleLayupSaveStatusChange}
           />
         )}
 

@@ -137,12 +137,20 @@ export function LoadGroupNew() {
 
   // ── General tab autosave ─────────────────────────────────────────────────
   const [generalStatus, setGeneralStatus] = useState<SaveStatus | undefined>(undefined);
+  // Separate from `generalStatus` (which only drives the toolbar's Saved/Saving
+  // indicator, hidden while there's nothing in flight to report) — this is what
+  // actually gates whether a blur has something new to save.
+  const [generalDirty, setGeneralDirty] = useState(false);
   // Mirrors the latest field values/isNew so a save requested while one is
   // already in flight retries with fresh data afterwards, instead of firing
   // a second concurrent create/update.
   const generalRef = useRef({ name, description, date, isNew });
   generalRef.current = { name, description, date, isNew };
   const retryGeneralRef = useRef(false);
+  // Signature (name|description|date|isNew) of the last save attempt that failed —
+  // blurring re-fires handleGeneralBlur on every field, so without this guard a
+  // failed save retries in a loop every time focus moves between fields.
+  const lastFailedGeneralRef = useRef<string | null>(null);
 
   async function commitGeneral() {
     if (createMutation.isPending || updateMutation.isPending) {
@@ -150,6 +158,7 @@ export function LoadGroupNew() {
       return;
     }
     const { name, description, date, isNew } = generalRef.current;
+    const signature = `${name}|${description}|${date}|${isNew}`;
     setGeneralStatus('saving');
     try {
       if (isNew) {
@@ -161,9 +170,11 @@ export function LoadGroupNew() {
         await updateMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
         setBaseline({ name, description, date });
       }
+      setGeneralDirty(false);
       setGeneralStatus('saved');
     } catch {
-      setGeneralStatus('not-saved');
+      lastFailedGeneralRef.current = signature;
+      setGeneralStatus(undefined);
     } finally {
       if (retryGeneralRef.current) {
         retryGeneralRef.current = false;
@@ -172,21 +183,30 @@ export function LoadGroupNew() {
     }
   }
 
+  // Only tracks dirty/valid state while typing — the actual save is deferred to
+  // handleGeneralBlur so it doesn't fire on every keystroke.
   useEffect(() => {
     if (isNew) {
-      if (!name.trim() || !date) return;
+      if (!name.trim() || !date || !description.trim()) return;
     } else {
       if (!baseline) return;
       if (name === baseline.name && description === baseline.description && date === baseline.date) {
+        setGeneralDirty(false);
         setGeneralStatus('saved');
         return;
       }
     }
-    setGeneralStatus('not-saved');
-    const timer = setTimeout(commitGeneral, 800);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setGeneralDirty(true);
+    setGeneralStatus(undefined);
   }, [name, description, date, isNew, baseline]);
+
+  function handleGeneralBlur() {
+    if (!generalDirty) return;
+    const { name, description, date, isNew } = generalRef.current;
+    const signature = `${name}|${description}|${date}|${isNew}`;
+    if (lastFailedGeneralRef.current === signature) return;
+    commitGeneral();
+  }
 
   function handleExit() {
     navigate(exitTarget);
@@ -234,6 +254,7 @@ export function LoadGroupNew() {
               onDescriptionChange={setDescription}
               date={date}
               onDateChange={setDate}
+              onBlur={handleGeneralBlur}
             />
           )}
 

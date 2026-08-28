@@ -14,7 +14,7 @@ export function Tip({ label, children, placement = 'top' }: TipProps) {
     <div className="group/tip relative">
       {children}
       <span
-        className={`pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-[#0a0a0a] px-1.5 py-0.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100 ${
+        className={`pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded bg-[#006496] px-2.5 py-1.5 text-[11px] leading-none text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100 ${
           placement === 'bottom' ? 'top-full mt-1.5' : 'bottom-full mb-1.5'
         }`}
       >

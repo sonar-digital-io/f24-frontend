@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Info, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { Info, Plus, Trash2, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { INITIAL_PROFILES, type Profile } from '@/data/profiles';
@@ -16,11 +16,9 @@ export interface ProfilesPanelProps {
   initialProfiles?: Profile[];
   /** Autosaves on every add/delete and every field blur inside the detail popover. */
   onCommit?: (profiles: Profile[]) => void;
-  committing?: boolean;
-  saveError?: boolean;
 }
 
-export function ProfilesPanel({ geometryId, initialProfiles, onCommit, committing, saveError }: ProfilesPanelProps) {
+export function ProfilesPanel({ geometryId, initialProfiles, onCommit }: ProfilesPanelProps) {
   const [bannerVisible, setBannerVisible] = useState(
     () => localStorage.getItem(HIDE_BANNER_KEY) !== 'true'
   );
@@ -160,25 +158,14 @@ export function ProfilesPanel({ geometryId, initialProfiles, onCommit, committin
           </table>
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="inline-flex h-8 items-center justify-center gap-2 self-start rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2} />
-            Add new profile
-          </button>
-          {committing && (
-            <div className="flex items-center gap-[6px]">
-              <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
-              <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
-            </div>
-          )}
-        </div>
-        {saveError && (
-          <p className="text-[13px] text-[#dc2626]">Failed to save. Please try again.</p>
-        )}
+        <button
+          type="button"
+          onClick={handleAdd}
+          className="inline-flex h-8 items-center justify-center gap-2 self-start rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+        >
+          <Plus className="h-4 w-4" strokeWidth={2} />
+          Add new profile
+        </button>
       </div>
 
       {selected && (
