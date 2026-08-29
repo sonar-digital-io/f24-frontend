@@ -4,7 +4,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useExitEditModeTarget } from '@/hooks/useExitEditModeTarget';
 import { toast } from 'sonner';
 import { MainNav } from '@/components/common/layout/MainNav';
-import { CompositionEditToolbar, type CompositionTab } from '@/components/composition/CompositionEditToolbar';
+import {
+  CompositionEditToolbar,
+  type CompositionTab,
+} from '@/components/composition/CompositionEditToolbar';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import { CompositionLayupMappingPanel } from '@/components/composition/CompositionLayupMappingPanel';
 import { LayupPickerDialog } from '@/components/composition/LayupPickerDialog';
@@ -13,7 +16,10 @@ import { TransversalMappingSection } from '@/components/composition/TransversalM
 import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
 import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
 import { CompositionPreviewTab } from '@/components/composition/CompositionPreviewTab';
-import { CompositionLayupTab, type CompositionLayup } from '@/components/composition/CompositionLayupTab';
+import {
+  CompositionLayupTab,
+  type CompositionLayup,
+} from '@/components/composition/CompositionLayupTab';
 import { getMaterialColor, type Ply } from '@/components/layup/LayupBuilder';
 import { type LayupMapping } from '@/components/composition/LayupMappingTable';
 import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
@@ -102,7 +108,11 @@ export function CompositionNew() {
   const [date, setDate] = useState(todayISO());
   const [solidCore, setSolidCore] = useState(false);
   const [targetWeight, setTargetWeight] = useState('');
-  const [baseline, setBaseline] = useState<{ name: string; description: string; date: string } | null>(null);
+  const [baseline, setBaseline] = useState<{
+    name: string;
+    description: string;
+    date: string;
+  } | null>(null);
   // Separate from `baseline` (name/description/date): target weight saves
   // only on blur, on its own schedule, so it needs its own "last persisted
   // value" to diff against instead of riding along with the debounced autosave.
@@ -114,7 +124,8 @@ export function CompositionNew() {
     const hydratedDate =
       typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO();
     const hydratedTargetWeight = c.settings?.find((s) => s.reference === 'target_weight')?.value;
-    const hydratedTargetWeightStr = hydratedTargetWeight !== undefined ? String(hydratedTargetWeight) : '';
+    const hydratedTargetWeightStr =
+      hydratedTargetWeight !== undefined ? String(hydratedTargetWeight) : '';
     setName(c.name);
     setDescription(hydratedDescription);
     setDate(hydratedDate);
@@ -125,13 +136,16 @@ export function CompositionNew() {
   });
 
   useHydrateOnce(
-    !isEditing && Number.isFinite(duplicateSourceId) && !duplicateQuery.isFetching && !!duplicateQuery.data,
+    !isEditing &&
+      Number.isFinite(duplicateSourceId) &&
+      !duplicateQuery.isFetching &&
+      !!duplicateQuery.data,
     () => {
       const c = duplicateQuery.data!;
       setName(`${c.name}_copy`);
       setDescription(c.description ?? '');
       setDate(typeof c.created_at === 'string' ? toDateInputValue(c.created_at) : todayISO());
-    }
+    },
   );
 
   // Layup — locally-created layups for this composition, separate from the
@@ -144,7 +158,7 @@ export function CompositionNew() {
   const [layupSaveState, setLayupSaveState] = useState({ pending: false, error: false });
   const handleLayupSaveStatusChange = useCallback(
     (status: { pending: boolean; error: boolean }) => setLayupSaveState(status),
-    []
+    [],
   );
   function addLayup(name: string) {
     setLayups((arr) => [...arr, { id: nextLocalId('layup'), name, plies: [] }]);
@@ -183,9 +197,9 @@ export function CompositionNew() {
               color: getMaterialColor(materialName),
             };
           }),
-        }))
+        })),
       );
-    }
+    },
   );
 
   // Layup mapping — no mapping rows by default; the user adds them explicitly.
@@ -195,7 +209,7 @@ export function CompositionNew() {
   // autosave debounce below and is kept in sync with hydration so loading an
   // existing composition doesn't immediately re-save it.
   const [savedMappingsSnapshot, setSavedMappingsSnapshot] = useState(() =>
-    mappingsSnapshotKey(upperMappings, lowerMappings)
+    mappingsSnapshotKey(upperMappings, lowerMappings),
   );
   // Tracks which mapping snapshot the transversal-mapping tab's intersection
   // data was last computed for — recomputed only when the mapping changes.
@@ -213,7 +227,9 @@ export function CompositionNew() {
       !(Number.isFinite(geometryId) && !topViewQuery.data),
     () => {
       const c = detailQuery.data!;
-      const toLayupMapping = (entry: NonNullable<typeof c.longitudinal_mapping>['upper_side'][number]): LayupMapping => ({
+      const toLayupMapping = (
+        entry: NonNullable<typeof c.longitudinal_mapping>['upper_side'][number],
+      ): LayupMapping => ({
         id: String(entry.id),
         name: entry.name,
         layupId: String(entry.layup),
@@ -230,7 +246,7 @@ export function CompositionNew() {
         setLowerMappings(lower);
         setSavedMappingsSnapshot(mappingsSnapshotKey(upper, lower));
       }
-    }
+    },
   );
 
   const [layupPicker, setLayupPicker] = useState<{
@@ -277,7 +293,7 @@ export function CompositionNew() {
   // the extreme top-left/top-right/bottom-left/bottom-right corners across
   // all of them, padded 10% in each direction. See computeProfilesBoundingRect.
   const profilePoints = (topViewQuery.data?.profiles ?? []).map((segment) =>
-    segment.map(([x, y]) => ({ x, y }))
+    segment.map(([x, y]) => ({ x, y })),
   );
   const profileRect = computeProfilesBoundingRect(profilePoints);
   const defaultMappingPoints: ControlPoint[] = [
@@ -324,7 +340,10 @@ export function CompositionNew() {
 
   const generalValid = Boolean(name.trim() && description.trim() && date);
   const hasUnsavedGeneralFields =
-    !baseline || name !== baseline.name || description !== baseline.description || date !== baseline.date;
+    !baseline ||
+    name !== baseline.name ||
+    description !== baseline.description ||
+    date !== baseline.date;
   const hasUnsavedTargetWeight = targetWeight !== targetWeightBaseline;
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState(false);
@@ -332,7 +351,8 @@ export function CompositionNew() {
 
   const generalSavePending = createMutation.isPending || updateMutation.isPending || settingsSaving;
   const saveError = createMutation.isError || updateMutation.isError || settingsError;
-  const anyAutosavePending = generalSavePending || layupSaveState.pending || layupMappingSavePending;
+  const anyAutosavePending =
+    generalSavePending || layupSaveState.pending || layupMappingSavePending;
   const saveStatus: SaveStatus | undefined = anyAutosavePending
     ? 'saving'
     : generalValid && !hasUnsavedGeneralFields && !hasUnsavedTargetWeight
@@ -343,7 +363,9 @@ export function CompositionNew() {
     setSettingsSaving(true);
     setSettingsError(false);
     try {
-      await updateCompositionSettings(id, { settings: [{ reference: 'target_weight', value: targetWeight }] });
+      await updateCompositionSettings(id, {
+        settings: [{ reference: 'target_weight', value: targetWeight }],
+      });
       setTargetWeightBaseline(targetWeight);
     } catch (err) {
       setSettingsError(true);
@@ -371,7 +393,11 @@ export function CompositionNew() {
       return creatingRef.current;
     }
     creatingRef.current = (async () => {
-      const created = await createMutation.mutateAsync({ name, description, created_at: toIsoDateTime(date) });
+      const created = await createMutation.mutateAsync({
+        name,
+        description,
+        created_at: toIsoDateTime(date),
+      });
       setBaseline({ name, description, date });
       // /composition/new and /composition/:id share a route, so this navigate does NOT
       // remount the component — switching the URL just flips isEditing to true.
@@ -405,7 +431,15 @@ export function CompositionNew() {
     // saveGeneralFields is a fresh closure every render; only the tracked
     // values below should gate the debounce.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, date, generalValid, generalSavePending, hasUnsavedGeneralFields, generalMutationError]);
+  }, [
+    name,
+    description,
+    date,
+    generalValid,
+    generalSavePending,
+    hasUnsavedGeneralFields,
+    generalMutationError,
+  ]);
 
   // Target weight saves only when the field loses focus, not on every
   // keystroke — avoids a PUT /composition/:id/settings/ per character typed.
@@ -428,16 +462,10 @@ export function CompositionNew() {
   }
 
   function addUpper() {
-    setUpperMappings((arr) => [
-      ...arr,
-      { id: nextLocalId('u'), name: '', layupId: null },
-    ]);
+    setUpperMappings((arr) => [...arr, { id: nextLocalId('u'), name: '', layupId: null }]);
   }
   function addLower() {
-    setLowerMappings((arr) => [
-      ...arr,
-      { id: nextLocalId('l'), name: '', layupId: null },
-    ]);
+    setLowerMappings((arr) => [...arr, { id: nextLocalId('l'), name: '', layupId: null }]);
   }
   function updateMapping(side: 'upper' | 'lower', id: string, next: Partial<LayupMapping>) {
     const setter = side === 'upper' ? setUpperMappings : setLowerMappings;
@@ -448,10 +476,22 @@ export function CompositionNew() {
     setter((arr) => arr.filter((m) => m.id !== id));
   }
   function copyUpperToLower() {
-    setLowerMappings(upperMappings.map((m) => ({ ...m, id: nextLocalId('l-copy'), name: m.name ? `${m.name} copy` : '' })));
+    setLowerMappings(
+      upperMappings.map((m) => ({
+        ...m,
+        id: nextLocalId('l-copy'),
+        name: m.name ? `${m.name} copy` : '',
+      })),
+    );
   }
   function copyLowerToUpper() {
-    setUpperMappings(lowerMappings.map((m) => ({ ...m, id: nextLocalId('u-copy'), name: m.name ? `${m.name} copy` : '' })));
+    setUpperMappings(
+      lowerMappings.map((m) => ({
+        ...m,
+        id: nextLocalId('u-copy'),
+        name: m.name ? `${m.name} copy` : '',
+      })),
+    );
   }
 
   const mappingsKey = mappingsSnapshotKey(upperMappings, lowerMappings);
@@ -490,7 +530,8 @@ export function CompositionNew() {
   const lastMappingsAttemptRef = useRef<string | null>(null);
   useEffect(() => {
     if (!hasUnsavedMappings || updateMappingLongitudinalMutation.isPending) return;
-    if (updateMappingLongitudinalMutation.isError && lastMappingsAttemptRef.current === mappingsKey) return;
+    if (updateMappingLongitudinalMutation.isError && lastMappingsAttemptRef.current === mappingsKey)
+      return;
     const timer = setTimeout(() => {
       lastMappingsAttemptRef.current = mappingsKey;
       saveLayupMappingData();
@@ -499,7 +540,12 @@ export function CompositionNew() {
     // saveLayupMappingData is a fresh closure every render; only the tracked
     // values below should gate the debounce.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mappingsKey, hasUnsavedMappings, updateMappingLongitudinalMutation.isPending, updateMappingLongitudinalMutation.isError]);
+  }, [
+    mappingsKey,
+    hasUnsavedMappings,
+    updateMappingLongitudinalMutation.isPending,
+    updateMappingLongitudinalMutation.isError,
+  ]);
 
   // The mapping data feeds the transversal-mapping tab's intersection
   // computation — make sure it's persisted and the intersections are fresh
@@ -518,8 +564,8 @@ export function CompositionNew() {
           queryClient.prefetchQuery({
             queryKey: geometryKeys.profile(geometryId, profile_id),
             queryFn: () => getGeometryProfile(geometryId, profile_id),
-          })
-        )
+          }),
+        ),
       );
     }
   }
@@ -535,109 +581,114 @@ export function CompositionNew() {
       <MainNav />
 
       <main className="relative flex-1 overflow-hidden bg-[#f8fafc]">
-      <CompositionEditToolbar
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        titleText={titleText}
-        onExit={handleExit}
-        saveStatus={saveStatus}
-        isSaved={isEditing}
-        layupsSaved={layupsSaved}
-        geometrySelected={Number.isFinite(geometryId)}
-      />
-      {saveError && (
-        <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
-          Failed to {isEditing ? 'update' : 'create'} composition. Please try again.
-        </div>
-      )}
-      {layupSaveState.error && (
-        <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
-          Failed to save layups. Please try again.
-        </div>
-      )}
-      {layupMappingSaveError && (
-        <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
-          Failed to save layup mapping. Please try again.
-        </div>
-      )}
-
-      {/* Tab content panels */}
-      <div className="absolute bottom-4 left-4 right-4 top-[60px]">
-        {activeTab === 'general' && (
-          <CompositionGeneralTab
-            name={name}
-            onNameChange={setName}
-            date={date}
-            onDateChange={setDate}
-            description={description}
-            onDescriptionChange={setDescription}
-            solidCore={solidCore}
-            onSolidCoreChange={setSolidCore}
-            targetWeight={targetWeight}
-            onTargetWeightChange={setTargetWeight}
-            onTargetWeightBlur={handleTargetWeightBlur}
-            onSubmit={handleGeneralFormSubmit}
-          />
-        )}
-
-        {activeTab === 'geometry' && (
-          <CompositionGeometryTab
-            compositionId={compositionId}
-            geomQuery={geomQuery}
-            onGeomQueryChange={setGeomQuery}
-            selectedGeometryId={selectedGeometryId}
-            onSelectGeometry={setSelectedGeometryId}
-            onAfterSelect={() => setActiveTab('layup')}
-          />
-        )}
-
-        {activeTab === 'layup' && (
-          <CompositionLayupTab
-            compositionId={compositionId}
-            layups={layups}
-            onAddLayup={addLayup}
-            onRenameLayup={renameLayup}
-            onDeleteLayup={deleteLayup}
-            onUpdateLayupPlies={updateLayupPlies}
-            onSaved={() => setLayupsSaved(true)}
-            onSaveStatusChange={handleLayupSaveStatusChange}
-          />
-        )}
-
-        <CompositionLayupMappingPanel
-          ref={layupPanelRef}
-          visible={activeTab === 'layup-mapping'}
-          upperMappings={upperMappings}
-          lowerMappings={lowerMappings}
-          layupOptions={layupOptions}
-          activeBezierSide={bezierFor?.side ?? null}
-          activeBezierMappingId={bezierFor?.mappingId ?? null}
-          onAdd={(side) => (side === 'upper' ? addUpper() : addLower())}
-          onDelete={deleteMapping}
-          onUpdate={updateMapping}
-          onCopyUpperToLower={copyUpperToLower}
-          onCopyLowerToUpper={copyLowerToUpper}
-          onDuplicate={duplicateMapping}
-          onOpenBezier={(side, id) => {
-            const rect = layupPanelRef.current?.getBoundingClientRect();
-            setBezierFor({ side, mappingId: id, anchorRight: rect?.right, anchorTop: rect?.top, anchorLeft: rect?.left });
-          }}
-          onReorder={reorderMapping}
-          onPickLayup={(side, id) => setLayupPicker({ side, mappingId: id })}
+        <CompositionEditToolbar
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          titleText={titleText}
+          onExit={handleExit}
+          saveStatus={saveStatus}
+          isSaved={isEditing}
+          layupsSaved={layupsSaved}
+          geometrySelected={Number.isFinite(geometryId)}
         />
-
-        {/* Always mounted — hidden instead of unmounted so internal state survives tab switches */}
-        <div className={`pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto${activeTab !== 'transversal-mapping' ? ' hidden' : ''}`}>
-          <TransversalMappingSection compositionId={compositionId} />
-        </div>
-
-        {activeTab === 'preview' && (
-          <CompositionPreviewTab
-            compositionId={compositionId}
-            geometryId={geometryId}
-          />
+        {saveError && (
+          <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
+            Failed to {isEditing ? 'update' : 'create'} composition. Please try again.
+          </div>
         )}
-      </div>
+        {layupSaveState.error && (
+          <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
+            Failed to save layups. Please try again.
+          </div>
+        )}
+        {layupMappingSaveError && (
+          <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
+            Failed to save layup mapping. Please try again.
+          </div>
+        )}
+
+        {/* Tab content panels */}
+        <div className="absolute bottom-4 left-4 right-4 top-[60px]">
+          {activeTab === 'general' && (
+            <CompositionGeneralTab
+              name={name}
+              onNameChange={setName}
+              date={date}
+              onDateChange={setDate}
+              description={description}
+              onDescriptionChange={setDescription}
+              solidCore={solidCore}
+              onSolidCoreChange={setSolidCore}
+              targetWeight={targetWeight}
+              onTargetWeightChange={setTargetWeight}
+              onTargetWeightBlur={handleTargetWeightBlur}
+              onSubmit={handleGeneralFormSubmit}
+            />
+          )}
+
+          {activeTab === 'geometry' && (
+            <CompositionGeometryTab
+              compositionId={compositionId}
+              geomQuery={geomQuery}
+              onGeomQueryChange={setGeomQuery}
+              selectedGeometryId={selectedGeometryId}
+              onSelectGeometry={setSelectedGeometryId}
+              onAfterSelect={() => setActiveTab('layup')}
+            />
+          )}
+
+          {activeTab === 'layup' && (
+            <CompositionLayupTab
+              compositionId={compositionId}
+              layups={layups}
+              onAddLayup={addLayup}
+              onRenameLayup={renameLayup}
+              onDeleteLayup={deleteLayup}
+              onUpdateLayupPlies={updateLayupPlies}
+              onSaved={() => setLayupsSaved(true)}
+              onSaveStatusChange={handleLayupSaveStatusChange}
+            />
+          )}
+
+          <CompositionLayupMappingPanel
+            ref={layupPanelRef}
+            visible={activeTab === 'layup-mapping'}
+            upperMappings={upperMappings}
+            lowerMappings={lowerMappings}
+            layupOptions={layupOptions}
+            activeBezierSide={bezierFor?.side ?? null}
+            activeBezierMappingId={bezierFor?.mappingId ?? null}
+            onAdd={(side) => (side === 'upper' ? addUpper() : addLower())}
+            onDelete={deleteMapping}
+            onUpdate={updateMapping}
+            onCopyUpperToLower={copyUpperToLower}
+            onCopyLowerToUpper={copyLowerToUpper}
+            onDuplicate={duplicateMapping}
+            onOpenBezier={(side, id) => {
+              const rect = layupPanelRef.current?.getBoundingClientRect();
+              setBezierFor({
+                side,
+                mappingId: id,
+                anchorRight: rect?.right,
+                anchorTop: rect?.top,
+                anchorLeft: rect?.left,
+              });
+            }}
+            onReorder={reorderMapping}
+            onPickLayup={(side, id) => setLayupPicker({ side, mappingId: id })}
+          />
+
+          {/* Always mounted — hidden instead of unmounted so internal state survives tab switches */}
+          <div
+            className={`pointer-events-auto max-h-[calc(100vh_-_145px)] overflow-y-auto${activeTab !== 'transversal-mapping' ? ' hidden' : ''}`}
+          >
+            <TransversalMappingSection compositionId={compositionId} />
+          </div>
+
+          {activeTab === 'preview' && (
+            <CompositionPreviewTab compositionId={compositionId} geometryId={geometryId} />
+          )}
+        </div>
       </main>
 
       <LayupPickerDialog

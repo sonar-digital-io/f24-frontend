@@ -26,7 +26,7 @@ export function GeometryGlobalPropertiesPanel({
   return (
     <div
       onBlur={onBlur}
-      className="flex max-h-[calc(100vh-72px)] flex-col gap-4 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm"
+      className="flex max-h-[calc(100vh_-_72px)] flex-col gap-4 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-4 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm"
     >
       {loading && <p className="text-[14px] text-[#6b7280]">Loading…</p>}
       {loadError && <p className="text-[14px] text-[#dc2626]">Failed to load form settings.</p>}

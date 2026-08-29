@@ -2,7 +2,10 @@ import { CheckCircle2, Search, XCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { formatDateTime } from '@/lib/utils';
 import { useGeometryList, useFetchGeometryTopView } from '@/hooks/api/useGeometry';
-import { useFetchCompositionIntersections, useUpdateCompositionGeometry } from '@/hooks/api/useComposition';
+import {
+  useFetchCompositionIntersections,
+  useUpdateCompositionGeometry,
+} from '@/hooks/api/useComposition';
 import type { Geometry as BackendGeometry } from '@/api/types/geometry';
 
 export interface CompositionGeometryTabProps {
@@ -27,13 +30,16 @@ export function CompositionGeometryTab({
   const updateGeometryMutation = useUpdateCompositionGeometry(compositionId);
   const intersectionsMutation = useFetchCompositionIntersections();
   const topViewMutation = useFetchGeometryTopView();
-  const selectPending = updateGeometryMutation.isPending || intersectionsMutation.isPending || topViewMutation.isPending;
+  const selectPending =
+    updateGeometryMutation.isPending ||
+    intersectionsMutation.isPending ||
+    topViewMutation.isPending;
 
   const filteredGeometries = geometries.filter(
     (g) =>
       !geomQuery.trim() ||
       g.name.toLowerCase().includes(geomQuery.trim().toLowerCase()) ||
-      (g.description ?? '').toLowerCase().includes(geomQuery.trim().toLowerCase())
+      (g.description ?? '').toLowerCase().includes(geomQuery.trim().toLowerCase()),
   );
 
   async function handleSelect(g: BackendGeometry) {
@@ -45,7 +51,7 @@ export function CompositionGeometryTab({
   }
 
   return (
-    <div className="pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+    <div className="pointer-events-auto max-h-[calc(100vh_-_145px)] overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
       <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Geometries</h2>
 
       <div className="mt-4 max-w-[384px]">
@@ -60,55 +66,65 @@ export function CompositionGeometryTab({
         </div>
       </div>
 
-      {(updateGeometryMutation.isError || intersectionsMutation.isError || topViewMutation.isError) && (
-        <p className="mt-3 text-[13px] text-[#dc2626]">Failed to select geometry. Please try again.</p>
+      {(updateGeometryMutation.isError ||
+        intersectionsMutation.isError ||
+        topViewMutation.isError) && (
+        <p className="mt-3 text-[13px] text-[#dc2626]">
+          Failed to select geometry. Please try again.
+        </p>
       )}
 
       <div className="mt-4 overflow-hidden rounded-md border border-[#e5e7eb]">
-          <table className="w-full border-separate border-spacing-0 text-[14px]">
-            <thead>
+        <table className="w-full border-separate border-spacing-0 text-[14px]">
+          <thead>
+            <tr>
+              <th className="h-10 w-[80px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
+                Valid
+              </th>
+              <th className="h-10 w-[140px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
+                Created at
+              </th>
+              <th className="h-10 w-[200px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
+                Name
+              </th>
+              <th className="h-10 w-[140px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
+                User
+              </th>
+              <th className="h-10 border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
+                Description
+              </th>
+              <th className="h-10 w-[100px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]" />
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading && (
               <tr>
-                <th className="h-10 w-[80px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                  Valid
-                </th>
-                <th className="h-10 w-[140px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                  Created at
-                </th>
-                <th className="h-10 w-[200px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                  Name
-                </th>
-                <th className="h-10 w-[140px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                  User
-                </th>
-                <th className="h-10 border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]">
-                  Description
-                </th>
-                <th className="h-10 w-[100px] border-b border-[#e5e7eb] px-3 text-left font-medium text-[#6b7280]" />
+                <td colSpan={6} className="px-3 py-8 text-center text-[#6b7280]">
+                  Loading geometries…
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {isLoading && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-[#6b7280]">
-                    Loading geometries…
-                  </td>
-                </tr>
-              )}
-              {isError && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-[#dc2626]">
-                    Failed to load geometries from the server.
-                  </td>
-                </tr>
-              )}
-              {!isLoading && !isError && filteredGeometries.map((g, idx) => {
+            )}
+            {isError && (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center text-[#dc2626]">
+                  Failed to load geometries from the server.
+                </td>
+              </tr>
+            )}
+            {!isLoading &&
+              !isError &&
+              filteredGeometries.map((g, idx) => {
                 const isLast = idx === filteredGeometries.length - 1;
                 const isSelected = selectedGeometryId === String(g.id);
                 const cellBorder = isLast || isSelected ? '' : 'border-b border-[#e5e7eb]';
                 return (
                   <tr
                     key={g.id}
-                    className={isSelected ? 'bg-[#eef9ff] shadow-[inset_2px_0_0_#006496]' : 'hover:bg-[#f9fafb]'}
+                    className={
+                      isSelected
+                        ? 'bg-[#eef9ff] shadow-[inset_2px_0_0_#006496]'
+                        : 'hover:bg-[#f9fafb]'
+                    }
                   >
                     <td className={`px-3 py-3 ${cellBorder}`}>
                       {g.valid ? (
@@ -120,7 +136,9 @@ export function CompositionGeometryTab({
                     <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>
                       {formatDateTime(g.created_at)}
                     </td>
-                    <td className={`px-3 py-3 font-medium text-[#0a0a0a] ${cellBorder}`}>{g.name}</td>
+                    <td className={`px-3 py-3 font-medium text-[#0a0a0a] ${cellBorder}`}>
+                      {g.name}
+                    </td>
                     <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>{g.user}</td>
                     <td className={`px-3 py-3 text-[#0a0a0a] ${cellBorder}`}>{g.description}</td>
                     <td className={`px-3 py-3 text-right ${cellBorder}`}>
@@ -140,16 +158,16 @@ export function CompositionGeometryTab({
                   </tr>
                 );
               })}
-              {!isLoading && !isError && filteredGeometries.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-[#6b7280]">
-                    No geometries match your search.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            {!isLoading && !isError && filteredGeometries.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center text-[#6b7280]">
+                  No geometries match your search.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -75,25 +75,29 @@ export function Nurbs() {
   };
 
   // Called when user clicks on geometry to place an edge
-  const handleEdgePlaced = useCallback((y: number) => {
-    const interpolated = interpolateAnchorsAtY(planes, y);
-    if (!interpolated) return;
+  const handleEdgePlaced = useCallback(
+    (y: number) => {
+      const interpolated = interpolateAnchorsAtY(planes, y);
+      if (!interpolated) return;
 
-    const newPlane: PlaneProfile = {
-      id: newPlaneId(),
-      y: Math.round(interpolated.clampedY * 10) / 10, // round to 1 decimal
-      anchors: interpolated.anchors,
-    };
+      const newPlane: PlaneProfile = {
+        id: newPlaneId(),
+        y: Math.round(interpolated.clampedY * 10) / 10, // round to 1 decimal
+        anchors: interpolated.anchors,
+      };
 
-    setPlanes((prev) => [...prev, newPlane]);
-    setSelectedPlaneIdx(planes.length);
-    setEdgePlacementMode(false); // exit placement mode after placing
-  }, [planes]);
+      setPlanes((prev) => [...prev, newPlane]);
+      setSelectedPlaneIdx(planes.length);
+      setEdgePlacementMode(false); // exit placement mode after placing
+    },
+    [planes],
+  );
 
   const removePlane = (idx: number) => {
     setPlanes((prev) => prev.filter((_, i) => i !== idx));
     if (selectedPlaneIdx === idx) setSelectedPlaneIdx(null);
-    else if (selectedPlaneIdx !== null && selectedPlaneIdx > idx) setSelectedPlaneIdx(selectedPlaneIdx - 1);
+    else if (selectedPlaneIdx !== null && selectedPlaneIdx > idx)
+      setSelectedPlaneIdx(selectedPlaneIdx - 1);
   };
 
   const updatePlaneY = (idx: number, y: number) => {
@@ -107,7 +111,7 @@ export function Nurbs() {
         const newAnchors = [...p.anchors];
         newAnchors[anchorIdx] = [x, z];
         return { ...p, anchors: newAnchors };
-      })
+      }),
     );
   };
 
@@ -115,7 +119,7 @@ export function Nurbs() {
     (stats: { faces: number; edges: number; vertices: number }) => {
       setLoftStats(stats);
     },
-    []
+    [],
   );
 
   const saveGeometry = () => {
@@ -140,7 +144,10 @@ export function Nurbs() {
       reader.onload = (ev) => {
         try {
           const loaded = JSON.parse(ev.target?.result as string) as PlaneProfile[];
-          if (Array.isArray(loaded) && loaded.every(p => p.id && typeof p.y === 'number' && Array.isArray(p.anchors))) {
+          if (
+            Array.isArray(loaded) &&
+            loaded.every((p) => p.id && typeof p.y === 'number' && Array.isArray(p.anchors))
+          ) {
             setPlanes(loaded);
             setSelectedPlaneIdx(null);
             setLoftTrigger(0);
@@ -183,7 +190,7 @@ export function Nurbs() {
       )}
 
       {/* Controls */}
-      <div className="absolute top-4 left-4 z-50 max-h-[calc(100vh-2rem)] overflow-y-auto">
+      <div className="absolute top-4 left-4 z-50 max-h-[calc(100vh_-_2rem)] overflow-y-auto">
         {/* Geometry Selector */}
         <Card className="bg-background/90 backdrop-blur-sm border border-border min-w-[240px] mb-2">
           <CardContent className="p-3">
@@ -261,8 +268,8 @@ export function Nurbs() {
               <span>
                 {isNurbs
                   ? 'NURBS Surface • Quad topology wireframe'
-                  : 'Loft (OpenCascade.js) • B-Rep edge wireframe'}
-                {' '}• Drag to rotate • Scroll to zoom
+                  : 'Loft (OpenCascade.js) • B-Rep edge wireframe'}{' '}
+                • Drag to rotate • Scroll to zoom
               </span>
             </div>
           </CardContent>
