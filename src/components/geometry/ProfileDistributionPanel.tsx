@@ -148,10 +148,7 @@ export function ProfileDistributionPanel({
   const {
     sectionPoints,
     setPointsForSection,
-    addPoint,
-    getInputValue,
-    handleInputChange,
-    handleInputBlur,
+    bindSection,
   } = useEditableSectionPoints(
     (() => {
       const parameterMap = new Map((initialParameters?.parameters ?? []).map((p) => [p.reference, p]));
@@ -250,10 +247,7 @@ export function ProfileDistributionPanel({
         onShowDistributionChange={(v) => setShowDistribution((s) => ({ ...s, [key]: v }))}
         showTable={showTable[key]}
         onShowTableChange={(v) => setShowTable((s) => ({ ...s, [key]: v }))}
-        getInputValue={(idx, field) => getInputValue(key, idx, field)}
-        onInputChange={(idx, field, raw) => handleInputChange(key, idx, field, raw)}
-        onInputBlur={(idx, field) => handleInputBlur(key, idx, field)}
-        onAddPoint={() => addPoint(key)}
+        {...bindSection(key)}
         onRemovePoint={(idx) => {
           handleCurveChange(key, sectionPoints[key].filter((_, i) => i !== idx));
           requestCommit();

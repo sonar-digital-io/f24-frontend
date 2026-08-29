@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { MaterialRow } from '@/components/material/MaterialRow';
-import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { DeleteConfirmDialog } from '@/components/common/list/DeleteConfirmDialog';
 import { ListPageCard } from '@/components/common/list/ListPageCard';
 import { ListTable } from '@/components/common/list/ListTable';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
@@ -15,18 +15,19 @@ import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
+import { useDeleteConfirm } from '@/hooks/useDeleteConfirm';
+import { useSortState } from '@/hooks/useSortState';
 import {
   matchesDateRange,
   matchesQuery,
   paginate,
   sortItems,
   toggleSetMember,
-  toggleSort,
 } from '@/lib/listTable';
 import { toUiMaterial } from '@/lib/materialListMapping';
 import { getMechPropTypeParameter } from '@/lib/sysconfigMapping';
 import { toTitleCase } from '@/lib/utils';
-import type { SortState, MaterialSortKey } from '@/types';
+import type { MaterialSortKey } from '@/types';
 import { lastUpdatedSortKey, type Material } from '@/data/materials';
 import { useDeleteMaterial, useExportMaterial, useMaterialList } from '@/hooks/api/useMaterials';
 import { useMaterialSysconfig } from '@/hooks/api/useSysconfig';
@@ -37,10 +38,7 @@ export function Material() {
   const navigate = useNavigate();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<MaterialSortKey>>({
-    key: 'lastUpdated',
-    direction: 'desc',
-  });
+  const { sort, handleSort } = useSortState<MaterialSortKey>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
@@ -61,8 +59,8 @@ export function Material() {
     [backendMaterials, typeNameById],
   );
 
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useDeleteMaterial();
+  const { pendingDelete, setPendingDelete, handleConfirmDelete } = useDeleteConfirm(deleteMutation);
   const exportMutation = useExportMaterial();
 
   function handleDuplicate(material: Material) {
@@ -83,15 +81,6 @@ export function Material() {
     }
   }
 
-  async function handleConfirmDelete() {
-    if (!pendingDelete) return;
-    try {
-      await deleteMutation.mutateAsync(Number(pendingDelete.id));
-      setPendingDelete(null);
-    } catch {
-      // deleteMutation.isError surfaces the failure in the dialog — stay open so the user can retry.
-    }
-  }
 
   const allTypes = useMemo(
     () => [...new Set(materials.map((m) => m.type).filter(Boolean))].sort(),
@@ -118,10 +107,6 @@ export function Material() {
   );
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
-
-  function handleSort(key: MaterialSortKey) {
-    setSort((prev) => toggleSort(prev, key));
-  }
 
   function toggleExpand(id: string) {
     setExpandedIds((prev) => toggleSetMember(prev, id));
@@ -242,14 +227,11 @@ export function Material() {
         onToggleAll={typeFilter.toggleSelectAll}
       />
 
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        title="Delete material"
-        message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
-        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-        confirmDisabled={deleteMutation.isPending}
-        errorMessage={deleteMutation.isError ? 'Failed to delete. Please try again.' : undefined}
-        danger
+      <DeleteConfirmDialog
+        entityLabel="material"
+        pendingDelete={pendingDelete}
+        isPending={deleteMutation.isPending}
+        isError={deleteMutation.isError}
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}
       />

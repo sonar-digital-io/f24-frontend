@@ -93,6 +93,19 @@ export function useEditableSectionPoints<K extends string>(
     onCommit?.();
   }
 
+  /** Bundles the four `PointsTableEditCallbacks` fields that are always
+   *  wired identically at every call site (`(idx, field) => x(key, idx,
+   *  field)`), pre-bound to one section — callers still supply their own
+   *  `onRemovePoint`, which varies (e.g. cross-section sync). */
+  function bindSection(key: K) {
+    return {
+      getInputValue: (idx: number, field: Field) => getInputValue(key, idx, field),
+      onInputChange: (idx: number, field: Field, raw: string) => handleInputChange(key, idx, field, raw),
+      onInputBlur: (idx: number, field: Field) => handleInputBlur(key, idx, field),
+      onAddPoint: () => addPoint(key),
+    };
+  }
+
   return {
     sectionPoints,
     setPointsForSection,
@@ -100,5 +113,6 @@ export function useEditableSectionPoints<K extends string>(
     getInputValue,
     handleInputChange,
     handleInputBlur,
+    bindSection,
   };
 }

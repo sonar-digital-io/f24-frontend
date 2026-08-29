@@ -8,7 +8,7 @@ import { ListTableHead, type ListTableHeadColumn } from '@/components/common/lis
 import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
-import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { DeleteConfirmDialog } from '@/components/common/list/DeleteConfirmDialog';
 import { LoadGroupListRow } from '@/components/load-group/LoadGroupListRow';
 import {
   matchesDateRange,
@@ -16,10 +16,11 @@ import {
   paginate,
   sortItems,
   toggleSetMember,
-  toggleSort,
 } from '@/lib/listTable';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
-import type { SortState, LoadGroupSortKey } from '@/types';
+import { useDeleteConfirm } from '@/hooks/useDeleteConfirm';
+import { useSortState } from '@/hooks/useSortState';
+import type { LoadGroupSortKey } from '@/types';
 import { type LoadGroup as LoadGroupItem } from '@/data/loadGroups';
 import { useDeleteLoadGroup, useLoadGroupList } from '@/hooks/api/useLoadGroups';
 import type { LoadGroup as BackendLoadGroup } from '@/api/types/loadGroups';
@@ -42,10 +43,7 @@ function toUiLoadGroup(g: BackendLoadGroup): LoadGroupItem {
 export function LoadGroup() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<LoadGroupSortKey>>({
-    key: 'lastUpdated',
-    direction: 'desc',
-  });
+  const { sort, handleSort } = useSortState<LoadGroupSortKey>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
@@ -56,22 +54,12 @@ export function LoadGroup() {
     [backendLoadGroups],
   );
 
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useDeleteLoadGroup();
+  const { pendingDelete, setPendingDelete, handleConfirmDelete } = useDeleteConfirm(deleteMutation);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   function toggleExpand(id: string) {
     setExpandedIds((prev) => toggleSetMember(prev, id));
-  }
-
-  async function handleConfirmDelete() {
-    if (!pendingDelete) return;
-    try {
-      await deleteMutation.mutateAsync(Number(pendingDelete.id));
-      setPendingDelete(null);
-    } catch {
-      // deleteMutation.isError surfaces the failure in the dialog — stay open so the user can retry.
-    }
   }
 
   const filtered = useMemo(() => {
@@ -85,10 +73,6 @@ export function LoadGroup() {
   const sorted = useMemo(() => sortItems(filtered, sort, (g, key) => g[key]), [filtered, sort]);
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
-
-  function handleSort(key: LoadGroupSortKey) {
-    setSort((prev) => toggleSort(prev, key));
-  }
 
   const COLUMNS: ListTableHeadColumn<LoadGroupSortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[260px]' },
@@ -171,14 +155,11 @@ export function LoadGroup() {
 
       <Footer />
 
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        title="Delete load group"
-        message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
-        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-        confirmDisabled={deleteMutation.isPending}
-        errorMessage={deleteMutation.isError ? 'Failed to delete. Please try again.' : undefined}
-        danger
+      <DeleteConfirmDialog
+        entityLabel="load group"
+        pendingDelete={pendingDelete}
+        isPending={deleteMutation.isPending}
+        isError={deleteMutation.isError}
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}
       />

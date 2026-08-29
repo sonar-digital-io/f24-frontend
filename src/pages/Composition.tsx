@@ -9,14 +9,16 @@ import { ListTableHead, type ListTableHeadColumn } from '@/components/common/lis
 import { ListTableBody } from '@/components/common/list/ListTableBody';
 import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
-import { matchesDateRange, matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
-import type { SortState, CompositionSortKey } from '@/types';
+import { matchesDateRange, matchesQuery, paginate, sortItems } from '@/lib/listTable';
+import type { CompositionSortKey } from '@/types';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { formatDateTime } from '@/lib/utils';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
+import { useDeleteConfirm } from '@/hooks/useDeleteConfirm';
+import { useSortState } from '@/hooks/useSortState';
 import { type Composition as CompositionItem } from '@/data/compositions';
 import { type BladeType } from '@/data/geometries';
-import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { DeleteConfirmDialog } from '@/components/common/list/DeleteConfirmDialog';
 import { useCompositionList, useDeleteComposition } from '@/hooks/api/useComposition';
 import type { Composition as BackendComposition } from '@/api/types/composition';
 
@@ -39,10 +41,7 @@ function toUiComposition(c: BackendComposition): CompositionItem {
 export function Composition() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<CompositionSortKey>>({
-    key: 'name',
-    direction: 'asc',
-  });
+  const { sort, handleSort } = useSortState<CompositionSortKey>({ key: 'name', direction: 'asc' });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
@@ -53,18 +52,8 @@ export function Composition() {
     [backendCompositions],
   );
 
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useDeleteComposition();
-
-  async function handleConfirmDelete() {
-    if (!pendingDelete) return;
-    try {
-      await deleteMutation.mutateAsync(Number(pendingDelete.id));
-      setPendingDelete(null);
-    } catch {
-      // deleteMutation.isError surfaces the failure in the dialog — stay open so the user can retry.
-    }
-  }
+  const { pendingDelete, setPendingDelete, handleConfirmDelete } = useDeleteConfirm(deleteMutation);
 
   const filtered = useMemo(() => {
     return COMPOSITIONS.filter((c) => {
@@ -77,10 +66,6 @@ export function Composition() {
   const sorted = useMemo(() => sortItems(filtered, sort, (c, key) => c[key]), [filtered, sort]);
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
-
-  function handleSort(key: CompositionSortKey) {
-    setSort((prev) => toggleSort(prev, key));
-  }
 
   const COLUMNS: ListTableHeadColumn<CompositionSortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[240px]' },
@@ -189,14 +174,11 @@ export function Composition() {
 
       <Footer />
 
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        title="Delete composition"
-        message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
-        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-        confirmDisabled={deleteMutation.isPending}
-        errorMessage={deleteMutation.isError ? 'Failed to delete. Please try again.' : undefined}
-        danger
+      <DeleteConfirmDialog
+        entityLabel="composition"
+        pendingDelete={pendingDelete}
+        isPending={deleteMutation.isPending}
+        isError={deleteMutation.isError}
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}
       />

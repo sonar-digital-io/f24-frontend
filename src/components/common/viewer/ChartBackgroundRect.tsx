@@ -1,5 +1,14 @@
 import type { PointerEvent as ReactPointerEvent, MouseEvent as ReactMouseEvent } from 'react';
 
+/** Pointer handlers driving pan — shared shape between `ChartBackgroundRect`
+ *  and `ChartFrame`, which just forwards them through. */
+export interface BgPointerHandlers {
+  onPointerDown: (e: ReactPointerEvent<SVGRectElement>) => void;
+  onPointerMove: (e: ReactPointerEvent<SVGRectElement>) => void;
+  onPointerUp: (e: ReactPointerEvent<SVGRectElement>) => void;
+  onPointerCancel: (e: ReactPointerEvent<SVGRectElement>) => void;
+}
+
 interface ChartBackgroundRectProps {
   viewX: number;
   viewY: number;
@@ -9,12 +18,7 @@ interface ChartBackgroundRectProps {
   panningPointerId: number | null;
   /** Cursor shown while idle (zoom === 1) — 'crosshair' hints click-to-add (CurveEditor), 'default' elsewhere. */
   idleCursor?: 'crosshair' | 'default' | 'grab';
-  bgPointerHandlers: {
-    onPointerDown: (e: ReactPointerEvent<SVGRectElement>) => void;
-    onPointerMove: (e: ReactPointerEvent<SVGRectElement>) => void;
-    onPointerUp: (e: ReactPointerEvent<SVGRectElement>) => void;
-    onPointerCancel: (e: ReactPointerEvent<SVGRectElement>) => void;
-  };
+  bgPointerHandlers: BgPointerHandlers;
   onDoubleClick: () => void;
   onClick?: (e: ReactMouseEvent<SVGRectElement>) => void;
 }

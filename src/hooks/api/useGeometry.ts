@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as geometryApi from '@/api/geometry';
 import type {
   GeometryPayload,
@@ -23,6 +23,15 @@ export const geometryKeys = {
     ['geometry', 'profile-preview', geometryId, profile?.id, profile?.position, profile?.type, JSON.stringify(profile?.parameters)] as const,
   topView: (geometryId: number) => ['geometry', 'top-view', geometryId] as const,
 };
+
+/** Both the detail and list views embed a geometry's own fields, so any
+ *  write to it invalidates both — shared by every "update geometry itself"
+ *  mutation (not the nested edges/profiles ones, which invalidate their own
+ *  sub-resource key instead). */
+function invalidateGeometryDetailAndList(queryClient: QueryClient, geometryId: number) {
+  queryClient.invalidateQueries({ queryKey: geometryKeys.detail(geometryId) });
+  queryClient.invalidateQueries({ queryKey: geometryKeys.list() });
+}
 
 export function useGeometryList() {
   return useQuery({ queryKey: geometryKeys.list(), queryFn: () => geometryApi.getGeometryList() });
@@ -51,10 +60,7 @@ export function useUpdateGeometry(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: GeometryPayload) => geometryApi.updateGeometry(geometryId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: geometryKeys.detail(geometryId) });
-      queryClient.invalidateQueries({ queryKey: geometryKeys.list() });
-    },
+    onSuccess: () => invalidateGeometryDetailAndList(queryClient, geometryId),
   });
 }
 
@@ -70,10 +76,7 @@ export function useUpdateGeometrySettings(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: GeometrySettingsPayload) => geometryApi.updateGeometrySettings(geometryId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: geometryKeys.detail(geometryId) });
-      queryClient.invalidateQueries({ queryKey: geometryKeys.list() });
-    },
+    onSuccess: () => invalidateGeometryDetailAndList(queryClient, geometryId),
   });
 }
 

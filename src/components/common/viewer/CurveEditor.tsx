@@ -1,9 +1,6 @@
 import { useRef } from 'react';
-import { cn } from '@/lib/utils';
 import type { ControlPoint, CurveType } from '@/types';
-import { ChartZoomControls } from '@/components/common/viewer/ChartZoomControls';
-import { ChartBackgroundRect } from '@/components/common/viewer/ChartBackgroundRect';
-import { ChartGrid } from '@/components/common/viewer/ChartGrid';
+import { ChartFrame } from '@/components/common/viewer/ChartFrame';
 import { ChartAnchorPointsLayer } from '@/components/common/viewer/ChartAnchorPointsLayer';
 import { useChartZoomPan } from '@/hooks/useChartZoomPan';
 import { useCurveEditorInteractions } from '@/hooks/useCurveEditorInteractions';
@@ -16,9 +13,7 @@ import {
   PAD_BOTTOM,
   dataToPx,
   clamp,
-  computeTicks,
-  decimalsForStep,
-  capStepForTicks,
+  computeChartAxis,
   catmullRomPath,
   bezierControlPolygonPath,
   pointsToPolygonString,
@@ -142,143 +137,113 @@ export function CurveEditor({
   }
 
   const buildPath = curveType === 'bezier' ? bezierControlPolygonPath : catmullRomPath;
-
-  // Cap gridlines at 10 per axis — a caller-fixed step (e.g. a user-editable
-  // Y range) can otherwise flood the chart once the range grows.
-  const effectiveYStep = capStepForTicks(yMin, yMax, yStep);
-  const effectiveXStep = capStepForTicks(xMin, xMax, xStep);
-  const yTicks = computeTicks(yMin, yMax, effectiveYStep);
-  const xTicks = computeTicks(xMin, xMax, effectiveXStep);
-  const yDecimals = decimalsForStep(effectiveYStep);
-  const xDecimals = decimalsForStep(effectiveXStep);
+  const xAxis = computeChartAxis(xMin, xMax, xStep);
+  const yAxis = computeChartAxis(yMin, yMax, yStep);
   const rootPx = dataToPx({ x: rootX, y: 0 }, xMin, xMax, yMin, yMax).cx;
 
   return (
-    <div className={cn('relative h-[260px] w-full rounded-md bg-white', className)}>
-      <ChartZoomControls {...zoomControlProps} />
-
-      <svg
-        ref={svgRef}
-        viewBox={`${viewX} ${viewY} ${viewW} ${viewH}`}
-        className="h-full w-full"
-        aria-label={curveType === 'bezier' ? 'Bézier distribution chart' : 'Distribution chart'}
-        style={{ touchAction: 'none' }}
-        /* No onWheel — scroll zoom deliberately disabled */
-      >
-        {/* Background: catches pan + click-to-add-point + dbl-click zoom reset */}
-        <ChartBackgroundRect
-          viewX={viewX}
-          viewY={viewY}
-          viewW={viewW}
-          viewH={viewH}
-          zoom={zoom}
-          panningPointerId={panningPointerId}
-          idleCursor="crosshair"
-          bgPointerHandlers={bgPointerHandlers}
-          onClick={handleBgClick}
-          onDoubleClick={resetView}
-        />
-
-        {yUnit && (
-          <text x="6" y="12" fontSize="10" fill="#6b7280">
-            [{yUnit}]
-          </text>
-        )}
-
-        {xUnit && (
-          <text x={VB_WIDTH - PAD_RIGHT} y={VB_HEIGHT - 4} fontSize="10" fill="#6b7280" textAnchor="end">
-            [{xUnit}]
-          </text>
-        )}
-
-        <ChartGrid
-          xTicks={xTicks}
-          yTicks={yTicks}
-          xMin={xMin}
-          xMax={xMax}
-          yMin={yMin}
-          yMax={yMax}
-          xDecimals={xDecimals}
-          yDecimals={yDecimals}
-        />
-
-        {/* Root indicator */}
-        {showRootIndicator && (
-          <line
-            x1={rootPx}
-            y1={PAD_TOP}
-            x2={rootPx}
-            y2={VB_HEIGHT - PAD_BOTTOM}
-            stroke="#f59e0b"
-            strokeWidth="1.5"
-            opacity="0.8"
-            vectorEffect="non-scaling-stroke"
-          />
-        )}
-
-        {/* Control-polygon guide — bezier only, hints which points are off-curve */}
-        {curveType === 'bezier' && (
-          <polyline
-            points={pointsToPolygonString(points, xMin, xMax, yMin, yMax)}
-            fill="none"
-            stroke="#94a3b8"
-            strokeWidth="1"
-            strokeDasharray="3 2"
-            vectorEffect="non-scaling-stroke"
-          />
-        )}
-
-        {/* Ghost curve — pre-drag snapshot, shown only while a point is being dragged */}
-        {draggingIndex !== null && preEditPointsRef.current && (
-          <path
-            d={buildPath(preEditPointsRef.current, xMin, xMax, yMin, yMax)}
-            fill="none"
-            stroke="#22c55e"
-            strokeWidth="1.5"
-            strokeDasharray="4 3"
-            opacity="0.85"
-            vectorEffect="non-scaling-stroke"
-          />
-        )}
-
-        {/* Active curve */}
-        <path
-          d={buildPath(points, xMin, xMax, yMin, yMax)}
-          fill="none"
-          stroke="#0066cc"
-          strokeWidth="2.5"
+    <ChartFrame
+      svgRef={svgRef}
+      ariaLabel={curveType === 'bezier' ? 'Bézier distribution chart' : 'Distribution chart'}
+      viewX={viewX}
+      viewY={viewY}
+      viewW={viewW}
+      viewH={viewH}
+      zoom={zoom}
+      panningPointerId={panningPointerId}
+      idleCursor="crosshair"
+      bgPointerHandlers={bgPointerHandlers}
+      onBgClick={handleBgClick}
+      onBgDoubleClick={resetView}
+      zoomControlProps={zoomControlProps}
+      xTicks={xAxis.ticks}
+      yTicks={yAxis.ticks}
+      xMin={xMin}
+      xMax={xMax}
+      yMin={yMin}
+      yMax={yMax}
+      xDecimals={xAxis.decimals}
+      yDecimals={yAxis.decimals}
+      xUnit={xUnit}
+      yUnit={yUnit}
+      className={className}
+    >
+      {/* Root indicator */}
+      {showRootIndicator && (
+        <line
+          x1={rootPx}
+          y1={PAD_TOP}
+          x2={rootPx}
+          y2={VB_HEIGHT - PAD_BOTTOM}
+          stroke="#f59e0b"
+          strokeWidth="1.5"
+          opacity="0.8"
           vectorEffect="non-scaling-stroke"
         />
+      )}
 
-        {/* Draggable points */}
-        <ChartAnchorPointsLayer
-          points={points}
-          project={(p) => dataToPx(p, xMin, xMax, yMin, yMax)}
-          draggingIndex={draggingIndex}
-          minPoints={minPoints}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onDoubleClick={handlePointDoubleClick}
-          onKeyDown={handleKeyDown}
+      {/* Control-polygon guide — bezier only, hints which points are off-curve */}
+      {curveType === 'bezier' && (
+        <polyline
+          points={pointsToPolygonString(points, xMin, xMax, yMin, yMax)}
+          fill="none"
+          stroke="#94a3b8"
+          strokeWidth="1"
+          strokeDasharray="3 2"
+          vectorEffect="non-scaling-stroke"
         />
+      )}
 
-        {/* Blocked-drag label — point 0 can't be dragged past the start position */}
-        {draggingIndex === 0 && blockedAtRoot && (() => {
-          const labelW = 172;
-          const labelH = 22;
-          const cx = clamp(rootPx, PAD_LEFT + labelW / 2, VB_WIDTH - PAD_RIGHT - labelW / 2);
-          const y = PAD_TOP + 6;
-          return (
-            <g style={{ pointerEvents: 'none' }}>
-              <rect x={cx - labelW / 2} y={y} width={labelW} height={labelH} rx={4} fill="#171717" />
-              <text x={cx} y={y + labelH / 2 + 4} textAnchor="middle" fontSize="11" fill="white">
-                Can&apos;t go past start position
-              </text>
-            </g>
-          );
-        })()}
-      </svg>
-    </div>
+      {/* Ghost curve — pre-drag snapshot, shown only while a point is being dragged */}
+      {draggingIndex !== null && preEditPointsRef.current && (
+        <path
+          d={buildPath(preEditPointsRef.current, xMin, xMax, yMin, yMax)}
+          fill="none"
+          stroke="#22c55e"
+          strokeWidth="1.5"
+          strokeDasharray="4 3"
+          opacity="0.85"
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
+
+      {/* Active curve */}
+      <path
+        d={buildPath(points, xMin, xMax, yMin, yMax)}
+        fill="none"
+        stroke="#0066cc"
+        strokeWidth="2.5"
+        vectorEffect="non-scaling-stroke"
+      />
+
+      {/* Draggable points */}
+      <ChartAnchorPointsLayer
+        points={points}
+        project={(p) => dataToPx(p, xMin, xMax, yMin, yMax)}
+        draggingIndex={draggingIndex}
+        minPoints={minPoints}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onDoubleClick={handlePointDoubleClick}
+        onKeyDown={handleKeyDown}
+      />
+
+      {/* Blocked-drag label — point 0 can't be dragged past the start position */}
+      {draggingIndex === 0 && blockedAtRoot && (() => {
+        const labelW = 172;
+        const labelH = 22;
+        const cx = clamp(rootPx, PAD_LEFT + labelW / 2, VB_WIDTH - PAD_RIGHT - labelW / 2);
+        const y = PAD_TOP + 6;
+        return (
+          <g style={{ pointerEvents: 'none' }}>
+            <rect x={cx - labelW / 2} y={y} width={labelW} height={labelH} rx={4} fill="#171717" />
+            <text x={cx} y={y + labelH / 2 + 4} textAnchor="middle" fontSize="11" fill="white">
+              Can&apos;t go past start position
+            </text>
+          </g>
+        );
+      })()}
+    </ChartFrame>
   );
 }

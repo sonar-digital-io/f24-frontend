@@ -76,6 +76,18 @@ export function capStepForTicks(min: number, max: number, step: number, maxTicks
   return range / step <= maxTicks ? step : niceStep(range, maxTicks);
 }
 
+export interface ChartAxis {
+  ticks: number[];
+  decimals: number;
+}
+
+/** One axis' gridline ticks + label decimal count, capped to at most 10
+ *  gridlines (see `capStepForTicks`) — shared by every SVG chart's x/y axis. */
+export function computeChartAxis(min: number, max: number, step: number): ChartAxis {
+  const effectiveStep = capStepForTicks(min, max, step);
+  return { ticks: computeTicks(min, max, effectiveStep), decimals: decimalsForStep(effectiveStep) };
+}
+
 /** SVG `<polygon points="...">` string for a set of data points, mapped through `dataToPx`. */
 export function pointsToPolygonString(
   points: ControlPoint[],

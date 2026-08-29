@@ -148,10 +148,7 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
   const {
     sectionPoints,
     setPointsForSection,
-    addPoint,
-    getInputValue,
-    handleInputChange,
-    handleInputBlur,
+    bindSection,
   } = useEditableSectionPoints(
     (() => {
       const map = edgeMap(initialEdges);
@@ -258,10 +255,7 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
         getBoundInputValue={(field) => getBoundInputValue(key, field)}
         onBoundChange={(field, raw) => handleBoundChange(key, field, raw)}
         onBoundBlur={(field) => handleBoundBlur(key, field)}
-        getInputValue={(idx, field) => getInputValue(key, idx, field)}
-        onInputChange={(idx, field, raw) => handleInputChange(key, idx, field, raw)}
-        onInputBlur={(idx, field) => handleInputBlur(key, idx, field)}
-        onAddPoint={() => addPoint(key)}
+        {...bindSection(key)}
         onRemovePoint={(idx) => {
           setPointsForSection(key, sectionPoints[key].filter((_, i) => i !== idx));
           requestCommit();

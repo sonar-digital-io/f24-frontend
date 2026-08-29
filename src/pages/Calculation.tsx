@@ -14,8 +14,9 @@ import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
-import { matchesDateRange, matchesQuery, paginate, sortItems, toggleSort } from '@/lib/listTable';
-import type { SortState, CalculationSortKey } from '@/types';
+import { useSortState } from '@/hooks/useSortState';
+import { matchesDateRange, matchesQuery, paginate, sortItems } from '@/lib/listTable';
+import type { CalculationSortKey } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 import { type Calculation } from '@/data/calculations';
 import { useProjectList } from '@/hooks/api/useProjects';
@@ -40,10 +41,7 @@ function toUiCalculation(p: Project): Calculation {
 export function Calculation() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<CalculationSortKey>>({
-    key: 'lastUpdated',
-    direction: 'desc',
-  });
+  const { sort, handleSort } = useSortState<CalculationSortKey>({ key: 'lastUpdated', direction: 'desc' });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
@@ -72,10 +70,6 @@ export function Calculation() {
   const sorted = useMemo(() => sortItems(filtered, sort, (c, key) => c[key]), [filtered, sort]);
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
-
-  function handleSort(key: CalculationSortKey) {
-    setSort((prev) => toggleSort(prev, key));
-  }
 
   const COLUMNS: ListTableHeadColumn<CalculationSortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[260px]' },
