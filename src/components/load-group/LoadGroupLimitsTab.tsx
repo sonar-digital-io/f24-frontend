@@ -2,9 +2,12 @@ import { Info, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CubicSplineEditor } from '@/components/common/viewer/CubicSplineEditor';
 import { BezierEditor } from '@/components/common/viewer/BezierEditor';
+import { CurveTypeToggle } from '@/components/common/viewer/CurveTypeToggle';
 import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
 import { niceStep } from '@/lib/bezierMath';
+import type { CurveType } from '@/types';
 import type { LoadLimitRange } from '@/api/types/loadGroups';
 import { LIMITS_UNITS, type LimitsSubTab } from '@/data/loadGroupForm';
 
@@ -14,6 +17,7 @@ interface LoadGroupLimitsTabProps {
   limits: Record<LimitsSubTab, LoadLimitRange>;
   onUpdateBounds: (sub: LimitsSubTab, field: 'x_min' | 'x_max' | 'y_min' | 'y_max', val: number) => void;
   onUpdateCurvePoint: (sub: LimitsSubTab, idx: number, field: 'rpm' | 'value', val: number) => void;
+  onUpdateCurveType: (sub: LimitsSubTab, curveType: CurveType) => void;
   onCurveChange: (sub: LimitsSubTab, curve: LoadLimitRange['curve']) => void;
   onAddCurvePoint: (sub: LimitsSubTab) => void;
   onDeleteCurvePoint: (sub: LimitsSubTab, idx: number) => void;
@@ -26,6 +30,7 @@ export function LoadGroupLimitsTab({
   limits,
   onUpdateBounds,
   onUpdateCurvePoint,
+  onUpdateCurveType,
   onCurveChange,
   onAddCurvePoint,
   onDeleteCurvePoint,
@@ -58,7 +63,7 @@ export function LoadGroupLimitsTab({
         </Tabs>
       </div>
 
-      {/* Bounds + BezierEditor + Table */}
+      {/* Bounds + CubicSplineEditor + Table */}
       <div className="flex flex-col gap-4 px-6 pb-6">
         <div className="flex items-end gap-4">
           {(['y_min', 'y_max', 'x_min', 'x_max'] as const).map((field) => (
@@ -77,22 +82,42 @@ export function LoadGroupLimitsTab({
         </div>
 
         <div className="grid grid-cols-[minmax(480px,1fr)_260px] gap-6">
-          {/* Interactive Bezier chart */}
+          {/* Interactive curve chart */}
           <div className="flex flex-col gap-3">
-            <BezierEditor
-              points={points}
-              onChange={(next) => onCurveChange(limitsSubTab, next.map((p) => ({ rpm: p.x, value: p.y })))}
-              xMin={bounds.x_min}
-              xMax={bounds.x_max}
-              xStep={niceStep(bounds.x_max - bounds.x_min)}
-              yMin={bounds.y_min}
-              yMax={bounds.y_max}
-              yStep={niceStep(bounds.y_max - bounds.y_min)}
-              xUnit="RPM"
-              yUnit={LIMITS_UNITS[limitsSubTab]}
-              showRootIndicator={false}
-              minPoints={2}
-            />
+            <div className="flex justify-end">
+              <CurveTypeToggle value={bounds.curve_type} onChange={(next) => onUpdateCurveType(limitsSubTab, next)} />
+            </div>
+            {bounds.curve_type === 'bezier' ? (
+              <BezierEditor
+                points={points}
+                onChange={(next) => onCurveChange(limitsSubTab, next.map((p) => ({ rpm: p.x, value: p.y })))}
+                xMin={bounds.x_min}
+                xMax={bounds.x_max}
+                xStep={niceStep(bounds.x_max - bounds.x_min)}
+                yMin={bounds.y_min}
+                yMax={bounds.y_max}
+                yStep={niceStep(bounds.y_max - bounds.y_min)}
+                xUnit="RPM"
+                yUnit={LIMITS_UNITS[limitsSubTab]}
+                showRootIndicator={false}
+                minPoints={2}
+              />
+            ) : (
+              <CubicSplineEditor
+                points={points}
+                onChange={(next) => onCurveChange(limitsSubTab, next.map((p) => ({ rpm: p.x, value: p.y })))}
+                xMin={bounds.x_min}
+                xMax={bounds.x_max}
+                xStep={niceStep(bounds.x_max - bounds.x_min)}
+                yMin={bounds.y_min}
+                yMax={bounds.y_max}
+                yStep={niceStep(bounds.y_max - bounds.y_min)}
+                xUnit="RPM"
+                yUnit={LIMITS_UNITS[limitsSubTab]}
+                showRootIndicator={false}
+                minPoints={2}
+              />
+            )}
           </div>
 
           {/* Precise editing table */}

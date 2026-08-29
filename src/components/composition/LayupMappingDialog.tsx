@@ -11,7 +11,7 @@ const INIT_W = 986;
 const MIN_W = 640;
 const MIN_H_FLOOR = 300;
 
-// BezierEditor has a fixed h-[260px]; table rows are ~48px each + 40px header + 37px add-button.
+// The polygon chart has a fixed h-[260px]; table rows are ~48px each + 40px header + 37px add-button.
 const BEZIER_H = 260;
 const TABLE_HEAD_H = 40;
 const TABLE_ROW_H = 48;
@@ -31,7 +31,7 @@ function applyXConstraints(pts: ControlPoint[], idx: number, nextX: number): num
   return Math.max(pts[idx - 1].x, Math.min(pts[idx + 1].x, nextX));
 }
 
-interface LayupMappingBezierDialogProps {
+interface LayupMappingDialogProps {
   open: boolean;
   /** Side + mapping name combined into the title, e.g. "Upper side / layup1". */
   title: string;
@@ -57,7 +57,7 @@ interface LayupMappingBezierDialogProps {
   anchorLeft?: number;
 }
 
-export function LayupMappingBezierDialog({
+export function LayupMappingDialog({
   open,
   title,
   points,
@@ -74,7 +74,7 @@ export function LayupMappingBezierDialog({
   anchorRight,
   anchorTop,
   anchorLeft,
-}: LayupMappingBezierDialogProps) {
+}: LayupMappingDialogProps) {
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
   const { pos, setPos, startDrag } = useDraggablePosition({ x: 0, y: 0 });
   const [size, setSize] = useState({ w: INIT_W, h: calcMinH(points.length) });

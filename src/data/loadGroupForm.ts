@@ -13,6 +13,7 @@ export const INITIAL_LOAD_LIMITS: Record<LimitsSubTab, LoadLimitRange> = {
     x_max: 20000,
     y_min: 0,
     y_max: 20000,
+    curve_type: 'spline',
     curve: [
       { rpm: 0, value: 10000 },
       { rpm: 10000, value: 10000 },
@@ -23,6 +24,7 @@ export const INITIAL_LOAD_LIMITS: Record<LimitsSubTab, LoadLimitRange> = {
     x_max: 20000,
     y_min: 0,
     y_max: 20000,
+    curve_type: 'spline',
     curve: [
       { rpm: 0, value: 10000 },
       { rpm: 10000, value: 10000 },
@@ -33,6 +35,7 @@ export const INITIAL_LOAD_LIMITS: Record<LimitsSubTab, LoadLimitRange> = {
     x_max: 20000,
     y_min: 0,
     y_max: 20000,
+    curve_type: 'spline',
     curve: [
       { rpm: 0, value: 10000 },
       { rpm: 10000, value: 10000 },

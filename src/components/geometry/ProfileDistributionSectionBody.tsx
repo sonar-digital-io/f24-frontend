@@ -1,13 +1,17 @@
+import { CubicSplineEditor } from '@/components/common/viewer/CubicSplineEditor';
 import { BezierEditor } from '@/components/common/viewer/BezierEditor';
-import { BezierPointsTable, type PointsTableEditCallbacks } from '@/components/common/viewer/BezierPointsTable';
+import { CubicSplinePointsTable, type PointsTableEditCallbacks } from '@/components/common/viewer/CubicSplinePointsTable';
+import { CurveTypeToggle } from '@/components/common/viewer/CurveTypeToggle';
 import { ProfileDistributionSwitch } from '@/components/geometry/ProfileDistributionSwitch';
-import type { ControlPoint } from '@/types';
+import type { ControlPoint, CurveType } from '@/types';
 
 interface ProfileDistributionSectionBodyProps extends PointsTableEditCallbacks {
   folded: boolean;
   points: ControlPoint[];
   onChange: (next: ControlPoint[]) => void;
   onCommit?: () => void;
+  curveType: CurveType;
+  onCurveTypeChange: (next: CurveType) => void;
   yMax: number;
   rootX: number;
   valueLabel: string;
@@ -25,6 +29,8 @@ export function ProfileDistributionSectionBody({
   points,
   onChange,
   onCommit,
+  curveType,
+  onCurveTypeChange,
   yMax,
   rootX,
   valueLabel,
@@ -44,13 +50,20 @@ export function ProfileDistributionSectionBody({
       <div className={folded ? 'flex flex-col gap-4' : 'grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]'}>
         {/* Distribution view */}
         <div className="flex flex-col gap-3">
-          <ProfileDistributionSwitch
-            checked={showDistribution}
-            onChange={onShowDistributionChange}
-            label="Distribution view"
-          />
+          <div className="flex items-center justify-between gap-3">
+            <ProfileDistributionSwitch
+              checked={showDistribution}
+              onChange={onShowDistributionChange}
+              label="Distribution view"
+            />
+            <CurveTypeToggle value={curveType} onChange={onCurveTypeChange} />
+          </div>
           {showDistribution && (
-            <BezierEditor points={points} onChange={onChange} onCommit={onCommit} yMax={yMax} rootX={rootX} />
+            curveType === 'bezier' ? (
+              <BezierEditor points={points} onChange={onChange} onCommit={onCommit} yMax={yMax} rootX={rootX} />
+            ) : (
+              <CubicSplineEditor points={points} onChange={onChange} onCommit={onCommit} yMax={yMax} rootX={rootX} />
+            )
           )}
         </div>
 
@@ -58,7 +71,7 @@ export function ProfileDistributionSectionBody({
         <div className="flex flex-col gap-3">
           <ProfileDistributionSwitch checked={showTable} onChange={onShowTableChange} label="Table" />
           {showTable && (
-            <BezierPointsTable
+            <CubicSplinePointsTable
               points={points}
               valueLabel={valueLabel}
               idPrefix={idPrefix}

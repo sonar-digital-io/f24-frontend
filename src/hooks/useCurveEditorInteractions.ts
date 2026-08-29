@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { ControlPoint } from '@/types';
 import { clamp, pxToData } from '@/lib/bezierMath';
 
-interface UseBezierEditorInteractionsOptions {
+interface UseCurveEditorInteractionsOptions {
   points: ControlPoint[];
   onChange: (points: ControlPoint[]) => void;
   /** Fires once a drag actually completes (pointer up/cancel after a real move) —
@@ -22,12 +22,15 @@ interface UseBezierEditorInteractionsOptions {
 }
 
 /**
- * Anchor drag/keyboard-nudge/insert/delete interaction logic for BezierEditor
+ * Anchor drag/keyboard-nudge/insert/delete interaction logic — shared by
+ * `CubicSplineEditor` and `BezierEditor`, whose point-manipulation UX is
+ * identical; they differ only in how the curve itself is drawn from the
+ * resulting points
  * — pure state + handlers, no JSX. Extracted so the component body stays
  * focused on rendering; every handler here closes over the same `points`/
  * `onChange` the component receives as props.
  */
-export function useBezierEditorInteractions({
+export function useCurveEditorInteractions({
   points,
   onChange,
   onCommit,
@@ -42,7 +45,7 @@ export function useBezierEditorInteractions({
   minPoints,
   screenToViewBox,
   hasPannedRef,
-}: UseBezierEditorInteractionsOptions) {
+}: UseCurveEditorInteractionsOptions) {
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   // True while dragging point 0 past rootX — shows the "can't go past start
   // position" label instead of silently clamping without feedback.

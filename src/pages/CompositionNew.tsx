@@ -8,7 +8,7 @@ import { CompositionEditToolbar, type CompositionTab } from '@/components/compos
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import { CompositionLayupMappingPanel } from '@/components/composition/CompositionLayupMappingPanel';
 import { LayupPickerDialog } from '@/components/composition/LayupPickerDialog';
-import { LayupMappingBezierDialog } from '@/components/composition/LayupMappingBezierDialog';
+import { LayupMappingDialog } from '@/components/composition/LayupMappingDialog';
 import { TransversalMappingSection } from '@/components/composition/TransversalMappingSection';
 import { CompositionGeneralTab } from '@/components/composition/CompositionGeneralTab';
 import { CompositionGeometryTab } from '@/components/composition/CompositionGeometryTab';
@@ -662,7 +662,7 @@ export function CompositionNew() {
       />
 
       {bezierFor && (
-        <LayupMappingBezierDialog
+        <LayupMappingDialog
           key={`${bezierFor.side}-${bezierFor.mappingId}`}
           open
           title={bezierTitle}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { FoldHorizontal, Loader2 } from 'lucide-react';
-import type { ControlPoint } from '@/types';
+import type { ControlPoint, CurveType } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
 import { StackingSectionBody } from '@/components/geometry/StackingSectionBody';
@@ -131,6 +131,16 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     };
   });
 
+  const [curveType, setCurveType] = useState<Record<SectionKey, CurveType>>(() => {
+    const map = edgeMap(initialEdges);
+    return {
+      sweep: map.get('sweep')?.curve_type ?? 'spline',
+      dihedral: map.get('dihedral')?.curve_type ?? 'spline',
+      twist: map.get('twist')?.curve_type ?? 'spline',
+      chord: map.get('chord')?.curve_type ?? 'spline',
+    };
+  });
+
   const requestCommit = useDeferredCommit(() => {
     if (hasEnoughPoints) onCommit?.(buildEdges());
   });
@@ -157,6 +167,11 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     () => rootX,
     requestCommit
   );
+
+  function handleCurveTypeChange(key: SectionKey, next: CurveType) {
+    setCurveType((current) => ({ ...current, [key]: next }));
+    requestCommit();
+  }
 
   function toggleSection(key: SectionKey) {
     setOpenSections((s) => ({ ...s, [key]: !s[key] }));
@@ -213,7 +228,7 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
       const divisor = radiusDivisor(key, nominalRadius);
       return {
         edge_type: key,
-        curve_type: 'bezier',
+        curve_type: curveType[key],
         ymin: yBounds[key].min / divisor,
         ymax: yBounds[key].max / divisor,
         curve: sectionPoints[key],
@@ -233,6 +248,8 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
         points={sectionPoints[key]}
         onChange={(next) => setPointsForSection(key, next)}
         onCommit={requestCommit}
+        curveType={curveType[key]}
+        onCurveTypeChange={(next) => handleCurveTypeChange(key, next)}
         yMin={yBounds[key].min}
         yMax={yBounds[key].max}
         yStep={SECTION_Y_STEP[key]}

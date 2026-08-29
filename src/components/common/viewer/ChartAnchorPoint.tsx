@@ -15,7 +15,7 @@ interface ChartAnchorPointProps {
   tooltip?: string;
 }
 
-/** Draggable chart control-point dot (with an oversized invisible hit area), shared by `BezierEditor`/`LayupMappingChart`. */
+/** Draggable chart control-point dot (with an oversized invisible hit area), shared by `CubicSplineEditor`/`LayupMappingChart`. */
 export function ChartAnchorPoint({
   cx,
   cy,

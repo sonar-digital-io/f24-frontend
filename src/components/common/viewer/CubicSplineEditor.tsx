@@ -19,32 +19,30 @@ import {
   computeTicks,
   decimalsForStep,
   capStepForTicks,
-  bezierControlPolygonPath,
+  catmullRomPath,
 } from '@/lib/bezierMath';
 
 /**
- * Interactive real-Bézier editor with N control points.
+ * Interactive Catmull-Rom spline editor with N control points.
  *
- * The point list IS the Bézier control polygon (a single degree-(N-1) curve,
- * De Casteljau-evaluated) — unlike `CubicSplineEditor`'s Catmull-Rom spline,
- * only the FIRST and LAST points sit on the curve. Every point in between
- * pulls the curve's shape without ever being touched by it.
+ * All points are "on-curve" anchors — the smooth curve passes through each
+ * one. This makes adding intermediate knots intuitive.
  *
- * Interactions (identical UX to `CubicSplineEditor` — same shared hook):
- * - Click on background  → insert a new control point at that position
- * - Drag a point         → move it (bounded by its neighbors / xMin·xMax)
- * - Double-click a point → remove it, including endpoints — blocked once
+ * Interactions:
+ * - Click on background  → insert a new anchor at that position
+ * - Drag anchor          → move it (bounded by its neighbors / xMin·xMax)
+ * - Double-click anchor  → remove it, including endpoints — blocked once
  *   `minPoints` remain (default 2)
  * - +/- buttons          → zoom in / out
  * - Drag background      → pan (only when zoomed in)
  * - Double-click bg      → reset zoom & pan
  *
  * Ghost curve:
- * - While dragging a point, the green dashed curve shows where the curve
+ * - While dragging an anchor, the green dashed curve shows where the curve
  *   was BEFORE the drag started. It vanishes the moment you release.
  */
 
-export interface BezierEditorProps {
+export interface CubicSplineEditorProps {
   points: ControlPoint[];
   onChange: (points: ControlPoint[]) => void;
   /** Fires once per completed point drag (on release) — for callers that autosave
@@ -68,7 +66,7 @@ export interface BezierEditorProps {
   className?: string;
 }
 
-export function BezierEditor({
+export function CubicSplineEditor({
   points,
   onChange,
   onCommit,
@@ -84,7 +82,7 @@ export function BezierEditor({
   xUnit = '',
   yUnit = '',
   className,
-}: BezierEditorProps) {
+}: CubicSplineEditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
 
   const {
@@ -138,6 +136,8 @@ export function BezierEditor({
     );
   }
 
+  // Cap gridlines at 10 per axis — a caller-fixed step (e.g. a user-editable
+  // Y range) can otherwise flood the chart once the range grows.
   const effectiveYStep = capStepForTicks(yMin, yMax, yStep);
   const effectiveXStep = capStepForTicks(xMin, xMax, xStep);
   const yTicks = computeTicks(yMin, yMax, effectiveYStep);
@@ -148,15 +148,18 @@ export function BezierEditor({
 
   return (
     <div className={cn('relative h-[260px] w-full rounded-md bg-white', className)}>
+      {/* Zoom controls */}
       <ChartZoomControls {...zoomControlProps} />
 
       <svg
         ref={svgRef}
         viewBox={`${viewX} ${viewY} ${viewW} ${viewH}`}
         className="h-full w-full"
-        aria-label="Bézier distribution chart"
+        aria-label="Distribution chart"
         style={{ touchAction: 'none' }}
+        /* No onWheel — scroll zoom deliberately disabled */
       >
+        {/* Background: catches pan + click-to-add-point + dbl-click zoom reset */}
         <ChartBackgroundRect
           viewX={viewX}
           viewY={viewY}
@@ -193,6 +196,7 @@ export function BezierEditor({
           yDecimals={yDecimals}
         />
 
+        {/* Root indicator */}
         {showRootIndicator && (
           <line
             x1={rootPx}
@@ -206,10 +210,10 @@ export function BezierEditor({
           />
         )}
 
-        {/* Ghost curve — pre-drag snapshot, shown only while dragging */}
+        {/* Ghost curve — pre-drag snapshot, shown only while a point is being dragged */}
         {draggingIndex !== null && preEditPointsRef.current && (
           <path
-            d={bezierControlPolygonPath(preEditPointsRef.current, xMin, xMax, yMin, yMax)}
+            d={catmullRomPath(preEditPointsRef.current, xMin, xMax, yMin, yMax)}
             fill="none"
             stroke="#22c55e"
             strokeWidth="1.5"
@@ -221,27 +225,14 @@ export function BezierEditor({
 
         {/* Active curve */}
         <path
-          d={bezierControlPolygonPath(points, xMin, xMax, yMin, yMax)}
+          d={catmullRomPath(points, xMin, xMax, yMin, yMax)}
           fill="none"
           stroke="#0066cc"
           strokeWidth="2.5"
           vectorEffect="non-scaling-stroke"
         />
 
-        {/* Control-polygon guide lines — hint which points are off-curve */}
-        <polyline
-          points={points.map((p) => {
-            const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
-            return `${cx.toFixed(1)},${cy.toFixed(1)}`;
-          }).join(' ')}
-          fill="none"
-          stroke="#94a3b8"
-          strokeWidth="1"
-          strokeDasharray="3 2"
-          vectorEffect="non-scaling-stroke"
-        />
-
-        {/* Draggable control points — reuses the shared chart anchor layer/dot */}
+        {/* Draggable anchors */}
         <ChartAnchorPointsLayer
           points={points}
           project={(p) => dataToPx(p, xMin, xMax, yMin, yMax)}
@@ -254,6 +245,7 @@ export function BezierEditor({
           onKeyDown={handleKeyDown}
         />
 
+        {/* Blocked-drag label — point 0 can't be dragged past the start position */}
         {draggingIndex === 0 && blockedAtRoot && (() => {
           const labelW = 172;
           const labelH = 22;

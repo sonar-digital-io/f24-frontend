@@ -27,6 +27,7 @@ export interface LoadLimitRange {
   x_max: number;
   y_min: number;
   y_max: number;
+  curve_type: 'bezier' | 'spline';
   curve: LoadLimitCurvePoint[];
 }
 
