@@ -22,13 +22,12 @@ interface UseCurveEditorInteractionsOptions {
 }
 
 /**
- * Anchor drag/keyboard-nudge/insert/delete interaction logic — shared by
- * `CubicSplineEditor` and `BezierEditor`, whose point-manipulation UX is
- * identical; they differ only in how the curve itself is drawn from the
- * resulting points
- * — pure state + handlers, no JSX. Extracted so the component body stays
- * focused on rendering; every handler here closes over the same `points`/
- * `onChange` the component receives as props.
+ * Anchor drag/keyboard-nudge/insert/delete interaction logic for
+ * `CurveEditor` — identical for both curve types, which differ only in how
+ * the curve itself is drawn from the resulting points. Pure state +
+ * handlers, no JSX. Extracted so the component body stays focused on
+ * rendering; every handler here closes over the same `points`/`onChange`
+ * the component receives as props.
  */
 export function useCurveEditorInteractions({
   points,

@@ -35,7 +35,7 @@ interface CubicSplinePointsTableProps {
 
 /**
  * Editable index/x/y table for a cubic-spline section, with an "Add point"
- * footer button and a per-row delete button. Paired with `CubicSplineEditor`
+ * footer button and a per-row delete button. Paired with `CurveEditor`
  * in ProfileDistributionPanel and StackingPanel — same table, different
  * section data/bounds.
  */

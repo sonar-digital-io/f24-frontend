@@ -2,8 +2,7 @@ import { Info, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CubicSplineEditor } from '@/components/common/viewer/CubicSplineEditor';
-import { BezierEditor } from '@/components/common/viewer/BezierEditor';
+import { CurveEditor } from '@/components/common/viewer/CurveEditor';
 import { CurveTypeToggle } from '@/components/common/viewer/CurveTypeToggle';
 import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
 import { niceStep } from '@/lib/bezierMath';
@@ -39,6 +38,10 @@ export function LoadGroupLimitsTab({
   const bounds = limits[limitsSubTab];
   const points = bounds.curve.map((c) => ({ x: c.rpm, y: c.value }));
 
+  function handleCurveChange(next: { x: number; y: number }[]) {
+    onCurveChange(limitsSubTab, next.map((p) => ({ rpm: p.x, value: p.y })));
+  }
+
   return (
     <div className="flex w-fit flex-col rounded-[14px] border border-[#e5e7eb] bg-white shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
       {/* Info banner + Sub-tabs header */}
@@ -63,7 +66,7 @@ export function LoadGroupLimitsTab({
         </Tabs>
       </div>
 
-      {/* Bounds + CubicSplineEditor + Table */}
+      {/* Bounds + CurveEditor + Table */}
       <div className="flex flex-col gap-4 px-6 pb-6">
         <div className="flex items-end gap-4">
           {(['y_min', 'y_max', 'x_min', 'x_max'] as const).map((field) => (
@@ -87,37 +90,21 @@ export function LoadGroupLimitsTab({
             <div className="flex justify-end">
               <CurveTypeToggle value={bounds.curve_type} onChange={(next) => onUpdateCurveType(limitsSubTab, next)} />
             </div>
-            {bounds.curve_type === 'bezier' ? (
-              <BezierEditor
-                points={points}
-                onChange={(next) => onCurveChange(limitsSubTab, next.map((p) => ({ rpm: p.x, value: p.y })))}
-                xMin={bounds.x_min}
-                xMax={bounds.x_max}
-                xStep={niceStep(bounds.x_max - bounds.x_min)}
-                yMin={bounds.y_min}
-                yMax={bounds.y_max}
-                yStep={niceStep(bounds.y_max - bounds.y_min)}
-                xUnit="RPM"
-                yUnit={LIMITS_UNITS[limitsSubTab]}
-                showRootIndicator={false}
-                minPoints={2}
-              />
-            ) : (
-              <CubicSplineEditor
-                points={points}
-                onChange={(next) => onCurveChange(limitsSubTab, next.map((p) => ({ rpm: p.x, value: p.y })))}
-                xMin={bounds.x_min}
-                xMax={bounds.x_max}
-                xStep={niceStep(bounds.x_max - bounds.x_min)}
-                yMin={bounds.y_min}
-                yMax={bounds.y_max}
-                yStep={niceStep(bounds.y_max - bounds.y_min)}
-                xUnit="RPM"
-                yUnit={LIMITS_UNITS[limitsSubTab]}
-                showRootIndicator={false}
-                minPoints={2}
-              />
-            )}
+            <CurveEditor
+              curveType={bounds.curve_type}
+              points={points}
+              onChange={handleCurveChange}
+              xMin={bounds.x_min}
+              xMax={bounds.x_max}
+              xStep={niceStep(bounds.x_max - bounds.x_min)}
+              yMin={bounds.y_min}
+              yMax={bounds.y_max}
+              yStep={niceStep(bounds.y_max - bounds.y_min)}
+              xUnit="RPM"
+              yUnit={LIMITS_UNITS[limitsSubTab]}
+              showRootIndicator={false}
+              minPoints={2}
+            />
           </div>
 
           {/* Precise editing table */}

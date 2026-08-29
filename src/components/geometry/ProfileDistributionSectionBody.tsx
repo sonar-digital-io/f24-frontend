@@ -1,5 +1,4 @@
-import { CubicSplineEditor } from '@/components/common/viewer/CubicSplineEditor';
-import { BezierEditor } from '@/components/common/viewer/BezierEditor';
+import { CurveEditor } from '@/components/common/viewer/CurveEditor';
 import { CubicSplinePointsTable, type PointsTableEditCallbacks } from '@/components/common/viewer/CubicSplinePointsTable';
 import { CurveTypeToggle } from '@/components/common/viewer/CurveTypeToggle';
 import { ProfileDistributionSwitch } from '@/components/geometry/ProfileDistributionSwitch';
@@ -59,11 +58,7 @@ export function ProfileDistributionSectionBody({
             <CurveTypeToggle value={curveType} onChange={onCurveTypeChange} />
           </div>
           {showDistribution && (
-            curveType === 'bezier' ? (
-              <BezierEditor points={points} onChange={onChange} onCommit={onCommit} yMax={yMax} rootX={rootX} />
-            ) : (
-              <CubicSplineEditor points={points} onChange={onChange} onCommit={onCommit} yMax={yMax} rootX={rootX} />
-            )
+            <CurveEditor curveType={curveType} points={points} onChange={onChange} onCommit={onCommit} yMax={yMax} rootX={rootX} />
           )}
         </div>
 

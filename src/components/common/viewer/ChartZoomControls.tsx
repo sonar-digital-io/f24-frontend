@@ -1,7 +1,7 @@
 import { Minus, Plus } from 'lucide-react';
 
 /** Zoom in/out button stack overlaid on a chart editor (top-right) — shared by
- *  `CubicSplineEditor`, `BezierEditor`, and `LayupMappingChart`. */
+ *  `CurveEditor` and `LayupMappingChart`. */
 export interface ChartZoomControlsProps {
   onZoomIn: () => void;
   onZoomOut: () => void;

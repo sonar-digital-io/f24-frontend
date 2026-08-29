@@ -7,7 +7,7 @@ interface ChartBackgroundRectProps {
   viewH: number;
   zoom: number;
   panningPointerId: number | null;
-  /** Cursor shown while idle (zoom === 1) — 'crosshair' hints click-to-add (CubicSplineEditor), 'default' elsewhere. */
+  /** Cursor shown while idle (zoom === 1) — 'crosshair' hints click-to-add (CurveEditor), 'default' elsewhere. */
   idleCursor?: 'crosshair' | 'default' | 'grab';
   bgPointerHandlers: {
     onPointerDown: (e: ReactPointerEvent<SVGRectElement>) => void;

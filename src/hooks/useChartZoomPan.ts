@@ -6,7 +6,7 @@ export const CHART_ZOOM_MAX = 8;
 export const CHART_ZOOM_STEP = 1.25;
 
 /**
- * Zoom + pan state machine shared by the SVG chart editors (`CubicSplineEditor`,
+ * Zoom + pan state machine shared by the SVG chart editors (`CurveEditor`,
  * `LayupMappingChart`): a zoomable/pannable viewBox over a fixed-size chart,
  * pan only enabled while zoomed in, double-click resets to zoom 1.
  */

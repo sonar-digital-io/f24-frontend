@@ -1,5 +1,4 @@
-import { CubicSplineEditor } from '@/components/common/viewer/CubicSplineEditor';
-import { BezierEditor } from '@/components/common/viewer/BezierEditor';
+import { CurveEditor } from '@/components/common/viewer/CurveEditor';
 import { CubicSplinePointsTable, type PointsTableEditCallbacks } from '@/components/common/viewer/CubicSplinePointsTable';
 import { CurveTypeToggle } from '@/components/common/viewer/CurveTypeToggle';
 import { Input } from '@/components/ui/input';
@@ -83,11 +82,7 @@ export function StackingSectionBody({
           </div>
           <CurveTypeToggle value={curveType} onChange={onCurveTypeChange} />
         </div>
-        {curveType === 'bezier' ? (
-          <BezierEditor points={points} onChange={onChange} onCommit={onCommit} yMin={yMin} yMax={yMax} yStep={yStep} rootX={rootX} />
-        ) : (
-          <CubicSplineEditor points={points} onChange={onChange} onCommit={onCommit} yMin={yMin} yMax={yMax} yStep={yStep} rootX={rootX} />
-        )}
+        <CurveEditor curveType={curveType} points={points} onChange={onChange} onCommit={onCommit} yMin={yMin} yMax={yMax} yStep={yStep} rootX={rootX} />
       </div>
       <CubicSplinePointsTable
         points={points}

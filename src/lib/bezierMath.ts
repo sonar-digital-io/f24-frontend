@@ -1,6 +1,6 @@
 import type { ControlPoint } from '@/types';
 
-/** Pure, framework-independent math helpers for CubicSplineEditor's data <-> pixel
+/** Pure, framework-independent math helpers for CurveEditor's data <-> pixel
  *  mapping and Catmull-Rom curve construction. */
 
 export const VB_WIDTH = 460;
