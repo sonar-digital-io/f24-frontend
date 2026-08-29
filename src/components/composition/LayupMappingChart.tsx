@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ControlPoint } from '@/types';
-import { BezierZoomControls } from '@/components/common/viewer/BezierZoomControls';
+import { ChartZoomControls } from '@/components/common/viewer/ChartZoomControls';
 import { ChartBackgroundRect } from '@/components/common/viewer/ChartBackgroundRect';
 import { ChartGrid } from '@/components/common/viewer/ChartGrid';
 import { ChartAnchorPointsLayer } from '@/components/common/viewer/ChartAnchorPointsLayer';
@@ -166,7 +166,7 @@ export function LayupMappingChart({
   return (
     <div className={cn('relative h-[260px] w-full rounded-md bg-white', className)}>
       {/* Zoom controls */}
-      <BezierZoomControls {...zoomControlProps} />
+      <ChartZoomControls {...zoomControlProps} />
 
       <svg
         ref={svgRef}

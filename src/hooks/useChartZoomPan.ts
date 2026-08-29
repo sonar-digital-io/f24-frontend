@@ -6,7 +6,7 @@ export const CHART_ZOOM_MAX = 8;
 export const CHART_ZOOM_STEP = 1.25;
 
 /**
- * Zoom + pan state machine shared by the SVG chart editors (`BezierEditor`,
+ * Zoom + pan state machine shared by the SVG chart editors (`CurveEditor`,
  * `LayupMappingChart`): a zoomable/pannable viewBox over a fixed-size chart,
  * pan only enabled while zoomed in, double-click resets to zoom 1.
  */
@@ -118,7 +118,7 @@ export function useChartZoomPan(svgRef: RefObject<SVGSVGElement>) {
       onPointerUp: handleBgPointerUp,
       onPointerCancel: handleBgPointerUp,
     },
-    /** Wiring for `<BezierZoomControls {...zoomControlProps} />` — identical at every call site. */
+    /** Wiring for `<ChartZoomControls {...zoomControlProps} />` — identical at every call site. */
     zoomControlProps: {
       onZoomIn: () => zoomBy(CHART_ZOOM_STEP),
       onZoomOut: () => zoomBy(1 / CHART_ZOOM_STEP),

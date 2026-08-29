@@ -11,7 +11,7 @@ interface ChartGridProps {
   yDecimals: number;
 }
 
-/** Y/X gridlines + axis labels shared by `BezierEditor` and `LayupMappingChart`. */
+/** Y/X gridlines + axis labels shared by `CurveEditor` and `LayupMappingChart`. */
 export function ChartGrid({ xTicks, yTicks, xMin, xMax, yMin, yMax, xDecimals, yDecimals }: ChartGridProps) {
   return (
     <>

@@ -15,7 +15,7 @@ export interface LayupMapping {
   name: string;
   /** Id (as a string) of one of the composition's own saved layups — needed as a number when saving. */
   layupId: string | null;
-  /** Bezier curve edited in LayupMappingBezierDialog; undefined = default curve. */
+  /** Mapping polygon edited in LayupMappingDialog; undefined = default curve. */
   points?: ControlPoint[];
 }
 

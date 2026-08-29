@@ -1,6 +1,6 @@
 import type { ControlPoint } from '@/types';
 
-/** Pure, framework-independent math helpers for `BezierEditor`'s data <-> pixel
+/** Pure, framework-independent math helpers for CurveEditor's data <-> pixel
  *  mapping and Catmull-Rom curve construction. */
 
 export const VB_WIDTH = 460;
@@ -281,6 +281,46 @@ export function catmullRomPath(
     const cp2x = p2.cx - (p3.cx - p1.cx) * t;
     const cp2y = p2.cy - (p3.cy - p1.cy) * t;
     d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.cx.toFixed(1)},${p2.cy.toFixed(1)}`;
+  }
+  return d;
+}
+
+/** One step of De Casteljau's algorithm: lerp every adjacent pair by `t`. */
+function lerpOnce(pts: { cx: number; cy: number }[], t: number): { cx: number; cy: number }[] {
+  const next: { cx: number; cy: number }[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    next.push({
+      cx: pts[i].cx + (pts[i + 1].cx - pts[i].cx) * t,
+      cy: pts[i].cy + (pts[i + 1].cy - pts[i].cy) * t,
+    });
+  }
+  return next;
+}
+
+/**
+ * Real Bézier curve through a control polygon of N points, evaluated via
+ * De Casteljau's algorithm — a single degree-(N-1) curve, NOT a per-segment
+ * spline. Only the first and last points sit on the curve; every point in
+ * between pulls it without ever being touched by it. Rendered as a sampled
+ * polyline since SVG's `C`/`Q` path commands only cover degree 2-3 directly.
+ */
+export function bezierControlPolygonPath(
+  points: ControlPoint[],
+  xMin: number,
+  xMax: number,
+  yMin: number,
+  yMax: number,
+  samples = 48,
+): string {
+  if (points.length < 2) return '';
+  const px = points.map((p) => dataToPx(p, xMin, xMax, yMin, yMax));
+  let d = '';
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    let layer = px;
+    while (layer.length > 1) layer = lerpOnce(layer, t);
+    const { cx, cy } = layer[0];
+    d += i === 0 ? `M ${cx.toFixed(1)},${cy.toFixed(1)}` : ` L ${cx.toFixed(1)},${cy.toFixed(1)}`;
   }
   return d;
 }

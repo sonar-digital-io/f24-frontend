@@ -1,12 +1,12 @@
 import { useRef } from 'react';
 import { cn } from '@/lib/utils';
-import type { ControlPoint } from '@/types';
-import { BezierZoomControls } from '@/components/common/viewer/BezierZoomControls';
+import type { ControlPoint, CurveType } from '@/types';
+import { ChartZoomControls } from '@/components/common/viewer/ChartZoomControls';
 import { ChartBackgroundRect } from '@/components/common/viewer/ChartBackgroundRect';
 import { ChartGrid } from '@/components/common/viewer/ChartGrid';
 import { ChartAnchorPointsLayer } from '@/components/common/viewer/ChartAnchorPointsLayer';
 import { useChartZoomPan } from '@/hooks/useChartZoomPan';
-import { useBezierEditorInteractions } from '@/hooks/useBezierEditorInteractions';
+import { useCurveEditorInteractions } from '@/hooks/useCurveEditorInteractions';
 import {
   VB_WIDTH,
   VB_HEIGHT,
@@ -20,29 +20,33 @@ import {
   decimalsForStep,
   capStepForTicks,
   catmullRomPath,
+  bezierControlPolygonPath,
+  pointsToPolygonString,
 } from '@/lib/bezierMath';
 
 /**
- * Interactive Catmull-Rom spline editor with N control points.
+ * Interactive curve editor — `curveType: 'spline'` renders a Catmull-Rom
+ * interpolating spline (every point sits on the curve); `curveType: 'bezier'`
+ * renders a real Bézier curve whose point list IS the control polygon
+ * (De Casteljau-evaluated) — only the first/last points sit on the curve,
+ * every point in between pulls it without ever being touched by it (shown
+ * with a dashed control-polygon guide).
  *
- * All points are "on-curve" anchors — the smooth curve passes through each
- * one. This makes adding intermediate knots intuitive.
- *
- * Interactions:
- * - Click on background  → insert a new anchor at that position
- * - Drag anchor          → move it (bounded by its neighbors / xMin·xMax)
- * - Double-click anchor  → remove it, including endpoints — blocked once
+ * Both curve types share identical point-manipulation UX:
+ * - Click on background  → insert a new point at that position
+ * - Drag a point         → move it (bounded by its neighbors / xMin·xMax)
+ * - Double-click a point → remove it, including endpoints — blocked once
  *   `minPoints` remain (default 2)
  * - +/- buttons          → zoom in / out
  * - Drag background      → pan (only when zoomed in)
  * - Double-click bg      → reset zoom & pan
  *
  * Ghost curve:
- * - While dragging an anchor, the green dashed curve shows where the curve
+ * - While dragging a point, the green dashed curve shows where the curve
  *   was BEFORE the drag started. It vanishes the moment you release.
  */
-
-export interface BezierEditorProps {
+export interface CurveEditorProps {
+  curveType: CurveType;
   points: ControlPoint[];
   onChange: (points: ControlPoint[]) => void;
   /** Fires once per completed point drag (on release) — for callers that autosave
@@ -66,7 +70,8 @@ export interface BezierEditorProps {
   className?: string;
 }
 
-export function BezierEditor({
+export function CurveEditor({
+  curveType,
   points,
   onChange,
   onCommit,
@@ -82,7 +87,7 @@ export function BezierEditor({
   xUnit = '',
   yUnit = '',
   className,
-}: BezierEditorProps) {
+}: CurveEditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
 
   const {
@@ -109,7 +114,7 @@ export function BezierEditor({
     handleKeyDown,
     handlePointDoubleClick,
     handleBgClick,
-  } = useBezierEditorInteractions({
+  } = useCurveEditorInteractions({
     points,
     onChange,
     onCommit,
@@ -136,6 +141,8 @@ export function BezierEditor({
     );
   }
 
+  const buildPath = curveType === 'bezier' ? bezierControlPolygonPath : catmullRomPath;
+
   // Cap gridlines at 10 per axis — a caller-fixed step (e.g. a user-editable
   // Y range) can otherwise flood the chart once the range grows.
   const effectiveYStep = capStepForTicks(yMin, yMax, yStep);
@@ -148,14 +155,13 @@ export function BezierEditor({
 
   return (
     <div className={cn('relative h-[260px] w-full rounded-md bg-white', className)}>
-      {/* Zoom controls */}
-      <BezierZoomControls {...zoomControlProps} />
+      <ChartZoomControls {...zoomControlProps} />
 
       <svg
         ref={svgRef}
         viewBox={`${viewX} ${viewY} ${viewW} ${viewH}`}
         className="h-full w-full"
-        aria-label="Distribution chart"
+        aria-label={curveType === 'bezier' ? 'Bézier distribution chart' : 'Distribution chart'}
         style={{ touchAction: 'none' }}
         /* No onWheel — scroll zoom deliberately disabled */
       >
@@ -210,10 +216,22 @@ export function BezierEditor({
           />
         )}
 
+        {/* Control-polygon guide — bezier only, hints which points are off-curve */}
+        {curveType === 'bezier' && (
+          <polyline
+            points={pointsToPolygonString(points, xMin, xMax, yMin, yMax)}
+            fill="none"
+            stroke="#94a3b8"
+            strokeWidth="1"
+            strokeDasharray="3 2"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+
         {/* Ghost curve — pre-drag snapshot, shown only while a point is being dragged */}
         {draggingIndex !== null && preEditPointsRef.current && (
           <path
-            d={catmullRomPath(preEditPointsRef.current, xMin, xMax, yMin, yMax)}
+            d={buildPath(preEditPointsRef.current, xMin, xMax, yMin, yMax)}
             fill="none"
             stroke="#22c55e"
             strokeWidth="1.5"
@@ -225,14 +243,14 @@ export function BezierEditor({
 
         {/* Active curve */}
         <path
-          d={catmullRomPath(points, xMin, xMax, yMin, yMax)}
+          d={buildPath(points, xMin, xMax, yMin, yMax)}
           fill="none"
           stroke="#0066cc"
           strokeWidth="2.5"
           vectorEffect="non-scaling-stroke"
         />
 
-        {/* Draggable anchors */}
+        {/* Draggable points */}
         <ChartAnchorPointsLayer
           points={points}
           project={(p) => dataToPx(p, xMin, xMax, yMin, yMax)}

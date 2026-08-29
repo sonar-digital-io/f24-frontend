@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { SelectField } from '@/components/composition/SelectField';
 import { useChartZoomPan } from '@/hooks/useChartZoomPan';
 import { usePointerDrag } from '@/hooks/usePointerDrag';
-import { BezierZoomControls } from '@/components/common/viewer/BezierZoomControls';
+import { ChartZoomControls } from '@/components/common/viewer/ChartZoomControls';
 import { ChartBackgroundRect } from '@/components/common/viewer/ChartBackgroundRect';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { dataToPx, pxToData } from '@/lib/bezierMath';
@@ -129,7 +129,7 @@ export function TransversalProfileBoundaryPopover({
       </div>
 
       <div className="relative h-[220px] w-full rounded-md border border-[#e5e7eb] bg-white">
-        <BezierZoomControls {...zoomControlProps} />
+        <ChartZoomControls {...zoomControlProps} />
         {pts.length ? (
           <svg
             ref={svgRef}

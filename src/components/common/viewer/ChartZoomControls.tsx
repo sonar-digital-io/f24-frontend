@@ -1,19 +1,20 @@
 import { Minus, Plus } from 'lucide-react';
 
-/** Zoom in/out button stack overlaid on the `BezierEditor` chart (top-right). */
-export interface BezierZoomControlsProps {
+/** Zoom in/out button stack overlaid on a chart editor (top-right) — shared by
+ *  `CurveEditor` and `LayupMappingChart`. */
+export interface ChartZoomControlsProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   canZoomIn: boolean;
   canZoomOut: boolean;
 }
 
-export function BezierZoomControls({
+export function ChartZoomControls({
   onZoomIn,
   onZoomOut,
   canZoomIn,
   canZoomOut,
-}: BezierZoomControlsProps) {
+}: ChartZoomControlsProps) {
   return (
     <div className="absolute right-2 top-2 z-10 flex flex-col overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
       <button

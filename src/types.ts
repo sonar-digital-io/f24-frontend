@@ -1,7 +1,10 @@
 // Cross-cutting, nem-domain UI-állapot típusok. Domain entitás típusok (Material, Geometry,
 // Composition stb.) változatlanul a data/*.ts fájlokban maradnak — nem itt.
 
-// ─── Bezier editor ────────────────────────────────────────────────────────────
+// ─── Curve editor (cubic-spline / bezier) ─────────────────────────────────────
+
+/** Which curve editor/math a section's points are edited and saved with. */
+export type CurveType = 'spline' | 'bezier';
 
 export interface ControlPoint {
   x: number; // data units

@@ -7,7 +7,7 @@ interface Position {
 
 /**
  * Mouse-drag-to-reposition state for floating popovers/dialogs
- * (`ProfileDetailPopover`, `LayupMappingBezierDialog`). Returns the current
+ * (`ProfileDetailPopover`, `LayupMappingDialog`). Returns the current
  * position, its setter (for programmatic repositioning, e.g. on open/expand),
  * and a `startDrag` mousedown handler to wire up on the draggable header.
  */

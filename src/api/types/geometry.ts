@@ -27,7 +27,7 @@ export interface GeometrySettingsPayload {
 export interface GeometryEdge {
   id: number;
   edge_type: string;
-  curve_type: string;
+  curve_type: 'bezier' | 'spline';
   ymin: number;
   ymax: number;
   curve: BezierControlPoint[];
@@ -40,7 +40,7 @@ export interface GeometryEdgesPayload {
 /** PUT /geometry/:id/edges/ — write payload; no id, unlike the GET shape. */
 export interface GeometryEdgeInput {
   edge_type: string;
-  curve_type: string;
+  curve_type: 'bezier' | 'spline';
   ymin: number;
   ymax: number;
   curve: BezierControlPoint[];
@@ -109,6 +109,10 @@ export interface GeometryTopView {
   nominal_radius: number;
 }
 
+/** A curve point on the wire — same flat `{x,y}` shape for both curve types.
+ *  For `curve_type: 'bezier'` the whole `curve`/`control_points` array IS the
+ *  Bézier control polygon (only the first/last points sit on the curve); for
+ *  `'spline'` every point is an on-curve Catmull-Rom anchor. */
 export interface BezierControlPoint {
   x: number;
   y: number;
@@ -116,7 +120,7 @@ export interface BezierControlPoint {
 
 export interface ProfileGeneratorCurveParameter {
   reference: string;
-  curve_type: string;
+  curve_type: 'bezier' | 'spline';
   control_points: BezierControlPoint[];
 }
 

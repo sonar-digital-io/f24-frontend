@@ -5,12 +5,16 @@ import { applyXConstraints, clamp } from '@/lib/bezierMath';
 type Field = 'x' | 'y';
 
 /**
- * Shared state/logic for a "section key -> editable Bezier control points"
- * panel (ProfileDistributionPanel's camber/thickness sections, StackingPanel's
+ * Shared state/logic for a "section key -> editable curve points" panel
+ * (ProfileDistributionPanel's camber/thickness sections, StackingPanel's
  * sweep/dihedral/twist/chord sections): per-section point list, an
  * "Add point" action, and a table-input editing buffer keyed by
  * "<section>-<idx>-<x|y>" so multiple accordion sections can be edited at once
  * without clobbering each other's in-progress (possibly invalid) text.
+ *
+ * Curve-shape-agnostic — the same flat `ControlPoint[]` backs both the
+ * cubic-spline and real-Bézier editors, which differ only in how they draw
+ * the curve through/around these points, not in the points' shape.
  */
 export function useEditableSectionPoints<K extends string>(
   initial: Record<K, ControlPoint[]>,

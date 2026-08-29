@@ -15,7 +15,7 @@ interface ChartAnchorPointsLayerProps {
   onKeyDown: (idx: number, e: KeyboardEvent<SVGCircleElement>) => void;
 }
 
-/** Draggable `ChartAnchorPoint`s for every control point — shared by `BezierEditor`
+/** Draggable `ChartAnchorPoint`s for every control point — shared by `CurveEditor`
  *  and `LayupMappingChart`, which only differ in the tooltip's "· Double-click to
  *  remove" vs plain "Drag to move" via the `minPoints` threshold. */
 export function ChartAnchorPointsLayer({

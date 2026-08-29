@@ -17,7 +17,7 @@ export interface PointsTableEditCallbacks {
   onRemovePoint: (idx: number) => void;
 }
 
-interface BezierPointsTableProps {
+interface CubicSplinePointsTableProps {
   points: ControlPoint[];
   /** Y column header, e.g. "Max Cam (%)" or "Sweep (m)". */
   valueLabel: string;
@@ -34,12 +34,12 @@ interface BezierPointsTableProps {
 }
 
 /**
- * Editable index/x/y table for a Bezier section, with an "Add point" footer
- * button and a per-row delete button. Paired with `BezierEditor` in
- * ProfileDistributionPanel and StackingPanel — same table, different section
- * data/bounds.
+ * Editable index/x/y table for a cubic-spline section, with an "Add point"
+ * footer button and a per-row delete button. Paired with `CurveEditor`
+ * in ProfileDistributionPanel and StackingPanel — same table, different
+ * section data/bounds.
  */
-export function BezierPointsTable({
+export function CubicSplinePointsTable({
   points,
   valueLabel,
   idPrefix,
@@ -49,7 +49,7 @@ export function BezierPointsTable({
   onAddPoint,
   onRemovePoint,
   minPoints = 2,
-}: BezierPointsTableProps) {
+}: CubicSplinePointsTableProps) {
   return (
     <div className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
       <table className="w-full border-collapse text-[14px]">

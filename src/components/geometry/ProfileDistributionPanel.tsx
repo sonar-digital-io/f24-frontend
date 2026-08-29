@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FoldHorizontal } from 'lucide-react';
-import type { ControlPoint } from '@/types';
+import type { ControlPoint, CurveType } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
 import { ProfileGeneratorTopRow } from '@/components/geometry/ProfileGeneratorTopRow';
@@ -126,6 +126,14 @@ export function ProfileDistributionPanel({
 
   const rootX = Number.isFinite(parseFloat(startPos)) ? parseFloat(startPos) : DEFAULT_START_POSITION;
 
+  const [curveType, setCurveType] = useState<Record<SectionKey, CurveType>>(() => {
+    const parameterMap = new Map((initialParameters?.parameters ?? []).map((p) => [p.reference, p]));
+    return SECTION_KEYS.reduce((acc, key) => {
+      acc[key] = parameterMap.get(SECTION_TO_REFERENCE[key])?.curve_type ?? 'spline';
+      return acc;
+    }, {} as Record<SectionKey, CurveType>);
+  });
+
   const requestCommit = useDeferredCommit(() => {
     if (hasEnoughPoints) onCommit(buildParams());
   });
@@ -158,6 +166,11 @@ export function ProfileDistributionPanel({
     () => rootX,
     requestCommit
   );
+
+  function handleCurveTypeChange(key: SectionKey, next: CurveType) {
+    setCurveType((current) => ({ ...current, [key]: next }));
+    requestCommit();
+  }
 
   // The three curves' first point stays in sync with each other.
   function handleCurveChange(key: SectionKey, next: ControlPoint[]) {
@@ -201,7 +214,7 @@ export function ProfileDistributionPanel({
       name: 'Profile',
       parameters: SECTION_KEYS.map((key) => ({
         reference: SECTION_TO_REFERENCE[key],
-        curve_type: 'bezier',
+        curve_type: curveType[key],
         control_points: sectionPoints[key],
       })),
     };
@@ -227,6 +240,8 @@ export function ProfileDistributionPanel({
         points={sectionPoints[key]}
         onChange={(next) => handleCurveChange(key, next)}
         onCommit={requestCommit}
+        curveType={curveType[key]}
+        onCurveTypeChange={(next) => handleCurveTypeChange(key, next)}
         yMax={Y_MAX}
         rootX={rootX}
         valueLabel={valueLabel}

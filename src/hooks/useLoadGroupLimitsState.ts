@@ -3,6 +3,7 @@ import { useUpdateLoadGroupLimits } from '@/hooks/api/useLoadGroups';
 import { INITIAL_LOAD_LIMITS, type LimitsSubTab } from '@/data/loadGroupForm';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import type { LoadLimitRange } from '@/api/types/loadGroups';
+import type { CurveType } from '@/types';
 
 /**
  * Limits tab state — hydrated from the load group's GET (in LoadGroupNew),
@@ -42,6 +43,11 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
 
   function handleLimitCurveChange(sub: LimitsSubTab, curve: LoadLimitRange['curve']) {
     setLimits((prev) => ({ ...prev, [sub]: { ...prev[sub], curve } }));
+    markDirty();
+  }
+
+  function updateLimitCurveType(sub: LimitsSubTab, curveType: CurveType) {
+    setLimits((prev) => ({ ...prev, [sub]: { ...prev[sub], curve_type: curveType } }));
     markDirty();
   }
 
@@ -118,6 +124,7 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
     setLimitsSubTab,
     updateLimitBounds,
     updateLimitCurvePoint,
+    updateLimitCurveType,
     handleLimitCurveChange,
     addLimitCurvePoint,
     deleteLimitCurvePoint,

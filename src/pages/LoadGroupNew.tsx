@@ -104,6 +104,7 @@ export function LoadGroupNew() {
     setLimitsSubTab,
     updateLimitBounds,
     updateLimitCurvePoint,
+    updateLimitCurveType,
     handleLimitCurveChange,
     addLimitCurvePoint,
     deleteLimitCurvePoint,
@@ -276,6 +277,7 @@ export function LoadGroupNew() {
               limits={limits}
               onUpdateBounds={updateLimitBounds}
               onUpdateCurvePoint={updateLimitCurvePoint}
+              onUpdateCurveType={updateLimitCurveType}
               onCurveChange={handleLimitCurveChange}
               onAddCurvePoint={addLimitCurvePoint}
               onDeleteCurvePoint={deleteLimitCurvePoint}
