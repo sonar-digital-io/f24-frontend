@@ -47,7 +47,10 @@ export function Geometry() {
   const navigate = useNavigate();
   const location = useLocation();
   const [query, setQuery] = useState('');
-  const { sort, handleSort } = useSortState<GeometrySortKey>({ key: 'lastUpdated', direction: 'desc' });
+  const { sort, handleSort } = useSortState<GeometrySortKey>({
+    key: 'lastUpdated',
+    direction: 'desc',
+  });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
@@ -159,11 +162,7 @@ export function Geometry() {
                           icon={Pencil}
                           onClick={() => navigate(`/geometry/${g.id}`)}
                         />
-                        <RowIconButton
-                          label="Export geometry"
-                          icon={Download}
-                          onClick={() => {}}
-                        />
+                        <RowIconButton label="Export geometry" icon={Download} onClick={() => {}} />
                         <RowIconButton
                           label="Duplicate geometry"
                           icon={Copy}

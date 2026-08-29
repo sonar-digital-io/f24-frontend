@@ -38,7 +38,10 @@ export function Material() {
   const navigate = useNavigate();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
-  const { sort, handleSort } = useSortState<MaterialSortKey>({ key: 'lastUpdated', direction: 'desc' });
+  const { sort, handleSort } = useSortState<MaterialSortKey>({
+    key: 'lastUpdated',
+    direction: 'desc',
+  });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
@@ -80,7 +83,6 @@ export function Material() {
       // exportMutation's onError (via the global mutation cache) already surfaces a toast.
     }
   }
-
 
   const allTypes = useMemo(
     () => [...new Set(materials.map((m) => m.type).filter(Boolean))].sort(),

@@ -230,20 +230,29 @@ export function CurveEditor({
       />
 
       {/* Blocked-drag label — point 0 can't be dragged past the start position */}
-      {draggingIndex === 0 && blockedAtRoot && (() => {
-        const labelW = 172;
-        const labelH = 22;
-        const cx = clamp(rootPx, PAD_LEFT + labelW / 2, VB_WIDTH - PAD_RIGHT - labelW / 2);
-        const y = PAD_TOP + 6;
-        return (
-          <g style={{ pointerEvents: 'none' }}>
-            <rect x={cx - labelW / 2} y={y} width={labelW} height={labelH} rx={4} fill="#171717" />
-            <text x={cx} y={y + labelH / 2 + 4} textAnchor="middle" fontSize="11" fill="white">
-              Can&apos;t go past start position
-            </text>
-          </g>
-        );
-      })()}
+      {draggingIndex === 0 &&
+        blockedAtRoot &&
+        (() => {
+          const labelW = 172;
+          const labelH = 22;
+          const cx = clamp(rootPx, PAD_LEFT + labelW / 2, VB_WIDTH - PAD_RIGHT - labelW / 2);
+          const y = PAD_TOP + 6;
+          return (
+            <g style={{ pointerEvents: 'none' }}>
+              <rect
+                x={cx - labelW / 2}
+                y={y}
+                width={labelW}
+                height={labelH}
+                rx={4}
+                fill="#171717"
+              />
+              <text x={cx} y={y + labelH / 2 + 4} textAnchor="middle" fontSize="11" fill="white">
+                Can&apos;t go past start position
+              </text>
+            </g>
+          );
+        })()}
     </ChartFrame>
   );
 }

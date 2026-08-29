@@ -1,7 +1,14 @@
 import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from 'react';
 import { cn } from '@/lib/utils';
-import { ChartZoomControls, type ChartZoomControlsProps } from '@/components/common/viewer/ChartZoomControls';
-import { ChartBackgroundRect, type BgPointerHandlers } from '@/components/common/viewer/ChartBackgroundRect';
+import {
+  ChartZoomControls,
+  type ChartZoomControlsProps,
+} from '@/components/common/viewer/ChartZoomControls';
+import {
+  ChartBackgroundRect,
+  type BgPointerHandlers,
+  type IdleCursor,
+} from '@/components/common/viewer/ChartBackgroundRect';
 import { ChartGrid } from '@/components/common/viewer/ChartGrid';
 import { VB_WIDTH, VB_HEIGHT, PAD_RIGHT } from '@/lib/bezierMath';
 
@@ -14,7 +21,7 @@ interface ChartFrameProps {
   viewH: number;
   zoom: number;
   panningPointerId: number | null;
-  idleCursor?: 'crosshair' | 'default' | 'grab';
+  idleCursor?: IdleCursor;
   bgPointerHandlers: BgPointerHandlers;
   onBgClick?: (e: ReactMouseEvent<SVGRectElement>) => void;
   onBgDoubleClick: () => void;
@@ -100,7 +107,13 @@ export function ChartFrame({
         )}
 
         {xUnit && (
-          <text x={VB_WIDTH - PAD_RIGHT} y={VB_HEIGHT - 4} fontSize="10" fill="#6b7280" textAnchor="end">
+          <text
+            x={VB_WIDTH - PAD_RIGHT}
+            y={VB_HEIGHT - 4}
+            fontSize="10"
+            fill="#6b7280"
+            textAnchor="end"
+          >
             [{xUnit}]
           </text>
         )}

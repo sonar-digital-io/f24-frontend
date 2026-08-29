@@ -43,7 +43,10 @@ function toUiLoadGroup(g: BackendLoadGroup): LoadGroupItem {
 export function LoadGroup() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const { sort, handleSort } = useSortState<LoadGroupSortKey>({ key: 'lastUpdated', direction: 'desc' });
+  const { sort, handleSort } = useSortState<LoadGroupSortKey>({
+    key: 'lastUpdated',
+    direction: 'desc',
+  });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;

@@ -41,7 +41,10 @@ function toUiCalculation(p: Project): Calculation {
 export function Calculation() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
-  const { sort, handleSort } = useSortState<CalculationSortKey>({ key: 'lastUpdated', direction: 'desc' });
+  const { sort, handleSort } = useSortState<CalculationSortKey>({
+    key: 'lastUpdated',
+    direction: 'desc',
+  });
   const [page, setPage] = useState(1);
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;

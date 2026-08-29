@@ -24,7 +24,7 @@ export function useEditableSectionPoints<K extends string>(
   getRootX?: (key: K) => number | undefined,
   /** Fires when a point is added (footer button) or a table x/y edit is committed
    *  (blur) — not on every keystroke while typing. */
-  onCommit?: () => void
+  onCommit?: () => void,
 ) {
   const [sectionPoints, setSectionPoints] = useState<Record<K, ControlPoint[]>>(initial);
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
@@ -41,7 +41,13 @@ export function useEditableSectionPoints<K extends string>(
       if (pts.length < 2) {
         const { min, max } = getYBounds(key);
         const midY = (min + max) / 2;
-        return { ...current, [key]: [{ x: 0, y: midY }, { x: 1, y: midY }] };
+        return {
+          ...current,
+          [key]: [
+            { x: 0, y: midY },
+            { x: 1, y: midY },
+          ],
+        };
       }
       // Insert a new point between the last two existing points
       const secondLast = pts[pts.length - 2];
@@ -75,7 +81,8 @@ export function useEditableSectionPoints<K extends string>(
       const { min, max } = getYBounds(section);
       const nextList = list.map((p, i) => {
         if (i !== idx) return p;
-        if (field === 'x') return { ...p, x: applyXConstraints(list, idx, parsed, 0, 1, getRootX?.(section)) };
+        if (field === 'x')
+          return { ...p, x: applyXConstraints(list, idx, parsed, 0, 1, getRootX?.(section)) };
         return { ...p, y: clamp(parsed, min, max) };
       });
       return { ...current, [section]: nextList };
@@ -100,7 +107,8 @@ export function useEditableSectionPoints<K extends string>(
   function bindSection(key: K) {
     return {
       getInputValue: (idx: number, field: Field) => getInputValue(key, idx, field),
-      onInputChange: (idx: number, field: Field, raw: string) => handleInputChange(key, idx, field, raw),
+      onInputChange: (idx: number, field: Field, raw: string) =>
+        handleInputChange(key, idx, field, raw),
       onInputBlur: (idx: number, field: Field) => handleInputBlur(key, idx, field),
       onAddPoint: () => addPoint(key),
     };

@@ -98,7 +98,9 @@ export function LayupMappingChart({
     if (draggingIndex !== idx) return;
     try {
       (e.target as Element).releasePointerCapture(e.pointerId);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     setDraggingIndex(null);
   }
 
@@ -124,11 +126,20 @@ export function LayupMappingChart({
     let x = point.x;
     let y = point.y;
     switch (e.key) {
-      case 'ArrowLeft': x -= xStep * 0.1; break;
-      case 'ArrowRight': x += xStep * 0.1; break;
-      case 'ArrowUp': y += yStep * 0.1; break;
-      case 'ArrowDown': y -= yStep * 0.1; break;
-      default: return;
+      case 'ArrowLeft':
+        x -= xStep * 0.1;
+        break;
+      case 'ArrowRight':
+        x += xStep * 0.1;
+        break;
+      case 'ArrowUp':
+        y += yStep * 0.1;
+        break;
+      case 'ArrowDown':
+        y -= yStep * 0.1;
+        break;
+      default:
+        return;
     }
     e.preventDefault();
     commitIfConvex(idx, clamp(x, xMin, xMax), clamp(y, yMin, yMax));

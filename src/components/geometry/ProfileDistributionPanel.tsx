@@ -15,11 +15,7 @@ const API_PROFILE_TYPE = 'naca_4_digit';
 
 type SectionKey = 'maximum-camber' | 'maximum-camber-position' | 'thickness';
 
-const SECTION_KEYS: SectionKey[] = [
-  'maximum-camber',
-  'maximum-camber-position',
-  'thickness',
-];
+const SECTION_KEYS: SectionKey[] = ['maximum-camber', 'maximum-camber-position', 'thickness'];
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   'maximum-camber': 'Maximum camber',
@@ -124,14 +120,21 @@ export function ProfileDistributionPanel({
     setOpenSections((s) => ({ ...s, [key]: !s[key] }));
   }
 
-  const rootX = Number.isFinite(parseFloat(startPos)) ? parseFloat(startPos) : DEFAULT_START_POSITION;
+  const rootX = Number.isFinite(parseFloat(startPos))
+    ? parseFloat(startPos)
+    : DEFAULT_START_POSITION;
 
   const [curveType, setCurveType] = useState<Record<SectionKey, CurveType>>(() => {
-    const parameterMap = new Map((initialParameters?.parameters ?? []).map((p) => [p.reference, p]));
-    return SECTION_KEYS.reduce((acc, key) => {
-      acc[key] = parameterMap.get(SECTION_TO_REFERENCE[key])?.curve_type ?? 'spline';
-      return acc;
-    }, {} as Record<SectionKey, CurveType>);
+    const parameterMap = new Map(
+      (initialParameters?.parameters ?? []).map((p) => [p.reference, p]),
+    );
+    return SECTION_KEYS.reduce(
+      (acc, key) => {
+        acc[key] = parameterMap.get(SECTION_TO_REFERENCE[key])?.curve_type ?? 'spline';
+        return acc;
+      },
+      {} as Record<SectionKey, CurveType>,
+    );
   });
 
   const requestCommit = useDeferredCommit(() => {
@@ -145,23 +148,24 @@ export function ProfileDistributionPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const {
-    sectionPoints,
-    setPointsForSection,
-    bindSection,
-  } = useEditableSectionPoints(
+  const { sectionPoints, setPointsForSection, bindSection } = useEditableSectionPoints(
     (() => {
-      const parameterMap = new Map((initialParameters?.parameters ?? []).map((p) => [p.reference, p]));
-      return SECTION_KEYS.reduce((acc, key) => {
-        const saved = parameterMap.get(SECTION_TO_REFERENCE[key]);
-        acc[key] = saved?.control_points ?? INITIAL_SECTION_POINTS[key];
-        return acc;
-      }, {} as Record<SectionKey, ControlPoint[]>);
+      const parameterMap = new Map(
+        (initialParameters?.parameters ?? []).map((p) => [p.reference, p]),
+      );
+      return SECTION_KEYS.reduce(
+        (acc, key) => {
+          const saved = parameterMap.get(SECTION_TO_REFERENCE[key]);
+          acc[key] = saved?.control_points ?? INITIAL_SECTION_POINTS[key];
+          return acc;
+        },
+        {} as Record<SectionKey, ControlPoint[]>,
+      );
     })(),
     () => ({ min: 0, max: Y_MAX }),
     2,
     () => rootX,
-    requestCommit
+    requestCommit,
   );
 
   function handleCurveTypeChange(key: SectionKey, next: CurveType) {
@@ -181,7 +185,7 @@ export function ProfileDistributionPanel({
       if (otherPoints[0]?.x === nextFirstX) return;
       setPointsForSection(
         otherKey,
-        otherPoints.map((p, i) => (i === 0 ? { ...p, x: nextFirstX } : p))
+        otherPoints.map((p, i) => (i === 0 ? { ...p, x: nextFirstX } : p)),
       );
     });
   }
@@ -193,7 +197,10 @@ export function ProfileDistributionPanel({
     SECTION_KEYS.forEach((key) => {
       const points = sectionPoints[key];
       if (points[0]?.x === rootX) return;
-      setPointsForSection(key, points.map((p, i) => (i === 0 ? { ...p, x: rootX } : p)));
+      setPointsForSection(
+        key,
+        points.map((p, i) => (i === 0 ? { ...p, x: rootX } : p)),
+      );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rootX]);
@@ -249,7 +256,10 @@ export function ProfileDistributionPanel({
         onShowTableChange={(v) => setShowTable((s) => ({ ...s, [key]: v }))}
         {...bindSection(key)}
         onRemovePoint={(idx) => {
-          handleCurveChange(key, sectionPoints[key].filter((_, i) => i !== idx));
+          handleCurveChange(
+            key,
+            sectionPoints[key].filter((_, i) => i !== idx),
+          );
           requestCommit();
         }}
       />
@@ -266,12 +276,18 @@ export function ProfileDistributionPanel({
   const header = (
     <div className="flex flex-col gap-4 p-6 pb-4">
       <div className="flex items-center justify-between">
-        <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">Airfoil generation settings</p>
+        <p className="text-[16px] font-semibold leading-none text-[#0a0a0a]">
+          Airfoil generation settings
+        </p>
         <button
           type="button"
           onClick={onFoldToggle}
           aria-pressed={folded}
-          aria-label={folded ? 'Show all sections at once (currently folded)' : 'Show sections one at a time (fold)'}
+          aria-label={
+            folded
+              ? 'Show all sections at once (currently folded)'
+              : 'Show sections one at a time (fold)'
+          }
           className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
         >
           <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
@@ -292,11 +308,18 @@ export function ProfileDistributionPanel({
         onFieldBlur={requestCommit}
       />
 
-      <p className="pt-2 text-[16px] font-semibold leading-none text-[#0a0a0a]">Distribution curves</p>
+      <p className="pt-2 text-[16px] font-semibold leading-none text-[#0a0a0a]">
+        Distribution curves
+      </p>
 
       {/* Sub-tabs — only when expanded; folded mode stacks all sections instead. */}
       {!folded && (
-        <SectionTabs sectionKeys={SECTION_KEYS} sectionLabels={SECTION_LABELS} value={subTab} onValueChange={setSubTab} />
+        <SectionTabs
+          sectionKeys={SECTION_KEYS}
+          sectionLabels={SECTION_LABELS}
+          value={subTab}
+          onValueChange={setSubTab}
+        />
       )}
     </div>
   );
