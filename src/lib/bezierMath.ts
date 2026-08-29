@@ -76,6 +76,18 @@ export function capStepForTicks(min: number, max: number, step: number, maxTicks
   return range / step <= maxTicks ? step : niceStep(range, maxTicks);
 }
 
+export interface ChartAxis {
+  ticks: number[];
+  decimals: number;
+}
+
+/** One axis' gridline ticks + label decimal count, capped to at most 10
+ *  gridlines (see `capStepForTicks`) — shared by every SVG chart's x/y axis. */
+export function computeChartAxis(min: number, max: number, step: number): ChartAxis {
+  const effectiveStep = capStepForTicks(min, max, step);
+  return { ticks: computeTicks(min, max, effectiveStep), decimals: decimalsForStep(effectiveStep) };
+}
+
 /** SVG `<polygon points="...">` string for a set of data points, mapped through `dataToPx`. */
 export function pointsToPolygonString(
   points: ControlPoint[],
@@ -148,7 +160,10 @@ export function computeMappingBounds(
  * tip, and any others), padded by `paddingRatio` independently in each
  * direction — used to seed a brand-new layup mapping's rectangle.
  */
-export function computeProfilesBoundingRect(profiles: ControlPoint[][], paddingRatio = 0.1): MappingBounds {
+export function computeProfilesBoundingRect(
+  profiles: ControlPoint[][],
+  paddingRatio = 0.1,
+): MappingBounds {
   const points = profiles.flat();
   if (points.length === 0) {
     return { longitudinalMin: 0, longitudinalMax: 1, transversalMin: -1, transversalMax: 1 };
@@ -203,7 +218,7 @@ export function applyXConstraints(
   xMin = 0,
   xMax = 1,
   /** Point 0 additionally can't sit past this (e.g. the profile's start position). */
-  rootX?: number
+  rootX?: number,
 ): number {
   const eps = (xMax - xMin) * 0.001 || 0.001;
   if (idx === 0) {
@@ -262,10 +277,7 @@ export function catmullRomPath(
   const px = pts.map((p) => dataToPx(p, xMin, xMax, yMin, yMax));
   let d = `M ${px[0].cx.toFixed(1)},${px[0].cy.toFixed(1)}`;
   for (let i = 0; i < px.length - 1; i++) {
-    const p0 =
-      i > 0
-        ? px[i - 1]
-        : { cx: 2 * px[0].cx - px[1].cx, cy: 2 * px[0].cy - px[1].cy };
+    const p0 = i > 0 ? px[i - 1] : { cx: 2 * px[0].cx - px[1].cx, cy: 2 * px[0].cy - px[1].cy };
     const p1 = px[i];
     const p2 = px[i + 1];
     const p3 =

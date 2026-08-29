@@ -100,7 +100,16 @@ function radiusDivisor(key: SectionKey, nominalRadius?: number): number {
   return key !== 'twist' && nominalRadius ? nominalRadius : 1;
 }
 
-export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPercent, onCommit, committing, saveError, nominalRadius }: StackingPanelProps) {
+export function StackingPanel({
+  folded,
+  onFoldToggle,
+  initialEdges,
+  rootRadiusPercent,
+  onCommit,
+  committing,
+  saveError,
+  nominalRadius,
+}: StackingPanelProps) {
   const rootXPercent = parseFloat((rootRadiusPercent ?? '').replace(',', '.'));
   const rootX = Number.isFinite(rootXPercent) ? rootXPercent / 100 : DEFAULT_ROOT_X;
   const [subTab, setSubTab] = useState<SectionKey>('sweep');
@@ -145,14 +154,7 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     if (hasEnoughPoints) onCommit?.(buildEdges());
   });
 
-  const {
-    sectionPoints,
-    setPointsForSection,
-    addPoint,
-    getInputValue,
-    handleInputChange,
-    handleInputBlur,
-  } = useEditableSectionPoints(
+  const { sectionPoints, setPointsForSection, bindSection } = useEditableSectionPoints(
     (() => {
       const map = edgeMap(initialEdges);
       return {
@@ -165,7 +167,7 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     (key) => yBounds[key],
     5,
     () => rootX,
-    requestCommit
+    requestCommit,
   );
 
   function handleCurveTypeChange(key: SectionKey, next: CurveType) {
@@ -218,7 +220,7 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     const { min, max } = yBounds[key];
     setPointsForSection(
       key,
-      sectionPoints[key].map((p) => ({ ...p, y: clamp(p.y, min, max) }))
+      sectionPoints[key].map((p) => ({ ...p, y: clamp(p.y, min, max) })),
     );
     requestCommit();
   }
@@ -258,12 +260,12 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
         getBoundInputValue={(field) => getBoundInputValue(key, field)}
         onBoundChange={(field, raw) => handleBoundChange(key, field, raw)}
         onBoundBlur={(field) => handleBoundBlur(key, field)}
-        getInputValue={(idx, field) => getInputValue(key, idx, field)}
-        onInputChange={(idx, field, raw) => handleInputChange(key, idx, field, raw)}
-        onInputBlur={(idx, field) => handleInputBlur(key, idx, field)}
-        onAddPoint={() => addPoint(key)}
+        {...bindSection(key)}
         onRemovePoint={(idx) => {
-          setPointsForSection(key, sectionPoints[key].filter((_, i) => i !== idx));
+          setPointsForSection(
+            key,
+            sectionPoints[key].filter((_, i) => i !== idx),
+          );
           requestCommit();
         }}
       />
@@ -274,7 +276,12 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
     <div className="flex flex-col gap-2 p-6 pb-4">
       <div className="flex items-center justify-between gap-4">
         {!folded ? (
-          <SectionTabs sectionKeys={SECTION_KEYS} sectionLabels={SECTION_LABELS} value={subTab} onValueChange={setSubTab} />
+          <SectionTabs
+            sectionKeys={SECTION_KEYS}
+            sectionLabels={SECTION_LABELS}
+            value={subTab}
+            onValueChange={setSubTab}
+          />
         ) : (
           <div />
         )}
@@ -289,14 +296,20 @@ export function StackingPanel({ folded, onFoldToggle, initialEdges, rootRadiusPe
             type="button"
             onClick={onFoldToggle}
             aria-pressed={folded}
-            aria-label={folded ? 'Show sections one at a time (expand)' : 'Show all sections as accordion (fold)'}
+            aria-label={
+              folded
+                ? 'Show sections one at a time (expand)'
+                : 'Show all sections as accordion (fold)'
+            }
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
           >
             <FoldHorizontal className="h-4 w-4" strokeWidth={2.5} />
           </button>
         </div>
       </div>
-      {!hasEnoughPoints && <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>}
+      {!hasEnoughPoints && (
+        <p className="text-[13px] text-[#dc2626]">Each curve needs at least 2 points.</p>
+      )}
       {saveError && <p className="text-[13px] text-[#dc2626]">Failed to save. Please try again.</p>}
     </div>
   );

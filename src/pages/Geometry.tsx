@@ -15,14 +15,15 @@ import {
   paginate,
   rowInteractionProps,
   sortItems,
-  toggleSort,
 } from '@/lib/listTable';
-import type { SortState, GeometrySortKey } from '@/types';
+import type { GeometrySortKey } from '@/types';
 import { RowIconButton } from '@/components/common/list/RowIconButton';
 import { formatDateTime } from '@/lib/utils';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
+import { useDeleteConfirm } from '@/hooks/useDeleteConfirm';
+import { useSortState } from '@/hooks/useSortState';
 import { type Geometry as GeometryItem, type BladeType } from '@/data/geometries';
-import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { DeleteConfirmDialog } from '@/components/common/list/DeleteConfirmDialog';
 import { useDeleteGeometry, useGeometryList } from '@/hooks/api/useGeometry';
 import type { Geometry as BackendGeometry } from '@/api/types/geometry';
 
@@ -46,7 +47,7 @@ export function Geometry() {
   const navigate = useNavigate();
   const location = useLocation();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortState<GeometrySortKey>>({
+  const { sort, handleSort } = useSortState<GeometrySortKey>({
     key: 'lastUpdated',
     direction: 'desc',
   });
@@ -60,18 +61,8 @@ export function Geometry() {
     [backendGeometries],
   );
 
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useDeleteGeometry();
-
-  async function handleConfirmDelete() {
-    if (!pendingDelete) return;
-    try {
-      await deleteMutation.mutateAsync(Number(pendingDelete.id));
-      setPendingDelete(null);
-    } catch {
-      // deleteMutation.isError surfaces the failure in the dialog — stay open so the user can retry.
-    }
-  }
+  const { pendingDelete, setPendingDelete, handleConfirmDelete } = useDeleteConfirm(deleteMutation);
 
   // Navigate to inline creation flow when arriving with ?new=1 (from Home dashboard)
   useEffect(() => {
@@ -92,10 +83,6 @@ export function Geometry() {
   const sorted = useMemo(() => sortItems(filtered, sort, (g, key) => g[key]), [filtered, sort]);
 
   const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
-
-  function handleSort(key: GeometrySortKey) {
-    setSort((prev) => toggleSort(prev, key));
-  }
 
   const COLUMNS: ListTableHeadColumn<GeometrySortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[240px]' },
@@ -175,11 +162,7 @@ export function Geometry() {
                           icon={Pencil}
                           onClick={() => navigate(`/geometry/${g.id}`)}
                         />
-                        <RowIconButton
-                          label="Export geometry"
-                          icon={Download}
-                          onClick={() => {}}
-                        />
+                        <RowIconButton label="Export geometry" icon={Download} onClick={() => {}} />
                         <RowIconButton
                           label="Duplicate geometry"
                           icon={Copy}
@@ -204,14 +187,11 @@ export function Geometry() {
 
       <Footer />
 
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        title="Delete geometry"
-        message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
-        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-        confirmDisabled={deleteMutation.isPending}
-        errorMessage={deleteMutation.isError ? 'Failed to delete. Please try again.' : undefined}
-        danger
+      <DeleteConfirmDialog
+        entityLabel="geometry"
+        pendingDelete={pendingDelete}
+        isPending={deleteMutation.isPending}
+        isError={deleteMutation.isError}
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}
       />

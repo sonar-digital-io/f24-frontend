@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as geometryApi from '@/api/geometry';
 import type {
   GeometryPayload,
@@ -15,14 +15,32 @@ export const geometryKeys = {
   list: () => ['geometry', 'list'] as const,
   detail: (geometryId: number) => ['geometry', 'detail', geometryId] as const,
   edges: (geometryId: number) => ['geometry', 'edges', geometryId] as const,
-  edgesPreview: (geometryId: number, resolution: number) => ['geometry', 'edges-preview', geometryId, resolution] as const,
+  edgesPreview: (geometryId: number, resolution: number) =>
+    ['geometry', 'edges-preview', geometryId, resolution] as const,
   profiles: (geometryId: number) => ['geometry', 'profiles', geometryId] as const,
   profile: (geometryId: number, profileId: number, query?: GeometryProfileQuery) =>
     ['geometry', 'profile', geometryId, profileId, query] as const,
   profilePreview: (geometryId: number, profile?: GeometryProfile) =>
-    ['geometry', 'profile-preview', geometryId, profile?.id, profile?.position, profile?.type, JSON.stringify(profile?.parameters)] as const,
+    [
+      'geometry',
+      'profile-preview',
+      geometryId,
+      profile?.id,
+      profile?.position,
+      profile?.type,
+      JSON.stringify(profile?.parameters),
+    ] as const,
   topView: (geometryId: number) => ['geometry', 'top-view', geometryId] as const,
 };
+
+/** Both the detail and list views embed a geometry's own fields, so any
+ *  write to it invalidates both — shared by every "update geometry itself"
+ *  mutation (not the nested edges/profiles ones, which invalidate their own
+ *  sub-resource key instead). */
+function invalidateGeometryDetailAndList(queryClient: QueryClient, geometryId: number) {
+  queryClient.invalidateQueries({ queryKey: geometryKeys.detail(geometryId) });
+  queryClient.invalidateQueries({ queryKey: geometryKeys.list() });
+}
 
 export function useGeometryList() {
   return useQuery({ queryKey: geometryKeys.list(), queryFn: () => geometryApi.getGeometryList() });
@@ -51,10 +69,7 @@ export function useUpdateGeometry(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: GeometryPayload) => geometryApi.updateGeometry(geometryId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: geometryKeys.detail(geometryId) });
-      queryClient.invalidateQueries({ queryKey: geometryKeys.list() });
-    },
+    onSuccess: () => invalidateGeometryDetailAndList(queryClient, geometryId),
   });
 }
 
@@ -69,11 +84,9 @@ export function useDeleteGeometry() {
 export function useUpdateGeometrySettings(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: GeometrySettingsPayload) => geometryApi.updateGeometrySettings(geometryId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: geometryKeys.detail(geometryId) });
-      queryClient.invalidateQueries({ queryKey: geometryKeys.list() });
-    },
+    mutationFn: (payload: GeometrySettingsPayload) =>
+      geometryApi.updateGeometrySettings(geometryId, payload),
+    onSuccess: () => invalidateGeometryDetailAndList(queryClient, geometryId),
   });
 }
 
@@ -88,7 +101,8 @@ export function useGeometryEdges(geometryId: number) {
 export function useUpdateGeometryEdges(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: GeometryEdgesWritePayload) => geometryApi.updateGeometryEdges(geometryId, payload),
+    mutationFn: (payload: GeometryEdgesWritePayload) =>
+      geometryApi.updateGeometryEdges(geometryId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: geometryKeys.edges(geometryId) });
       queryClient.invalidateQueries({ queryKey: ['geometry', 'edges-preview', geometryId] });
@@ -115,7 +129,8 @@ export function useGeometryProfiles(geometryId: number) {
 export function useUpdateGeometryProfiles(geometryId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: GeometryProfilesWritePayload) => geometryApi.updateGeometryProfiles(geometryId, payload),
+    mutationFn: (payload: GeometryProfilesWritePayload) =>
+      geometryApi.updateGeometryProfiles(geometryId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: geometryKeys.profiles(geometryId) });
       queryClient.invalidateQueries({ queryKey: ['geometry', 'profile', geometryId] });
@@ -125,8 +140,13 @@ export function useUpdateGeometryProfiles(geometryId: number) {
 
 export function usePreviewGeometryProfile() {
   return useMutation({
-    mutationFn: ({ geometryId, payload }: { geometryId: number; payload: GeometryProfilePreviewPayload }) =>
-      geometryApi.previewGeometryProfile(geometryId, payload),
+    mutationFn: ({
+      geometryId,
+      payload,
+    }: {
+      geometryId: number;
+      payload: GeometryProfilePreviewPayload;
+    }) => geometryApi.previewGeometryProfile(geometryId, payload),
   });
 }
 
@@ -162,7 +182,11 @@ export function useGeometryProfilePreview(geometryId: number, profile?: Geometry
   });
 }
 
-export function useGeometryProfile(geometryId: number, profileId: number, query?: GeometryProfileQuery) {
+export function useGeometryProfile(
+  geometryId: number,
+  profileId: number,
+  query?: GeometryProfileQuery,
+) {
   return useQuery({
     queryKey: geometryKeys.profile(geometryId, profileId, query),
     queryFn: () => geometryApi.getGeometryProfile(geometryId, profileId, query),
@@ -192,15 +216,25 @@ export function useFetchGeometryTopView() {
 
 export function useRunProfileGenerator() {
   return useMutation({
-    mutationFn: ({ geometryId, payload }: { geometryId: number; payload: ProfileGeneratorPayload }) =>
-      geometryApi.runProfileGenerator(geometryId, payload),
+    mutationFn: ({
+      geometryId,
+      payload,
+    }: {
+      geometryId: number;
+      payload: ProfileGeneratorPayload;
+    }) => geometryApi.runProfileGenerator(geometryId, payload),
   });
 }
 
 export function useUpdateProfileGenerator() {
   return useMutation({
-    mutationFn: ({ geometryId, payload }: { geometryId: number; payload: ProfileGeneratorPayload }) =>
-      geometryApi.updateProfileGenerator(geometryId, payload),
+    mutationFn: ({
+      geometryId,
+      payload,
+    }: {
+      geometryId: number;
+      payload: ProfileGeneratorPayload;
+    }) => geometryApi.updateProfileGenerator(geometryId, payload),
   });
 }
 

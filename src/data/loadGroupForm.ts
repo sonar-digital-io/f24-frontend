@@ -7,40 +7,26 @@ export type LimitsSubTab = 'thrust' | 'torque' | 'power';
 
 // ─── Initial mock data ───────────────────────────────────────────────────────
 
+// thrust/torque/power all start from the same flat 2-point curve — a fresh
+// object per key so no two sub-tabs' state accidentally alias the same array.
+function defaultLimitRange(): LoadLimitRange {
+  return {
+    x_min: -20000,
+    x_max: 20000,
+    y_min: 0,
+    y_max: 20000,
+    curve_type: 'spline',
+    curve: [
+      { rpm: 0, value: 10000 },
+      { rpm: 10000, value: 10000 },
+    ],
+  };
+}
+
 export const INITIAL_LOAD_LIMITS: Record<LimitsSubTab, LoadLimitRange> = {
-  thrust: {
-    x_min: -20000,
-    x_max: 20000,
-    y_min: 0,
-    y_max: 20000,
-    curve_type: 'spline',
-    curve: [
-      { rpm: 0, value: 10000 },
-      { rpm: 10000, value: 10000 },
-    ],
-  },
-  torque: {
-    x_min: -20000,
-    x_max: 20000,
-    y_min: 0,
-    y_max: 20000,
-    curve_type: 'spline',
-    curve: [
-      { rpm: 0, value: 10000 },
-      { rpm: 10000, value: 10000 },
-    ],
-  },
-  power: {
-    x_min: -20000,
-    x_max: 20000,
-    y_min: 0,
-    y_max: 20000,
-    curve_type: 'spline',
-    curve: [
-      { rpm: 0, value: 10000 },
-      { rpm: 10000, value: 10000 },
-    ],
-  },
+  thrust: defaultLimitRange(),
+  torque: defaultLimitRange(),
+  power: defaultLimitRange(),
 };
 
 export const LIMITS_UNITS: Record<LimitsSubTab, string> = {
