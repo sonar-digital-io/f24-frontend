@@ -70,10 +70,7 @@ export function CompositionGeneralTab({
       </div>
 
       <div className="flex w-full flex-col gap-2">
-        <Label
-          htmlFor="comp-description"
-          className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-        >
+        <Label htmlFor="comp-description" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
           Description<span className="text-[#dc2626]">*</span>
         </Label>
         <Textarea
@@ -95,10 +92,7 @@ export function CompositionGeneralTab({
             onCheckedChange={(c) => onSolidCoreChange(Boolean(c))}
             className="size-4 rounded border-[#e2e8f0] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]"
           />
-          <Label
-            htmlFor="comp-solid-core"
-            className="cursor-pointer text-[14px] font-medium text-[#0a0a0a]"
-          >
+          <Label htmlFor="comp-solid-core" className="cursor-pointer text-[14px] font-medium text-[#0a0a0a]">
             Solid core
           </Label>
         </div>
@@ -113,10 +107,7 @@ export function CompositionGeneralTab({
       </div>
 
       <div className="flex w-full flex-col gap-2">
-        <Label
-          htmlFor="comp-target-weight"
-          className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-        >
+        <Label htmlFor="comp-target-weight" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
           Target weight (kg)
         </Label>
         <Input

@@ -89,10 +89,7 @@ export function LoadCasePickerDialog({
                   <td className="px-3 py-2 text-right">
                     <button
                       type="button"
-                      onClick={() => {
-                        onSelect(lc.id);
-                        onClose();
-                      }}
+                      onClick={() => { onSelect(lc.id); onClose(); }}
                       className="inline-flex h-8 items-center justify-center rounded-md bg-[#006496] px-3 text-[13px] font-medium text-[#fafafa] hover:bg-[#005580]"
                     >
                       Select

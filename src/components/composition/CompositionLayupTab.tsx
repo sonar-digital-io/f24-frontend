@@ -60,7 +60,7 @@ export function CompositionLayupTab({
   // none is a valid, save-worthy state (it clears them on the backend too) —
   // only a non-empty-but-incomplete layup blocks the autosave.
   const layupsReadyToSave = layups.every(
-    (l) => l.plies.length > 0 && l.plies.every((p) => p.material !== 'Select'),
+    (l) => l.plies.length > 0 && l.plies.every((p) => p.material !== 'Select')
   );
   const hasUnsavedLayups = layupsReadyToSave && layupsKey !== savedSnapshot;
 
@@ -123,10 +123,7 @@ export function CompositionLayupTab({
           }}
           className="flex flex-col gap-2 rounded-[10px] border border-[#e5e7eb] p-4"
         >
-          <Label
-            htmlFor="new-layup-name"
-            className="text-[14px] font-medium leading-none text-[#0a0a0a]"
-          >
+          <Label htmlFor="new-layup-name" className="text-[14px] font-medium leading-none text-[#0a0a0a]">
             Name
           </Label>
           <Input
@@ -142,9 +139,7 @@ export function CompositionLayupTab({
       )}
 
       {layups.length === 0 ? (
-        <p className="py-8 text-center text-[14px] text-[#6b7280]">
-          No layups yet. Add one to get started.
-        </p>
+        <p className="py-8 text-center text-[14px] text-[#6b7280]">No layups yet. Add one to get started.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {layups.map((l) => {
@@ -183,10 +178,7 @@ export function CompositionLayupTab({
                 </div>
                 {/* Always mounted — hidden instead of unmounted so each layup's ply state survives collapsing */}
                 <div className={expanded ? 'border-t border-[#e5e7eb] p-4' : 'hidden'}>
-                  <LayupBuilder
-                    plies={l.plies}
-                    onPliesChange={(updater) => onUpdateLayupPlies(l.id, updater)}
-                  />
+                  <LayupBuilder plies={l.plies} onPliesChange={(updater) => onUpdateLayupPlies(l.id, updater)} />
                 </div>
               </li>
             );

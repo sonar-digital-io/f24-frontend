@@ -1,8 +1,5 @@
 import type { ReactNode } from 'react';
-import {
-  FoldableSectionList,
-  type FoldableSectionListProps,
-} from '@/components/geometry/FoldableSectionList';
+import { FoldableSectionList, type FoldableSectionListProps } from '@/components/geometry/FoldableSectionList';
 
 interface FoldablePanelShellProps<K extends string> extends FoldableSectionListProps<K> {
   header: ReactNode;
@@ -13,10 +10,7 @@ interface FoldablePanelShellProps<K extends string> extends FoldableSectionListP
  * header + `FoldableSectionList` body — shared by `ProfileDistributionPanel`
  * and `StackingPanel`. Each caller only supplies its own header content.
  */
-export function FoldablePanelShell<K extends string>({
-  header,
-  ...sectionListProps
-}: FoldablePanelShellProps<K>) {
+export function FoldablePanelShell<K extends string>({ header, ...sectionListProps }: FoldablePanelShellProps<K>) {
   const { folded } = sectionListProps;
   return (
     <div
