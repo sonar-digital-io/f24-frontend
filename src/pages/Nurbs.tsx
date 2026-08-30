@@ -183,7 +183,7 @@ export function Nurbs() {
       )}
 
       {/* Controls */}
-      <div className="absolute top-4 left-4 z-50 max-h-[calc(100vh-2rem)] overflow-y-auto">
+      <div className="absolute top-4 left-4 z-50 max-h-[calc(100vh_-_2rem)] overflow-y-auto">
         {/* Geometry Selector */}
         <Card className="bg-background/90 backdrop-blur-sm border border-border min-w-[240px] mb-2">
           <CardContent className="p-3">

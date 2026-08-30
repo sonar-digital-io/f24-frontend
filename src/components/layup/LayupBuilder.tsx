@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { ChevronDown, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { PlyStackViz } from '@/components/layup/PlyStackViz';
+import { UnifiedPlyStackViz } from '@/components/layup/UnifiedPlyStackViz';
 import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
 import { nextLocalId } from '@/lib/utils';
 import { MaterialPickerDialog } from '@/components/layup/MaterialPickerDialog';
@@ -12,9 +14,20 @@ import { useDragReorder } from '@/hooks/useDragReorder';
 // Vibrant pastel palette — one material name always hashes to the same
 // color, and distinct material names spread across the palette.
 const PLY_COLOR_PALETTE = [
-  '#FF9AA2', '#FFB7B2', '#FFDAC1', '#FFE066', '#C4F1BE',
-  '#9BF6FF', '#A0C4FF', '#BDB2FF', '#FFC6FF', '#B5EAD7',
-  '#C7CEEA', '#FDCB82', '#F694C1', '#8DE0D5',
+  '#FF9AA2',
+  '#FFB7B2',
+  '#FFDAC1',
+  '#FFE066',
+  '#C4F1BE',
+  '#9BF6FF',
+  '#A0C4FF',
+  '#BDB2FF',
+  '#FFC6FF',
+  '#B5EAD7',
+  '#C7CEEA',
+  '#FDCB82',
+  '#F694C1',
+  '#8DE0D5',
 ];
 const FALLBACK_COLOR = '#6b7280';
 
@@ -58,6 +71,7 @@ export interface LayupBuilderProps {
  */
 export function LayupBuilder({ plies, onPliesChange }: LayupBuilderProps) {
   const [materialPickerPlyId, setMaterialPickerPlyId] = useState<string | null>(null);
+  const [unifiedViz, setUnifiedViz] = useState(false);
   const { data: materialData } = useMaterialList();
   const materials = materialData ?? [];
 
@@ -70,14 +84,15 @@ export function LayupBuilder({ plies, onPliesChange }: LayupBuilderProps) {
     });
   }
 
-  const { draggingIdx, insertBeforeIdx, getHandleProps, getRowDragProps } = useDragReorder(reorderPlies);
+  const { draggingIdx, insertBeforeIdx, getHandleProps, getRowDragProps } =
+    useDragReorder(reorderPlies);
 
   function updatePly<K extends keyof Ply>(idx: number, key: K, value: Ply[K]) {
     onPliesChange((current) =>
       current.map((p, i) => {
         if (i !== idx) return p;
         return { ...p, [key]: value };
-      })
+      }),
     );
   }
 
@@ -90,7 +105,8 @@ export function LayupBuilder({ plies, onPliesChange }: LayupBuilderProps) {
       id: nextLocalId('p'),
       name: 'Placeholder',
       material: 'Select',
-      thickness: 0,
+      // 0mm plies get rejected on save — default to a valid, non-zero thickness.
+      thickness: 10,
       orientation: 0,
       color: FALLBACK_COLOR,
     };
@@ -184,10 +200,15 @@ export function LayupBuilder({ plies, onPliesChange }: LayupBuilderProps) {
                         onClick={() => setMaterialPickerPlyId(ply.id)}
                         className="flex h-8 w-full items-center justify-between gap-1 rounded-md border border-[#e2e8f0] bg-white px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:border-[#006496]"
                       >
-                        <span className={`truncate text-left ${ply.material === 'Select' ? 'text-[#9ca3af]' : 'text-[#0a0a0a]'}`}>
+                        <span
+                          className={`truncate text-left ${ply.material === 'Select' ? 'text-[#9ca3af]' : 'text-[#0a0a0a]'}`}
+                        >
                           {ply.material}
                         </span>
-                        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#6b7280]" strokeWidth={2} />
+                        <ChevronDown
+                          className="h-3.5 w-3.5 shrink-0 text-[#6b7280]"
+                          strokeWidth={2}
+                        />
                       </button>
                     </td>
                     <td className="px-3 py-2 align-middle">
@@ -230,9 +251,15 @@ export function LayupBuilder({ plies, onPliesChange }: LayupBuilderProps) {
                   </tr>
                 );
                 const result = [];
-                if (draggingIdx !== null && insertBeforeIdx === idx) result.push(insertLine(`insert-before-${idx}`));
+                if (draggingIdx !== null && insertBeforeIdx === idx)
+                  result.push(insertLine(`insert-before-${idx}`));
                 result.push(row);
-                if (draggingIdx !== null && idx === plies.length - 1 && insertBeforeIdx === plies.length) result.push(insertLine('insert-end'));
+                if (
+                  draggingIdx !== null &&
+                  idx === plies.length - 1 &&
+                  insertBeforeIdx === plies.length
+                )
+                  result.push(insertLine('insert-end'));
                 return result;
               })}
               {plies.length === 0 && (
@@ -245,12 +272,24 @@ export function LayupBuilder({ plies, onPliesChange }: LayupBuilderProps) {
             </tbody>
           </table>
         </div>
-
       </div>
 
-      {/* Right: 3D ply stack viz — rotate/zoom like OccViewer */}
-      <div className="flex w-full max-w-[440px] shrink-0 flex-col items-center">
-        <PlyStackViz plies={plies} materials={materials} className="h-[520px] w-full" />
+      {/* Right: ply stack viz — 3D (rotate/zoom like OccViewer) or a static unified schematic */}
+      <div className="flex w-full max-w-[440px] shrink-0 flex-col items-center gap-3">
+        <div className="flex w-full items-center gap-2">
+          <Checkbox id="unified-viz" checked={unifiedViz} onCheckedChange={setUnifiedViz} />
+          <Label
+            htmlFor="unified-viz"
+            className="cursor-pointer text-[13px] leading-none text-[#374151]"
+          >
+            Unified visualization
+          </Label>
+        </div>
+        {unifiedViz ? (
+          <UnifiedPlyStackViz plies={plies} materials={materials} className="h-[520px] w-full" />
+        ) : (
+          <PlyStackViz plies={plies} materials={materials} className="h-[520px] w-full" />
+        )}
       </div>
 
       <MaterialPickerDialog

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Search } from 'lucide-react';
 import { Pagination } from '@/components/common/list/Pagination';
 import { SortableHeader } from '@/components/common/list/SortableHeader';
@@ -104,7 +105,13 @@ export function TablePickerDialog<T>({
 
   if (!open) return null;
 
-  return (
+  // Portaled to <body> — a caller like CompositionLayupTab wraps this in a
+  // backdrop-blur-sm panel, and any ancestor with a filter/backdrop-filter/
+  // transform traps `position: fixed` descendants inside its own box instead
+  // of the real viewport (per spec), which clipped the dialog's bottom and
+  // let other fixed/absolute chrome (e.g. the z-40 edit sub-toolbar) paint
+  // over its top despite this dialog's higher z-index.
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -114,7 +121,7 @@ export function TablePickerDialog<T>({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[calc(100vh-4rem)] w-full max-w-[931px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
+        className="flex max-h-[calc(100vh_-_4rem)] w-full max-w-[931px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
       >
         <DialogHeader title={title} titleId={titleId} onClose={onClose} />
 
@@ -135,8 +142,10 @@ export function TablePickerDialog<T>({
           </div>
         </div>
 
-        {/* Table */}
-        <div className="min-h-0 flex-1 overflow-auto">
+        {/* Table — min-height keeps the dialog a consistent size even when a
+            search/filter leaves only a couple of rows, instead of collapsing
+            to fit just those rows. */}
+        <div className="min-h-[560px] flex-1 overflow-auto">
           <table className="w-full table-fixed border-collapse">
             <thead className="sticky top-0 bg-white">
               <tr className="border-b border-[#e5e7eb]">
@@ -156,7 +165,7 @@ export function TablePickerDialog<T>({
                         {col.label}
                       </span>
                     </th>
-                  )
+                  ),
                 )}
                 <th className="h-10 w-[100px] px-3 text-right" />
               </tr>
@@ -211,6 +220,7 @@ export function TablePickerDialog<T>({
         {/* Pagination */}
         <Pagination page={page} totalPages={totalPages} onChange={setPage} />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

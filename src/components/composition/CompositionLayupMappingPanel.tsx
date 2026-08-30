@@ -49,7 +49,7 @@ export const CompositionLayupMappingPanel = forwardRef<HTMLDivElement, Compositi
     return (
       <div
         ref={ref}
-        className={`pointer-events-auto flex max-h-[calc(100vh-145px)] w-full max-w-[560px] flex-col gap-6 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm${visible ? '' : ' hidden'}`}
+        className={`pointer-events-auto flex max-h-[calc(100vh_-_145px)] w-full max-w-[560px] flex-col gap-6 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm${visible ? '' : ' hidden'}`}
       >
         <LayupMappingTable
           title="Upper side"

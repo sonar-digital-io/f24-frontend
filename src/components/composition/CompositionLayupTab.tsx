@@ -102,7 +102,7 @@ export function CompositionLayupTab({
   }, [layupsKey, hasUnsavedLayups, saveMutation.isPending, saveMutation.isError]);
 
   return (
-    <div className="pointer-events-auto flex max-h-[calc(100vh-145px)] w-full max-w-[1300px] flex-col gap-4 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+    <div className="pointer-events-auto flex max-h-[calc(100vh_-_145px)] w-full max-w-[1300px] flex-col gap-4 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Layups</h2>
         <button

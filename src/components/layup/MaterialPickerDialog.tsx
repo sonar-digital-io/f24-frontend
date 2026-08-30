@@ -1,4 +1,7 @@
-import { TablePickerDialog, type TablePickerColumn } from '@/components/common/dialog/TablePickerDialog';
+import {
+  TablePickerDialog,
+  type TablePickerColumn,
+} from '@/components/common/dialog/TablePickerDialog';
 import { formatDateTime } from '@/lib/utils';
 import { useMaterialList } from '@/hooks/api/useMaterials';
 import type { Material } from '@/api/types/materials';
@@ -11,8 +14,20 @@ interface MaterialPickerDialogProps {
 }
 
 const COLUMNS: TablePickerColumn<Material>[] = [
-  { key: 'name', label: 'Name', widthClassName: 'w-[220px]', sortValue: (m) => m.name, render: (m) => m.name },
-  { key: 'type', label: 'Type', widthClassName: 'w-[160px]', sortValue: (m) => m.type, render: (m) => m.type },
+  {
+    key: 'name',
+    label: 'Name',
+    widthClassName: 'w-[220px]',
+    sortValue: (m) => m.name,
+    render: (m) => m.name,
+  },
+  {
+    key: 'type',
+    label: 'Type',
+    widthClassName: 'w-[160px]',
+    sortValue: (m) => m.type ?? '',
+    render: (m) => m.type,
+  },
   { key: 'description', label: 'Description', render: (m) => m.description ?? '' },
   {
     key: 'lastUpdated',
@@ -44,7 +59,7 @@ export function MaterialPickerDialog({
       searchPlaceholder="Search by name, type or description"
       searchPredicate={(m, q) =>
         m.name.toLowerCase().includes(q) ||
-        m.type.toLowerCase().includes(q) ||
+        (m.type ?? '').toLowerCase().includes(q) ||
         (m.description ?? '').toLowerCase().includes(q)
       }
       columns={COLUMNS}

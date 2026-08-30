@@ -45,7 +45,7 @@ export function CompositionGeometryTab({
   }
 
   return (
-    <div className="pointer-events-auto max-h-[calc(100vh-145px)] overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+    <div className="pointer-events-auto max-h-[calc(100vh_-_145px)] overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)] backdrop-blur-sm">
       <h2 className="text-[20px] font-bold leading-7 text-[#181c20]">Geometries</h2>
 
       <div className="mt-4 max-w-[384px]">
