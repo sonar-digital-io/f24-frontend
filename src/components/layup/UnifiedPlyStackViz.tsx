@@ -72,9 +72,8 @@ function needsCrosshatch(ply: Ply, materials: Material[]): boolean {
  * diamond's own two edge directions (`screenAngleForOrientation`) so 0° is
  * parallel to the diamond's edge — i.e. the rectangle's own side — not flat
  * horizontal. Drawn as a crosshatch instead of single-direction lines when
- * the material is
- * biaxial or woven (`needsCrosshatch`) — those need two fiber directions to
- * read correctly, not one.
+ * the material is biaxial or woven (`needsCrosshatch`) — those need two
+ * fiber directions to read correctly, not one.
  */
 export function UnifiedPlyStackViz({ plies, materials, className }: UnifiedPlyStackVizProps) {
   const n = plies.length;
@@ -134,7 +133,7 @@ export function UnifiedPlyStackViz({ plies, materials, className }: UnifiedPlySt
         // Paint back-to-front (last ply in the stack first) so ply 0 — the
         // top of the stack — is painted last and lands in front, unoccluded,
         // instead of buried under everything drawn after it.
-        [...plies]
+        plies
           .map((ply, idx) => ({ ply, idx }))
           .reverse()
           .map(({ ply, idx }) => {
