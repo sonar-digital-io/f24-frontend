@@ -79,6 +79,119 @@ function findNearestIntersectionId(
   return best.id;
 }
 
+/**
+ * Whether two intersections are "the same landmark" — e.g. both are the
+ * same spar, or both are the profile's leading edge — so that if a
+ * mapping's two boundary profiles are both locked to the same landmark
+ * type, an inner profile between them can be locked to *its own* instance
+ * of that same landmark instead of interpolating a plain number.
+ *
+ * This backend's CompositionIntersection has `type: 'edge' | 'mapping'`
+ * plus nullable `spar_id`/`longitudinal_mapping_id` (unlike the reference
+ * architecture's dedicated `type: 'spar'`) — spar identity lives in
+ * `spar_id`, so two intersections are the same landmark when `type`,
+ * `spar_id`, `longitudinal_mapping_id`, `index`, and `side` all match, and
+ * — only for a bare profile edge (both spar_id and longitudinal_mapping_id
+ * null) — they're both the trailing edge or both the leading edge
+ * (position === 0 is always the trailing edge; a profile has exactly one
+ * other edge intersection, the leading edge, at some other position).
+ */
+export function isSameLandmark(a: CompositionIntersection, b: CompositionIntersection): boolean {
+  if (a.type !== b.type) return false;
+  if (a.spar_id !== b.spar_id) return false;
+  if (a.longitudinal_mapping_id !== b.longitudinal_mapping_id) return false;
+  if (a.index !== b.index) return false;
+  if (a.side !== b.side) return false;
+  if (a.spar_id == null && a.longitudinal_mapping_id == null) {
+    return (a.position === 0) === (b.position === 0);
+  }
+  return true;
+}
+
+function findLandmarkOnProfile(
+  profileId: number,
+  landmark: CompositionIntersection,
+  intersectionsData: CompositionProfileIntersections[] | undefined,
+): CompositionIntersection | null {
+  const list = intersectionsData?.find((p) => p.profile_id === profileId)?.intersections ?? [];
+  return list.find((candidate) => isSameLandmark(candidate, landmark)) ?? null;
+}
+
+function findIntersectionById(
+  profileId: number,
+  intersectionId: number | null,
+  intersectionsData: CompositionProfileIntersections[] | undefined,
+): CompositionIntersection | null {
+  if (intersectionId == null) return null;
+  const list = intersectionsData?.find((p) => p.profile_id === profileId)?.intersections ?? [];
+  return list.find((i) => i.id === intersectionId) ?? null;
+}
+
+/**
+ * Re-interpolates every profile strictly between the mapping's start and
+ * end profile, for both the start and end position independently. If both
+ * boundary profiles are locked to "the same landmark" (isSameLandmark) and
+ * an inner profile has an intersection matching that same landmark, the
+ * inner profile locks to it (its position becomes that intersection's
+ * position); otherwise the inner profile's position is linearly
+ * interpolated by span position between the two boundary profiles, and
+ * unlocked (lockedTo: null).
+ *
+ * Does nothing to the two boundary profiles themselves — only profiles
+ * strictly between them. Call this explicitly (e.g. a "Recalculate"
+ * button); it is never run automatically, so a manually-dragged inner
+ * point stays where the user put it until they ask to re-snap it.
+ */
+export function recalculateInnerProfiles(
+  mapping: TransversalMapping,
+  coveredProfilesSortedByPosition: GeometryProfile[],
+  intersectionsData: CompositionProfileIntersections[] | undefined,
+): TransversalMapping {
+  if (coveredProfilesSortedByPosition.length < 3) return mapping; // no inner profiles to touch
+  const first = coveredProfilesSortedByPosition[0];
+  const last = coveredProfilesSortedByPosition[coveredProfilesSortedByPosition.length - 1];
+  const startBoundary = getMappingBoundary(mapping, first.id);
+  const endBoundary = getMappingBoundary(mapping, last.id);
+  const spanRange = last.position - first.position || 1;
+
+  const next = { ...mapping.profileBoundaries };
+
+  (['start', 'end'] as const).forEach((side) => {
+    const posKey = side === 'start' ? 'startPosition' : 'endPosition';
+    const lockKey = side === 'start' ? 'startLockedTo' : 'endLockedTo';
+    const firstPos = startBoundary[posKey];
+    const lastPos = endBoundary[posKey];
+    if (firstPos == null || lastPos == null) return; // nothing to interpolate from
+
+    const firstLandmark = findIntersectionById(first.id, startBoundary[lockKey], intersectionsData);
+    const lastLandmark = findIntersectionById(last.id, endBoundary[lockKey], intersectionsData);
+    const sameLandmarkLock =
+      firstLandmark && lastLandmark && isSameLandmark(firstLandmark, lastLandmark)
+        ? firstLandmark
+        : null;
+
+    coveredProfilesSortedByPosition.slice(1, -1).forEach((profile) => {
+      const current = next[profile.id] ?? { ...EMPTY_BOUNDARY };
+      const equivalentLandmark = sameLandmarkLock
+        ? findLandmarkOnProfile(profile.id, sameLandmarkLock, intersectionsData)
+        : null;
+      if (equivalentLandmark) {
+        next[profile.id] = {
+          ...current,
+          [posKey]: equivalentLandmark.position,
+          [lockKey]: equivalentLandmark.id,
+        };
+        return;
+      }
+      const t = (profile.position - first.position) / spanRange;
+      const interpolated = firstPos + (lastPos - firstPos) * t;
+      next[profile.id] = { ...current, [posKey]: interpolated, [lockKey]: null };
+    });
+  });
+
+  return { ...mapping, profileBoundaries: next };
+}
+
 function resolveLockedTo(
   profileId: number,
   lockedTo: number | null,
@@ -139,26 +252,24 @@ export function buildTransversalMappingPayload(
       return;
     }
     const [loIdx, hiIdx] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
-    const [loProfile, hiProfile] =
-      startIdx <= endIdx ? [startProfileId, endProfileId] : [endProfileId, startProfileId];
     const [loBoundary, hiBoundary] = startIdx <= endIdx ? [sb, eb] : [eb, sb];
     const covered = sortedProfiles.slice(loIdx, hiIdx + 1);
     const spanRange = sortedProfiles[hiIdx].position - sortedProfiles[loIdx].position || 1;
 
     let resolvedAny = false;
     covered.forEach((profile) => {
-      let boundary: ProfileBoundary;
-      if (profile.id === loProfile) boundary = loBoundary;
-      else if (profile.id === hiProfile) boundary = hiBoundary;
-      else {
-        const t = (profile.position - sortedProfiles[loIdx].position) / spanRange;
-        boundary = {
-          startPosition: lerp(loBoundary.startPosition!, hiBoundary.startPosition!, t),
-          startLockedTo: null,
-          endPosition: lerp(loBoundary.endPosition!, hiBoundary.endPosition!, t),
-          endLockedTo: null,
-        };
-      }
+      // Prefer this profile's own explicitly-set boundary (drag, lock
+      // selection, or a previous Recalculate) — only fall back to a fresh
+      // lerp for a position this profile never got (still EMPTY_BOUNDARY).
+      const own = getMappingBoundary(m, profile.id);
+      const t = (profile.position - sortedProfiles[loIdx].position) / spanRange;
+      const boundary: ProfileBoundary = {
+        startPosition:
+          own.startPosition ?? lerp(loBoundary.startPosition!, hiBoundary.startPosition!, t),
+        startLockedTo: own.startLockedTo,
+        endPosition: own.endPosition ?? lerp(loBoundary.endPosition!, hiBoundary.endPosition!, t),
+        endLockedTo: own.endLockedTo,
+      };
       const startLockedTo = resolveLockedTo(
         profile.id,
         boundary.startLockedTo,
