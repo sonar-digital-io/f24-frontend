@@ -9,7 +9,42 @@ import type {
   ProfileBoundary,
   TransversalMapping,
 } from '@/components/composition/TransversalMappingRow';
-import { getMappingBoundary } from '@/components/composition/TransversalMappingRow';
+import { EMPTY_BOUNDARY, getMappingBoundary } from '@/components/composition/TransversalMappingRow';
+
+/**
+ * Keeps `profileBoundaries` in sync with the mapping's current
+ * startProfileId/endProfileId: seeds EMPTY_BOUNDARY for any profile newly in
+ * range, and drops entries for profiles no longer in range. Call this
+ * whenever startProfileId/endProfileId changes — before this call, a
+ * profile's boundary can be stale (left over from a previous range) or
+ * missing (freshly entered the range).
+ */
+export function resizeMappingRange(
+  mapping: TransversalMapping,
+  profiles: GeometryProfile[],
+): TransversalMapping {
+  const { startProfileId, endProfileId } = mapping;
+  if (startProfileId == null || endProfileId == null) {
+    return { ...mapping, profileBoundaries: {} };
+  }
+  const sorted = [...profiles].sort((a, b) => a.position - b.position);
+  const startIdx = sorted.findIndex((p) => p.id === startProfileId);
+  const endIdx = sorted.findIndex((p) => p.id === endProfileId);
+  if (startIdx === -1 || endIdx === -1) return mapping;
+  const [loIdx, hiIdx] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+  const covered = sorted.slice(loIdx, hiIdx + 1);
+  const coveredIds = new Set(covered.map((p) => p.id));
+
+  const next: Record<number, ProfileBoundary> = {};
+  covered.forEach((p) => {
+    next[p.id] = mapping.profileBoundaries[p.id] ?? EMPTY_BOUNDARY;
+  });
+  // Anything still in `mapping.profileBoundaries` but not in `coveredIds` is
+  // pruned by simply not copying it into `next`.
+  void coveredIds; // documents intent; `next` construction above already excludes them
+
+  return { ...mapping, profileBoundaries: next };
+}
 
 /** "Start/end locked to" describes what an intersection point actually is —
  *  either a profile edge (leading/trailing) or a specific longitudinal

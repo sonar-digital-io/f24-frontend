@@ -16,6 +16,7 @@ import {
   describeIntersection,
   buildTransversalMappingPayload,
   hydrateTransversalMappings,
+  resizeMappingRange,
 } from '@/lib/transversalMapping';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import {
@@ -109,7 +110,16 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
   });
 
   function updateMapping(id: string, patch: Partial<TransversalMapping>) {
-    setMappings((arr) => arr.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+    setMappings((arr) =>
+      arr.map((m) => {
+        if (m.id !== id) return m;
+        const next = { ...m, ...patch };
+        if ('startProfileId' in patch || 'endProfileId' in patch) {
+          return resizeMappingRange(next, crossSectionProfiles);
+        }
+        return next;
+      }),
+    );
   }
 
   function updateBoundary(id: string, profileId: number, patch: Partial<ProfileBoundary>) {
