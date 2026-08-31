@@ -29,8 +29,19 @@ export interface TransversalMapping {
   layupId: string | null;
   startProfileId: number | null;
   endProfileId: number | null;
-  startProfileBoundary: ProfileBoundary;
-  endProfileBoundary: ProfileBoundary;
+  /** Every profile from startProfileId to endProfileId (inclusive, by span
+   *  position) gets its own boundary — keyed by profile id. */
+  profileBoundaries: Record<number, ProfileBoundary>;
+}
+
+/** `mapping.profileBoundaries[profileId]`, or EMPTY_BOUNDARY if that profile
+ *  isn't covered (or profileId is null, e.g. a not-yet-selected profile). */
+export function getMappingBoundary(
+  mapping: TransversalMapping,
+  profileId: number | null,
+): ProfileBoundary {
+  if (profileId == null) return EMPTY_BOUNDARY;
+  return mapping.profileBoundaries[profileId] ?? EMPTY_BOUNDARY;
 }
 
 interface TransversalMappingRowProps {
@@ -89,7 +100,12 @@ export function TransversalMappingRow({
         )}
       </td>
       <td className="px-2 py-2">
-        <SelectField value={m.layupId ?? ''} onChange={(v) => onUpdate({ layupId: v })} options={layupOptions} placeholder="Select layup" />
+        <SelectField
+          value={m.layupId ?? ''}
+          onChange={(v) => onUpdate({ layupId: v })}
+          options={layupOptions}
+          placeholder="Select layup"
+        />
       </td>
       <td className="px-2 py-2">
         <div className="flex items-center gap-2">

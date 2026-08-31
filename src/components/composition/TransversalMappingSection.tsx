@@ -6,12 +6,17 @@ import { CrossSectionDialog } from '@/components/composition/CrossSectionDialog'
 import { CrossSectionProfileList } from '@/components/composition/CrossSectionProfileList';
 import { TransversalProfileBoundaryPopover } from '@/components/composition/TransversalProfileBoundaryPopover';
 import {
-  EMPTY_BOUNDARY,
   TransversalMappingRow,
+  getMappingBoundary,
+  type ProfileBoundary,
   type TransversalMapping,
 } from '@/components/composition/TransversalMappingRow';
 import { getApiErrorMessage } from '@/lib/apiError';
-import { describeIntersection, buildTransversalMappingPayload, hydrateTransversalMappings } from '@/lib/transversalMapping';
+import {
+  describeIntersection,
+  buildTransversalMappingPayload,
+  hydrateTransversalMappings,
+} from '@/lib/transversalMapping';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import {
   useCompositionDetail,
@@ -34,21 +39,24 @@ function newDraft(): TransversalMapping {
     layupId: null,
     startProfileId: null,
     endProfileId: null,
-    startProfileBoundary: EMPTY_BOUNDARY,
-    endProfileBoundary: EMPTY_BOUNDARY,
+    profileBoundaries: {},
   };
 }
 
 interface OpenBoundaryEditor {
   mappingId: string;
-  side: 'start' | 'end';
+  profileId: number;
 }
 
 export function TransversalMappingSection({ compositionId }: TransversalMappingSectionProps) {
   const [mappings, setMappings] = useState<TransversalMapping[]>([]);
   const { data: compositionDetail } = useCompositionDetail(compositionId);
-  const layupOptions = (compositionDetail?.layups ?? []).map((l) => ({ value: String(l.id), label: l.name }));
-  const geometryId = typeof compositionDetail?.geometry === 'number' ? compositionDetail.geometry : NaN;
+  const layupOptions = (compositionDetail?.layups ?? []).map((l) => ({
+    value: String(l.id),
+    label: l.name,
+  }));
+  const geometryId =
+    typeof compositionDetail?.geometry === 'number' ? compositionDetail.geometry : NaN;
   const { data: geometryProfilesData } = useGeometryProfiles(geometryId);
   const crossSectionProfiles = geometryProfilesData?.profiles ?? [];
   const { data: transversalMappingData } = useCompositionMappingTransversal(compositionId);
@@ -75,13 +83,19 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
     if (data) pointsByProfileId.set(p.id, data as [number, number][]);
   });
 
-  const profileOptions = crossSectionProfiles.map((p) => ({ value: String(p.id), label: `${p.name} (${p.position})` }));
+  const profileOptions = crossSectionProfiles.map((p) => ({
+    value: String(p.id),
+    label: `${p.name} (${p.position})`,
+  }));
 
   // Hydrate the editable table from whatever's already saved — group the
   // per-profile entries (GET's shape) back into rows by group_id.
-  useHydrateOnce(mappings.length === 0 && !!transversalMappingData && crossSectionProfiles.length > 0, () => {
-    setMappings(hydrateTransversalMappings(transversalMappingData!, crossSectionProfiles));
-  });
+  useHydrateOnce(
+    mappings.length === 0 && !!transversalMappingData && crossSectionProfiles.length > 0,
+    () => {
+      setMappings(hydrateTransversalMappings(transversalMappingData!, crossSectionProfiles));
+    },
+  );
 
   // Saved mapping rings per profile, for the list thumbnails — drawn from
   // whatever the backend has (freshest right after a save, since the mutation
@@ -98,12 +112,15 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
     setMappings((arr) => arr.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   }
 
-  function updateBoundary(id: string, side: 'start' | 'end', patch: Partial<TransversalMapping['startProfileBoundary']>) {
+  function updateBoundary(id: string, profileId: number, patch: Partial<ProfileBoundary>) {
     setMappings((arr) =>
       arr.map((m) => {
         if (m.id !== id) return m;
-        const key = side === 'start' ? 'startProfileBoundary' : 'endProfileBoundary';
-        return { ...m, [key]: { ...m[key], ...patch } };
+        const current = getMappingBoundary(m, profileId);
+        return {
+          ...m,
+          profileBoundaries: { ...m.profileBoundaries, [profileId]: { ...current, ...patch } },
+        };
       }),
     );
   }
@@ -113,7 +130,11 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
   }
 
   async function handleSave() {
-    const { payload, incomplete } = buildTransversalMappingPayload(mappings, crossSectionProfiles, intersectionsData);
+    const { payload, incomplete } = buildTransversalMappingPayload(
+      mappings,
+      crossSectionProfiles,
+      intersectionsData,
+    );
     if (incomplete > 0) {
       toast.error(
         incomplete === 1
@@ -128,13 +149,12 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
     }
   }
 
-  const editingMapping = boundaryEditor ? mappings.find((m) => m.id === boundaryEditor.mappingId) : undefined;
-  const editingProfileId = editingMapping
-    ? boundaryEditor!.side === 'start'
-      ? editingMapping.startProfileId
-      : editingMapping.endProfileId
-    : null;
-  const editingIntersections = intersectionsData?.find((p) => p.profile_id === editingProfileId)?.intersections ?? [];
+  const editingMapping = boundaryEditor
+    ? mappings.find((m) => m.id === boundaryEditor.mappingId)
+    : undefined;
+  const editingProfileId = editingMapping ? boundaryEditor!.profileId : null;
+  const editingIntersections =
+    intersectionsData?.find((p) => p.profile_id === editingProfileId)?.intersections ?? [];
   const editingLockOptions = [
     { value: 'unlocked', label: 'Unlocked' },
     ...editingIntersections.map((i) => ({ value: String(i.id), label: describeIntersection(i) })),
@@ -147,11 +167,9 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
           .filter((m) => m.id !== editingMapping.id)
           .flatMap((m) => {
             const rings: { startFrac: number; endFrac: number }[] = [];
-            if (m.startProfileId === editingProfileId && m.startProfileBoundary.startPosition != null && m.startProfileBoundary.endPosition != null) {
-              rings.push({ startFrac: m.startProfileBoundary.startPosition, endFrac: m.startProfileBoundary.endPosition });
-            }
-            if (m.endProfileId === editingProfileId && m.endProfileBoundary.startPosition != null && m.endProfileBoundary.endPosition != null) {
-              rings.push({ startFrac: m.endProfileBoundary.startPosition, endFrac: m.endProfileBoundary.endPosition });
+            const b = getMappingBoundary(m, editingProfileId);
+            if (b.startPosition != null && b.endPosition != null) {
+              rings.push({ startFrac: b.startPosition, endFrac: b.endPosition });
             }
             return rings;
           })
@@ -182,8 +200,14 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
                 onStartEditingName={() => setEditingNameId(m.id)}
                 onStopEditingName={() => setEditingNameId(null)}
                 onUpdate={(next) => updateMapping(m.id, next)}
-                onEditStartProfile={() => setBoundaryEditor({ mappingId: m.id, side: 'start' })}
-                onEditEndProfile={() => setBoundaryEditor({ mappingId: m.id, side: 'end' })}
+                onEditStartProfile={() =>
+                  m.startProfileId != null &&
+                  setBoundaryEditor({ mappingId: m.id, profileId: m.startProfileId })
+                }
+                onEditEndProfile={() =>
+                  m.endProfileId != null &&
+                  setBoundaryEditor({ mappingId: m.id, profileId: m.endProfileId })
+                }
                 onDelete={() => deleteMapping(m.id)}
               />
             ))}
@@ -211,12 +235,14 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
         {editingMapping && editingProfileId != null && (
           <div className="absolute left-0 top-[calc(100%+8px)] z-40">
             <TransversalProfileBoundaryPopover
-              profileName={profileOptions.find((p) => p.value === String(editingProfileId))?.label ?? ''}
+              profileName={
+                profileOptions.find((p) => p.value === String(editingProfileId))?.label ?? ''
+              }
               points={pointsByProfileId.get(editingProfileId)}
-              boundary={boundaryEditor!.side === 'start' ? editingMapping.startProfileBoundary : editingMapping.endProfileBoundary}
+              boundary={getMappingBoundary(editingMapping, editingProfileId)}
               lockOptions={editingLockOptions}
               otherRings={otherRings}
-              onChange={(patch) => updateBoundary(editingMapping.id, boundaryEditor!.side, patch)}
+              onChange={(patch) => updateBoundary(editingMapping.id, editingProfileId!, patch)}
               onClose={() => setBoundaryEditor(null)}
             />
           </div>
@@ -236,33 +262,42 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
 
       {/* Cross-section view dialog — SVG rings + table both come straight
           from GET /composition/:id/mapping/transversal/ for this profile. */}
-      {crossSectionProfile && crossSectionPoints && (() => {
-        const prof = crossSectionProfiles.find((p) => String(p.id) === crossSectionProfile);
-        if (!prof) return null;
-        const profileMappings =
-          transversalMappingData?.transversal_mapping.find((p) => p.profile_id === Number(crossSectionProfile))
-            ?.mappings ?? [];
-        const profileIntersections =
-          intersectionsData?.find((p) => p.profile_id === Number(crossSectionProfile))?.intersections ?? [];
-        const entries = profileMappings.map((m, i) => ({
-          id: m.group_id || `${crossSectionProfile}-${i}`,
-          name: m.name,
-          layupName: layupOptions.find((l) => Number(l.value) === m.layup)?.label ?? 'Unknown layup',
-          startFrac: m.start_position,
-          endFrac: m.end_position,
-          startLockedToLabel: describeIntersection(profileIntersections.find((i) => i.id === m.start_locked_to)),
-          endLockedToLabel: describeIntersection(profileIntersections.find((i) => i.id === m.end_locked_to)),
-        }));
+      {crossSectionProfile &&
+        crossSectionPoints &&
+        (() => {
+          const prof = crossSectionProfiles.find((p) => String(p.id) === crossSectionProfile);
+          if (!prof) return null;
+          const profileMappings =
+            transversalMappingData?.transversal_mapping.find(
+              (p) => p.profile_id === Number(crossSectionProfile),
+            )?.mappings ?? [];
+          const profileIntersections =
+            intersectionsData?.find((p) => p.profile_id === Number(crossSectionProfile))
+              ?.intersections ?? [];
+          const entries = profileMappings.map((m, i) => ({
+            id: m.group_id || `${crossSectionProfile}-${i}`,
+            name: m.name,
+            layupName:
+              layupOptions.find((l) => Number(l.value) === m.layup)?.label ?? 'Unknown layup',
+            startFrac: m.start_position,
+            endFrac: m.end_position,
+            startLockedToLabel: describeIntersection(
+              profileIntersections.find((i) => i.id === m.start_locked_to),
+            ),
+            endLockedToLabel: describeIntersection(
+              profileIntersections.find((i) => i.id === m.end_locked_to),
+            ),
+          }));
 
-        return (
-          <CrossSectionDialog
-            profileName={prof.name}
-            points={crossSectionPoints as [number, number][]}
-            entries={entries}
-            onClose={() => setCrossSectionProfile(null)}
-          />
-        );
-      })()}
+          return (
+            <CrossSectionDialog
+              profileName={prof.name}
+              points={crossSectionPoints as [number, number][]}
+              entries={entries}
+              onClose={() => setCrossSectionProfile(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

@@ -5,7 +5,11 @@ import type {
   CompositionProfileIntersections,
 } from '@/api/types/composition';
 import type { GeometryProfile } from '@/api/types/geometry';
-import type { ProfileBoundary, TransversalMapping } from '@/components/composition/TransversalMappingRow';
+import type {
+  ProfileBoundary,
+  TransversalMapping,
+} from '@/components/composition/TransversalMappingRow';
+import { getMappingBoundary } from '@/components/composition/TransversalMappingRow';
 
 /** "Start/end locked to" describes what an intersection point actually is —
  *  either a profile edge (leading/trailing) or a specific longitudinal
@@ -70,12 +74,17 @@ export function buildTransversalMappingPayload(
   intersectionsData: CompositionProfileIntersections[] | undefined,
 ): { payload: CompositionMappingTransversalWritePayload; incomplete: number } {
   const sortedProfiles = [...profiles].sort((a, b) => a.position - b.position);
-  const byProfile = new Map<number, CompositionMappingTransversalWritePayload['transversal_mapping'][number]['mappings']>();
+  const byProfile = new Map<
+    number,
+    CompositionMappingTransversalWritePayload['transversal_mapping'][number]['mappings']
+  >();
   profiles.forEach((p) => byProfile.set(p.id, []));
 
   let incomplete = 0;
   mappings.forEach((m, rowIndex) => {
-    const { startProfileId, endProfileId, startProfileBoundary: sb, endProfileBoundary: eb } = m;
+    const { startProfileId, endProfileId } = m;
+    const sb = getMappingBoundary(m, startProfileId);
+    const eb = getMappingBoundary(m, endProfileId);
     if (
       !m.layupId ||
       startProfileId == null ||
@@ -95,10 +104,11 @@ export function buildTransversalMappingPayload(
       return;
     }
     const [loIdx, hiIdx] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
-    const [loProfile, hiProfile] = startIdx <= endIdx ? [startProfileId, endProfileId] : [endProfileId, startProfileId];
+    const [loProfile, hiProfile] =
+      startIdx <= endIdx ? [startProfileId, endProfileId] : [endProfileId, startProfileId];
     const [loBoundary, hiBoundary] = startIdx <= endIdx ? [sb, eb] : [eb, sb];
     const covered = sortedProfiles.slice(loIdx, hiIdx + 1);
-    const spanRange = (sortedProfiles[hiIdx].position - sortedProfiles[loIdx].position) || 1;
+    const spanRange = sortedProfiles[hiIdx].position - sortedProfiles[loIdx].position || 1;
 
     let resolvedAny = false;
     covered.forEach((profile) => {
@@ -114,8 +124,18 @@ export function buildTransversalMappingPayload(
           endLockedTo: null,
         };
       }
-      const startLockedTo = resolveLockedTo(profile.id, boundary.startLockedTo, boundary.startPosition, intersectionsData);
-      const endLockedTo = resolveLockedTo(profile.id, boundary.endLockedTo, boundary.endPosition, intersectionsData);
+      const startLockedTo = resolveLockedTo(
+        profile.id,
+        boundary.startLockedTo,
+        boundary.startPosition,
+        intersectionsData,
+      );
+      const endLockedTo = resolveLockedTo(
+        profile.id,
+        boundary.endLockedTo,
+        boundary.endPosition,
+        intersectionsData,
+      );
       const arr = byProfile.get(profile.id);
       if (startLockedTo == null || endLockedTo == null || !arr) return;
       resolvedAny = true;
@@ -132,7 +152,12 @@ export function buildTransversalMappingPayload(
   });
 
   return {
-    payload: { transversal_mapping: profiles.map((p) => ({ profile_id: p.id, mappings: byProfile.get(p.id) ?? [] })) },
+    payload: {
+      transversal_mapping: profiles.map((p) => ({
+        profile_id: p.id,
+        mappings: byProfile.get(p.id) ?? [],
+      })),
+    },
     incomplete,
   };
 }
@@ -146,7 +171,10 @@ export function hydrateTransversalMappings(
   profiles: GeometryProfile[],
 ): TransversalMapping[] {
   const profileById = new Map(profiles.map((p) => [p.id, p]));
-  const groups = new Map<string, { name: string; layup: number; byProfileId: Map<number, ProfileBoundary> }>();
+  const groups = new Map<
+    string,
+    { name: string; layup: number; byProfileId: Map<number, ProfileBoundary> }
+  >();
   transversalMappingData.transversal_mapping.forEach((p) => {
     p.mappings.forEach((entry) => {
       const boundary: ProfileBoundary = {
@@ -181,8 +209,7 @@ export function hydrateTransversalMappings(
       layupId: String(g.layup),
       startProfileId,
       endProfileId,
-      startProfileBoundary: g.byProfileId.get(startProfileId)!,
-      endProfileBoundary: g.byProfileId.get(endProfileId)!,
+      profileBoundaries: Object.fromEntries(g.byProfileId),
     };
   });
 }
