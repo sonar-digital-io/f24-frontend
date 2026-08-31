@@ -35,11 +35,11 @@ const Y_STEP = 0.1;
 const SEED_Y = 0.5;
 
 /**
- * A point is genuinely "locked" (pinned to a landmark, so not freely
- * draggable) only when its locked-to intersection's own position IS the
- * stored position. `resolveLockedTo` snaps every freely-dragged position to
- * its nearest intersection id at save time, so a non-null `lockedTo` alone
- * means nothing — after one save+reload every point would look pinned.
+ * Whether a point currently sits exactly on its locked-to landmark — drives
+ * the marker shape only, never interactivity. `resolveLockedTo` snaps every
+ * freely-dragged position to its nearest intersection id at save time, so a
+ * non-null `lockedTo` alone means nothing: after one save+reload every point
+ * would look pinned.
  */
 function isGenuinelyLocked(
   profileId: number,
@@ -71,9 +71,11 @@ interface SeriesPoint {
  * is the live preview of exactly what save will write, since both it and
  * `buildTransversalMappingPayload` read `effectiveBoundaryValue`. Points
  * without an explicitly-set value are drawn as faded, dashed "ghosts"; they
- * drag like any other point (which is what makes them real). Genuinely
- * pinned points aren't draggable (change the lock target via the popover
- * instead, opened by double-clicking any point). See
+ * drag like any other point (which is what makes them real). A point sitting
+ * exactly on its locked-to intersection is drawn as a diamond — purely
+ * informational, it drags like any other point and reverts to a circle once
+ * dragged off the landmark. Double-clicking any point opens the popover for
+ * exact numeric entry and lock-target selection. See
  * docs/superpowers/specs/2026-08-30-transversal-mapping-span-view-design.md.
  */
 export function TransversalMappingSpanChart({
@@ -184,10 +186,32 @@ export function TransversalMappingSpanChart({
         {points.map(({ profile, value, isGhost, locked }) => {
           const { cx, cy } = project(profile.position, value);
           const label = `${sideLabel} boundary on ${profile.name}${
-            locked ? ' (locked to an intersection)' : isGhost ? ' (not yet set)' : ''
+            locked ? ' (on its locked-to intersection)' : isGhost ? ' (not yet set)' : ''
           }`;
           const ghostProps = isGhost ? { opacity: 0.45, strokeDasharray: '2 2' } : {};
           const isDragging = dragTarget?.profileId === profile.id && dragTarget.field === field;
+          // Every point drags, diamond included — "locked" is only a visual
+          // hint that this point currently sits exactly on a landmark, and it
+          // self-corrects: drag it off and the epsilon check in
+          // `isGenuinelyLocked` fails on the next render, so it becomes a
+          // circle again with no explicit unlock step.
+          const interactionProps = {
+            fill: color,
+            stroke: '#0a0a0a',
+            strokeWidth: 1,
+            ...ghostProps,
+            style: { cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' } as const,
+            role: 'button',
+            tabIndex: 0,
+            'aria-label': label,
+            onPointerDown: (e: React.PointerEvent<SVGElement>) => {
+              e.preventDefault();
+              e.stopPropagation();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              setDragTarget({ profileId: profile.id, field });
+            },
+            onDoubleClick: () => onOpenProfileEditor(profile.id),
+          };
           return (
             <g key={profile.id}>
               {locked ? (
@@ -196,39 +220,13 @@ export function TransversalMappingSpanChart({
                   y={cy - 5}
                   width={10}
                   height={10}
-                  fill={color}
-                  stroke="#0a0a0a"
-                  strokeWidth={1}
                   transform={`rotate(45 ${cx} ${cy})`}
-                  style={{ cursor: 'pointer' }}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={label}
-                  onDoubleClick={() => onOpenProfileEditor(profile.id)}
+                  {...interactionProps}
                 >
                   <title>{label}</title>
                 </rect>
               ) : (
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={6}
-                  fill={color}
-                  stroke="#0a0a0a"
-                  strokeWidth={1}
-                  {...ghostProps}
-                  style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={label}
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                    setDragTarget({ profileId: profile.id, field });
-                  }}
-                  onDoubleClick={() => onOpenProfileEditor(profile.id)}
-                >
+                <circle cx={cx} cy={cy} r={6} {...interactionProps}>
                   <title>{label}</title>
                 </circle>
               )}
@@ -302,9 +300,9 @@ export function TransversalMappingSpanChart({
       <div className="flex items-center justify-between">
         <p className="text-[12px] text-[#6b7280]">
           X: profile position along the span. Y: chordwise position (0–1). Purple = start boundary,
-          teal = end boundary. Diamond = locked to an intersection (double-click to change). Faded
-          dashed circle = not set yet, showing the interpolated value. Drag a circle to adjust;
-          double-click to fine-tune numerically.
+          teal = end boundary. Diamond = sitting exactly on its locked-to intersection. Faded dashed
+          marker = not set yet, showing the interpolated value. Drag any point to adjust;
+          double-click to fine-tune numerically or change its lock target.
         </p>
         <button
           type="button"

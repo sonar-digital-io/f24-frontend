@@ -270,7 +270,22 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
               boundary={getMappingBoundary(editingMapping, editingProfileId)}
               lockOptions={editingLockOptions}
               otherRings={otherRings}
-              onChange={(patch) => updateBoundary(editingMapping.id, editingProfileId!, patch)}
+              // Picking a lock target should also move the point onto that
+              // landmark — the popover only knows the labels, so the caller
+              // fills in the intersection's own position. Mirrors
+              // `recalculateInnerProfiles`, which sets both fields together.
+              onChange={(patch) => {
+                const enriched = { ...patch };
+                if (patch.startLockedTo != null) {
+                  const i = editingIntersections.find((x) => x.id === patch.startLockedTo);
+                  if (i) enriched.startPosition = i.position;
+                }
+                if (patch.endLockedTo != null) {
+                  const i = editingIntersections.find((x) => x.id === patch.endLockedTo);
+                  if (i) enriched.endPosition = i.position;
+                }
+                updateBoundary(editingMapping.id, editingProfileId!, enriched);
+              }}
               onClose={() => setBoundaryEditor(null)}
             />
           </div>
