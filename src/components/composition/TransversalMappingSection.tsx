@@ -257,8 +257,11 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
           </button>
         </div>
 
+        {/* Sits to the right of the span chart (w-[720px] + 16px gap) — the
+            popover can only be opened from a chart point, so both are always
+            open together. */}
         {editingMapping && editingProfileId != null && (
-          <div className="absolute left-0 top-[calc(100%+8px)] z-40">
+          <div className="absolute left-[736px] top-[calc(100%+8px)] z-40">
             <TransversalProfileBoundaryPopover
               profileName={
                 profileOptions.find((p) => p.value === String(editingProfileId))?.label ?? ''
@@ -278,6 +281,7 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
             <TransversalMappingSpanChart
               mapping={spanChartMapping}
               coveredProfilesSortedByPosition={spanChartCoveredProfiles}
+              intersectionsData={intersectionsData}
               onChangeBoundary={(profileId, field, position) =>
                 updateBoundary(spanChartMapping.id, profileId, { [field]: position })
               }

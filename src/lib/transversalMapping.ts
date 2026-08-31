@@ -33,17 +33,22 @@ export function resizeMappingRange(
   if (startIdx === -1 || endIdx === -1) return mapping;
   const [loIdx, hiIdx] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
   const covered = sorted.slice(loIdx, hiIdx + 1);
-  const coveredIds = new Set(covered.map((p) => p.id));
+  // Anything in mapping.profileBoundaries not in `covered` is pruned by
+  // simply not copying it into `next` below.
 
   const next: Record<number, ProfileBoundary> = {};
   covered.forEach((p) => {
     next[p.id] = mapping.profileBoundaries[p.id] ?? EMPTY_BOUNDARY;
   });
-  // Anything still in `mapping.profileBoundaries` but not in `coveredIds` is
-  // pruned by simply not copying it into `next`.
-  void coveredIds; // documents intent; `next` construction above already excludes them
 
   return { ...mapping, profileBoundaries: next };
+}
+
+/** A profile's own two edge intersections are the trailing edge (near
+ *  position 0) and the leading edge (near position 0.5, since arc length
+ *  is measured from the trailing edge around one side and back). */
+function isTrailingEdge(position: number): boolean {
+  return position < 0.5;
 }
 
 /** "Start/end locked to" describes what an intersection point actually is —
@@ -51,7 +56,8 @@ export function resizeMappingRange(
  *  mapping's boundary. */
 export function describeIntersection(entry: CompositionIntersection | undefined): string {
   if (!entry) return '—';
-  if (entry.type === 'edge') return entry.position < 0.5 ? 'Trailing edge' : 'Leading edge';
+  if (entry.type === 'edge')
+    return isTrailingEdge(entry.position) ? 'Trailing edge' : 'Leading edge';
   const name = entry.longitudinal_mapping_name ?? 'Mapping';
   return entry.side ? `${name} (${entry.side})` : name;
 }
@@ -92,9 +98,9 @@ function findNearestIntersectionId(
  * `spar_id`, so two intersections are the same landmark when `type`,
  * `spar_id`, `longitudinal_mapping_id`, `index`, and `side` all match, and
  * — only for a bare profile edge (both spar_id and longitudinal_mapping_id
- * null) — they're both the trailing edge or both the leading edge
- * (position === 0 is always the trailing edge; a profile has exactly one
- * other edge intersection, the leading edge, at some other position).
+ * null) — they're both the trailing edge or both the leading edge (see
+ * `isTrailingEdge`: a near-0 position is the trailing edge; a profile has
+ * exactly one other edge intersection, the leading edge, near 0.5).
  */
 export function isSameLandmark(a: CompositionIntersection, b: CompositionIntersection): boolean {
   if (a.type !== b.type) return false;
@@ -103,7 +109,7 @@ export function isSameLandmark(a: CompositionIntersection, b: CompositionInterse
   if (a.index !== b.index) return false;
   if (a.side !== b.side) return false;
   if (a.spar_id == null && a.longitudinal_mapping_id == null) {
-    return (a.position === 0) === (b.position === 0);
+    return isTrailingEdge(a.position) === isTrailingEdge(b.position);
   }
   return true;
 }
@@ -203,8 +209,49 @@ function resolveLockedTo(
   return findNearestIntersectionId(profileId, position, intersectionsData);
 }
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
+/**
+ * The effective value for one profile's boundary field: its own explicitly-
+ * set value if it has one, otherwise linearly interpolated (by real span
+ * position, not array index) between the nearest COVERED profiles on either
+ * side that DO have an explicit value for this field — not always the two
+ * endpoint profiles. Falls back to whichever single side has a value if
+ * only one side does. Returns null if no covered profile has this field set
+ * at all.
+ *
+ * Used by both buildTransversalMappingPayload (so save reflects exactly
+ * what a user actually set, not just the two endpoints) and
+ * TransversalMappingSpanChart (so the chart's preview matches what save
+ * will actually write).
+ */
+export function effectiveBoundaryValue(
+  coveredProfilesSortedByPosition: GeometryProfile[],
+  profileBoundaries: Record<number, ProfileBoundary>,
+  profileId: number,
+  field: 'startPosition' | 'endPosition',
+): number | null {
+  const own = profileBoundaries[profileId]?.[field];
+  if (own != null) return own;
+  const target = coveredProfilesSortedByPosition.find((p) => p.id === profileId);
+  if (!target) return null;
+
+  let before: { position: number; value: number } | null = null;
+  let after: { position: number; value: number } | null = null;
+  for (const p of coveredProfilesSortedByPosition) {
+    const v = profileBoundaries[p.id]?.[field];
+    if (v == null) continue;
+    if (p.position <= target.position && (!before || p.position > before.position)) {
+      before = { position: p.position, value: v };
+    }
+    if (p.position >= target.position && (!after || p.position < after.position)) {
+      after = { position: p.position, value: v };
+    }
+  }
+  if (before && after) {
+    if (after.position === before.position) return before.value;
+    const t = (target.position - before.position) / (after.position - before.position);
+    return before.value + (after.value - before.value) * t;
+  }
+  return before?.value ?? after?.value ?? null;
 }
 
 /**
@@ -252,22 +299,30 @@ export function buildTransversalMappingPayload(
       return;
     }
     const [loIdx, hiIdx] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
-    const [loBoundary, hiBoundary] = startIdx <= endIdx ? [sb, eb] : [eb, sb];
     const covered = sortedProfiles.slice(loIdx, hiIdx + 1);
-    const spanRange = sortedProfiles[hiIdx].position - sortedProfiles[loIdx].position || 1;
 
     let resolvedAny = false;
     covered.forEach((profile) => {
       // Prefer this profile's own explicitly-set boundary (drag, lock
-      // selection, or a previous Recalculate) — only fall back to a fresh
-      // lerp for a position this profile never got (still EMPTY_BOUNDARY).
+      // selection, or a previous Recalculate); otherwise interpolate between
+      // the nearest covered profiles that DO have an explicit value — so a
+      // dragged inner profile is honoured, not overwritten by an
+      // endpoint-to-endpoint lerp.
       const own = getMappingBoundary(m, profile.id);
-      const t = (profile.position - sortedProfiles[loIdx].position) / spanRange;
       const boundary: ProfileBoundary = {
-        startPosition:
-          own.startPosition ?? lerp(loBoundary.startPosition!, hiBoundary.startPosition!, t),
+        startPosition: effectiveBoundaryValue(
+          covered,
+          m.profileBoundaries,
+          profile.id,
+          'startPosition',
+        ),
         startLockedTo: own.startLockedTo,
-        endPosition: own.endPosition ?? lerp(loBoundary.endPosition!, hiBoundary.endPosition!, t),
+        endPosition: effectiveBoundaryValue(
+          covered,
+          m.profileBoundaries,
+          profile.id,
+          'endPosition',
+        ),
         endLockedTo: own.endLockedTo,
       };
       const startLockedTo = resolveLockedTo(

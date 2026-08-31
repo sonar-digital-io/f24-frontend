@@ -1,16 +1,20 @@
 import { useRef, useState } from 'react';
 import { ChartFrame } from '@/components/common/viewer/ChartFrame';
 import { useChartZoomPan } from '@/hooks/useChartZoomPan';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { dataToPx, pxToData, computeChartAxis } from '@/lib/bezierMath';
+import { effectiveBoundaryValue } from '@/lib/transversalMapping';
 import {
   getMappingBoundary,
   type TransversalMapping,
 } from '@/components/composition/TransversalMappingRow';
 import type { GeometryProfile } from '@/api/types/geometry';
+import type { CompositionProfileIntersections } from '@/api/types/composition';
 
 interface TransversalMappingSpanChartProps {
   mapping: TransversalMapping;
   coveredProfilesSortedByPosition: GeometryProfile[];
+  intersectionsData: CompositionProfileIntersections[] | undefined;
   onChangeBoundary: (
     profileId: number,
     field: 'startPosition' | 'endPosition',
@@ -26,25 +30,62 @@ type DragTarget = { profileId: number; field: 'startPosition' | 'endPosition' } 
 const Y_MIN = 0;
 const Y_MAX = 1;
 const Y_STEP = 0.1;
+/** Cold-start y for a boundary profile of a mapping whose positions are all
+ *  still unset — something has to be on screen to drag or double-click. */
+const SEED_Y = 0.5;
+
+/**
+ * A point is genuinely "locked" (pinned to a landmark, so not freely
+ * draggable) only when its locked-to intersection's own position IS the
+ * stored position. `resolveLockedTo` snaps every freely-dragged position to
+ * its nearest intersection id at save time, so a non-null `lockedTo` alone
+ * means nothing — after one save+reload every point would look pinned.
+ */
+function isGenuinelyLocked(
+  profileId: number,
+  lockedTo: number | null,
+  storedPosition: number | null,
+  intersectionsData: CompositionProfileIntersections[] | undefined,
+): boolean {
+  if (lockedTo == null || storedPosition == null) return false;
+  const intersection = intersectionsData
+    ?.find((p) => p.profile_id === profileId)
+    ?.intersections.find((i) => i.id === lockedTo);
+  if (!intersection) return false;
+  return Math.abs(intersection.position - storedPosition) < 1e-6;
+}
+
+interface SeriesPoint {
+  profile: GeometryProfile;
+  value: number;
+  /** No explicitly-set value on this profile — the value shown is computed
+   *  (interpolated, or the cold-start seed), so it renders faded/dashed. */
+  isGhost: boolean;
+  locked: boolean;
+}
 
 /**
  * Whole-span view of one transversal mapping: X = each covered profile's
  * real spanwise position, Y = chordwise position (0-1). Two point series
- * (start boundary, end boundary) connected by a polyline each — since inner
- * points are either locked (pinned) or linearly interpolated by
- * construction, the polyline itself is the live interpolation preview.
- * Locked points aren't draggable (drag the lock target via the popover
+ * (start boundary, end boundary) connected by a polyline each — the polyline
+ * is the live preview of exactly what save will write, since both it and
+ * `buildTransversalMappingPayload` read `effectiveBoundaryValue`. Points
+ * without an explicitly-set value are drawn as faded, dashed "ghosts"; they
+ * drag like any other point (which is what makes them real). Genuinely
+ * pinned points aren't draggable (change the lock target via the popover
  * instead, opened by double-clicking any point). See
  * docs/superpowers/specs/2026-08-30-transversal-mapping-span-view-design.md.
  */
 export function TransversalMappingSpanChart({
   mapping,
   coveredProfilesSortedByPosition,
+  intersectionsData,
   onChangeBoundary,
   onOpenProfileEditor,
   onRecalculate,
   onClose,
 }: TransversalMappingSpanChartProps) {
+  useEscapeKey(onClose);
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragTarget, setDragTarget] = useState<DragTarget>(null);
   const {
@@ -61,9 +102,19 @@ export function TransversalMappingSpanChart({
   } = useChartZoomPan(svgRef);
 
   const profiles = coveredProfilesSortedByPosition;
-  if (profiles.length === 0) return null;
+  // Degenerate bounds would put NaN into every coordinate — bail out with a
+  // placeholder instead (same idiom as CurveEditor).
+  if (profiles.length < 2 || profiles[profiles.length - 1].position <= profiles[0].position) {
+    return (
+      <div className="flex h-[280px] w-[720px] items-center justify-center rounded-[14px] border border-[#e5e7eb] bg-white text-[12px] text-[#6b7280]">
+        {profiles.length === 0
+          ? 'This mapping’s profiles are no longer in the geometry.'
+          : 'Start and end profile must be different.'}
+      </div>
+    );
+  }
   const xMin = profiles[0].position;
-  const xMax = profiles[profiles.length - 1].position || xMin + 1;
+  const xMax = profiles[profiles.length - 1].position;
   const xAxis = computeChartAxis(xMin, xMax, (xMax - xMin) / 5 || 1);
   const yAxis = computeChartAxis(Y_MIN, Y_MAX, Y_STEP);
 
@@ -85,13 +136,36 @@ export function TransversalMappingSpanChart({
   }
 
   function renderSeries(field: 'startPosition' | 'endPosition', color: string) {
-    const points = profiles
-      .map((p) => ({ profile: p, boundary: getMappingBoundary(mapping, p.id) }))
-      .filter(({ boundary }) => boundary[field] != null);
+    const lockKey = field === 'startPosition' ? 'startLockedTo' : 'endLockedTo';
+    const sideLabel = field === 'startPosition' ? 'Start' : 'End';
+
+    const points: SeriesPoint[] = [];
+    profiles.forEach((profile, i) => {
+      const own = getMappingBoundary(mapping, profile.id);
+      const effective = effectiveBoundaryValue(
+        profiles,
+        mapping.profileBoundaries,
+        profile.id,
+        field,
+      );
+      // Cold start: the mapping's own two boundary profiles always get a
+      // handle, even with nothing set anywhere yet, so the mapping can be
+      // created from scratch. Inner profiles stay hidden until there is
+      // something real to interpolate from.
+      const isEndpoint = i === 0 || i === profiles.length - 1;
+      const value = effective ?? (isEndpoint ? SEED_Y : null);
+      if (value == null) return;
+      points.push({
+        profile,
+        value,
+        isGhost: own[field] == null,
+        locked: isGenuinelyLocked(profile.id, own[lockKey], own[field], intersectionsData),
+      });
+    });
 
     const linePoints = points
-      .map(({ profile, boundary }) => {
-        const { cx, cy } = project(profile.position, boundary[field]!);
+      .map(({ profile, value }) => {
+        const { cx, cy } = project(profile.position, value);
         return `${cx.toFixed(1)},${cy.toFixed(1)}`;
       })
       .join(' ');
@@ -107,10 +181,13 @@ export function TransversalMappingSpanChart({
             vectorEffect="non-scaling-stroke"
           />
         )}
-        {points.map(({ profile, boundary }) => {
-          const { cx, cy } = project(profile.position, boundary[field]!);
-          const lockKey = field === 'startPosition' ? 'startLockedTo' : 'endLockedTo';
-          const locked = boundary[lockKey] != null;
+        {points.map(({ profile, value, isGhost, locked }) => {
+          const { cx, cy } = project(profile.position, value);
+          const label = `${sideLabel} boundary on ${profile.name}${
+            locked ? ' (locked to an intersection)' : isGhost ? ' (not yet set)' : ''
+          }`;
+          const ghostProps = isGhost ? { opacity: 0.45, strokeDasharray: '2 2' } : {};
+          const isDragging = dragTarget?.profileId === profile.id && dragTarget.field === field;
           return (
             <g key={profile.id}>
               {locked ? (
@@ -124,8 +201,13 @@ export function TransversalMappingSpanChart({
                   strokeWidth={1}
                   transform={`rotate(45 ${cx} ${cy})`}
                   style={{ cursor: 'pointer' }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={label}
                   onDoubleClick={() => onOpenProfileEditor(profile.id)}
-                />
+                >
+                  <title>{label}</title>
+                </rect>
               ) : (
                 <circle
                   cx={cx}
@@ -134,13 +216,21 @@ export function TransversalMappingSpanChart({
                   fill={color}
                   stroke="#0a0a0a"
                   strokeWidth={1}
-                  style={{ cursor: 'grab' }}
+                  {...ghostProps}
+                  style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={label}
                   onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     e.currentTarget.setPointerCapture(e.pointerId);
                     setDragTarget({ profileId: profile.id, field });
                   }}
                   onDoubleClick={() => onOpenProfileEditor(profile.id)}
-                />
+                >
+                  <title>{label}</title>
+                </circle>
               )}
             </g>
           );
@@ -150,8 +240,8 @@ export function TransversalMappingSpanChart({
   }
 
   const hasInnerProfiles = profiles.length > 2;
-  const start = getMappingBoundary(mapping, profiles[0]?.id ?? null);
-  const end = getMappingBoundary(mapping, profiles[profiles.length - 1]?.id ?? null);
+  const start = getMappingBoundary(mapping, profiles[0].id);
+  const end = getMappingBoundary(mapping, profiles[profiles.length - 1].id);
   const canRecalculate =
     hasInnerProfiles &&
     start.startPosition != null &&
@@ -211,8 +301,10 @@ export function TransversalMappingSpanChart({
 
       <div className="flex items-center justify-between">
         <p className="text-[12px] text-[#6b7280]">
-          Purple = start boundary, teal = end boundary. Diamond = locked to an intersection
-          (double-click to change). Drag a circle to adjust; double-click to fine-tune numerically.
+          X: profile position along the span. Y: chordwise position (0–1). Purple = start boundary,
+          teal = end boundary. Diamond = locked to an intersection (double-click to change). Faded
+          dashed circle = not set yet, showing the interpolated value. Drag a circle to adjust;
+          double-click to fine-tune numerically.
         </p>
         <button
           type="button"
