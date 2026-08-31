@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { CrossSectionDialog } from '@/components/composition/CrossSectionDialog';
 import { CrossSectionProfileList } from '@/components/composition/CrossSectionProfileList';
 import { TransversalProfileBoundaryPopover } from '@/components/composition/TransversalProfileBoundaryPopover';
+import { TransversalMappingSpanChart } from '@/components/composition/TransversalMappingSpanChart';
 import {
   TransversalMappingRow,
   getMappingBoundary,
@@ -16,6 +17,7 @@ import {
   describeIntersection,
   buildTransversalMappingPayload,
   hydrateTransversalMappings,
+  recalculateInnerProfiles,
   resizeMappingRange,
 } from '@/lib/transversalMapping';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
@@ -65,6 +67,7 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
   const updateTransversalMutation = useUpdateCompositionMappingTransversal(compositionId);
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [boundaryEditor, setBoundaryEditor] = useState<OpenBoundaryEditor | null>(null);
+  const [spanChartMappingId, setSpanChartMappingId] = useState<string | null>(null);
   // Real geometry profile id (as a string) for the Cross-section view.
   const [crossSectionProfile, setCrossSectionProfile] = useState<string | null>(null);
   const crossSectionProfileId = crossSectionProfile ? Number(crossSectionProfile) : NaN;
@@ -159,6 +162,24 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
     }
   }
 
+  const spanChartMapping = spanChartMappingId
+    ? mappings.find((m) => m.id === spanChartMappingId)
+    : undefined;
+  const spanChartCoveredProfiles = (() => {
+    if (
+      !spanChartMapping ||
+      spanChartMapping.startProfileId == null ||
+      spanChartMapping.endProfileId == null
+    )
+      return [];
+    const sorted = [...crossSectionProfiles].sort((a, b) => a.position - b.position);
+    const startIdx = sorted.findIndex((p) => p.id === spanChartMapping.startProfileId);
+    const endIdx = sorted.findIndex((p) => p.id === spanChartMapping.endProfileId);
+    if (startIdx === -1 || endIdx === -1) return [];
+    const [lo, hi] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+    return sorted.slice(lo, hi + 1);
+  })();
+
   const editingMapping = boundaryEditor
     ? mappings.find((m) => m.id === boundaryEditor.mappingId)
     : undefined;
@@ -196,6 +217,7 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
               <th className="h-8 w-[160px] px-2 text-left font-medium text-[#6b7280]">Layup</th>
               <th className="h-8 px-2 text-left font-medium text-[#6b7280]">Start profile</th>
               <th className="h-8 px-2 text-left font-medium text-[#6b7280]">End profile</th>
+              <th className="h-8 w-[110px] px-2 text-left font-medium text-[#6b7280]">Span</th>
               <th className="h-8 w-[40px] px-2" />
             </tr>
           </thead>
@@ -210,14 +232,7 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
                 onStartEditingName={() => setEditingNameId(m.id)}
                 onStopEditingName={() => setEditingNameId(null)}
                 onUpdate={(next) => updateMapping(m.id, next)}
-                onEditStartProfile={() =>
-                  m.startProfileId != null &&
-                  setBoundaryEditor({ mappingId: m.id, profileId: m.startProfileId })
-                }
-                onEditEndProfile={() =>
-                  m.endProfileId != null &&
-                  setBoundaryEditor({ mappingId: m.id, profileId: m.endProfileId })
-                }
+                onEditSpan={() => setSpanChartMappingId(m.id)}
                 onDelete={() => deleteMapping(m.id)}
               />
             ))}
@@ -254,6 +269,31 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
               otherRings={otherRings}
               onChange={(patch) => updateBoundary(editingMapping.id, editingProfileId!, patch)}
               onClose={() => setBoundaryEditor(null)}
+            />
+          </div>
+        )}
+
+        {spanChartMapping && (
+          <div className="absolute left-0 top-[calc(100%+8px)] z-40">
+            <TransversalMappingSpanChart
+              mapping={spanChartMapping}
+              coveredProfilesSortedByPosition={spanChartCoveredProfiles}
+              onChangeBoundary={(profileId, field, position) =>
+                updateBoundary(spanChartMapping.id, profileId, { [field]: position })
+              }
+              onOpenProfileEditor={(profileId) =>
+                setBoundaryEditor({ mappingId: spanChartMapping.id, profileId })
+              }
+              onRecalculate={() =>
+                setMappings((arr) =>
+                  arr.map((m) =>
+                    m.id === spanChartMapping.id
+                      ? recalculateInnerProfiles(m, spanChartCoveredProfiles, intersectionsData)
+                      : m,
+                  ),
+                )
+              }
+              onClose={() => setSpanChartMappingId(null)}
             />
           </div>
         )}

@@ -52,8 +52,7 @@ interface TransversalMappingRowProps {
   onStartEditingName: () => void;
   onStopEditingName: () => void;
   onUpdate: (next: Partial<TransversalMapping>) => void;
-  onEditStartProfile: () => void;
-  onEditEndProfile: () => void;
+  onEditSpan: () => void;
   onDelete: () => void;
 }
 
@@ -68,8 +67,7 @@ export function TransversalMappingRow({
   onStartEditingName,
   onStopEditingName,
   onUpdate,
-  onEditStartProfile,
-  onEditEndProfile,
+  onEditSpan,
   onDelete,
 }: TransversalMappingRowProps) {
   return (
@@ -108,42 +106,31 @@ export function TransversalMappingRow({
         />
       </td>
       <td className="px-2 py-2">
-        <div className="flex items-center gap-2">
-          <SelectField
-            value={m.startProfileId != null ? String(m.startProfileId) : ''}
-            onChange={(v) => onUpdate({ startProfileId: Number(v) })}
-            options={profileOptions}
-            placeholder="Select profile"
-          />
-          <button
-            type="button"
-            onClick={onEditStartProfile}
-            disabled={m.startProfileId == null}
-            aria-label="Edit start profile boundary"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#eef9ff] text-[#006496] hover:bg-[#dcf1ff] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
-          </button>
-        </div>
+        <SelectField
+          value={m.startProfileId != null ? String(m.startProfileId) : ''}
+          onChange={(v) => onUpdate({ startProfileId: Number(v) })}
+          options={profileOptions}
+          placeholder="Select profile"
+        />
       </td>
       <td className="px-2 py-2">
-        <div className="flex items-center gap-2">
-          <SelectField
-            value={m.endProfileId != null ? String(m.endProfileId) : ''}
-            onChange={(v) => onUpdate({ endProfileId: Number(v) })}
-            options={profileOptions}
-            placeholder="Select profile"
-          />
-          <button
-            type="button"
-            onClick={onEditEndProfile}
-            disabled={m.endProfileId == null}
-            aria-label="Edit end profile boundary"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#eef9ff] text-[#006496] hover:bg-[#dcf1ff] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
-          </button>
-        </div>
+        <SelectField
+          value={m.endProfileId != null ? String(m.endProfileId) : ''}
+          onChange={(v) => onUpdate({ endProfileId: Number(v) })}
+          options={profileOptions}
+          placeholder="Select profile"
+        />
+      </td>
+      <td className="px-2 py-2">
+        <button
+          type="button"
+          onClick={onEditSpan}
+          disabled={m.startProfileId == null || m.endProfileId == null}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#eef9ff] px-2 text-[12px] font-medium text-[#006496] hover:bg-[#dcf1ff] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+          Edit span
+        </button>
       </td>
       <td className="px-2 py-2">
         <button
