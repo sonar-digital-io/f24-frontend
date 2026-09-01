@@ -278,6 +278,10 @@ export function buildTransversalMappingPayload(
   let incomplete = 0;
   mappings.forEach((m, rowIndex) => {
     const { startProfileId, endProfileId } = m;
+    // A row added via "Add transversal mapping" and never touched (no
+    // layup, no profiles picked) isn't a mistake worth warning about — it's
+    // just an unused blank row, silently dropped from the payload.
+    const isUntouched = !m.layupId && startProfileId == null && endProfileId == null;
     const sb = getMappingBoundary(m, startProfileId);
     const eb = getMappingBoundary(m, endProfileId);
     if (
@@ -289,7 +293,7 @@ export function buildTransversalMappingPayload(
       eb.startPosition == null ||
       eb.endPosition == null
     ) {
-      incomplete += 1;
+      if (!isUntouched) incomplete += 1;
       return;
     }
     const startIdx = sortedProfiles.findIndex((p) => p.id === startProfileId);

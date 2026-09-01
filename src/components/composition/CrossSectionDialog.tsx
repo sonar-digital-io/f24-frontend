@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { Pencil, X } from 'lucide-react';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useDraggablePosition } from '@/hooks/useDraggablePosition';
 import {
@@ -9,6 +9,8 @@ import {
   buildArcPoints,
   segD,
   fitPointsToSvg,
+  PROFILE_VIEWBOX,
+  LAYUP_COLORS,
 } from '@/lib/crossSectionGeometry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,6 +31,7 @@ interface CsRing {
   color: string;
   /** Inward perpendicular offset in SVG-viewport units */
   svgOffset: number;
+  onEdit?: () => void;
 }
 
 export interface TransversalMappingEntryForCs {
@@ -43,6 +46,14 @@ export interface TransversalMappingEntryForCs {
    *  geometric guess when not provided. */
   startLockedToLabel?: string;
   endLockedToLabel?: string;
+  /** Overrides the auto-cycled ring color — used for the layup-mapping
+   *  reference regions (blue = upper side, orange = lower side), which need
+   *  a consistent, meaningful color rather than one picked by array index. */
+  color?: string;
+  /** Opens this entry's boundary editor for the profile shown here — omitted
+   *  for the read-only layup-mapping reference regions, which have no
+   *  editable boundary of their own. */
+  onEdit?: () => void;
 }
 
 interface CrossSectionDialogProps {
@@ -56,21 +67,23 @@ interface CrossSectionDialogProps {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const VB_W = 800;
-const VB_H = 200;
-const PAD_X = 24;
-const PAD_Y = 16;
+const { width: VB_W, height: VB_H, padX: PAD_X, padY: PAD_Y } = PROFILE_VIEWBOX;
 const INNER_W = VB_W - 2 * PAD_X;
 const INNER_H = VB_H - 2 * PAD_Y;
 
-const RING_OFFSET = 5; // SVG-viewport units between consecutive rings
+const RING_OFFSET = 2; // SVG-viewport units between consecutive rings
 
 // Cycled by index — supports any number of mapping segments.
-const RING_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#e11d48', '#8b5cf6', '#0891b2', '#64748b', '#ca8a04'];
+const RING_COLORS = LAYUP_COLORS;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function CrossSectionDialog({ profileName, points, entries, onClose }: CrossSectionDialogProps) {
+export function CrossSectionDialog({
+  profileName,
+  points,
+  entries,
+  onClose,
+}: CrossSectionDialogProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const { pos, startDrag } = useDraggablePosition(() => ({
     x: Math.max(0, (window.innerWidth - 900) / 2),
@@ -96,8 +109,9 @@ export function CrossSectionDialog({ profileName, points, entries, onClose }: Cr
     endLockedTo: entry.endLockedToLabel ?? perimeterLabel(entry.endFrac, leFrac),
     startFrac: entry.startFrac,
     endFrac: entry.endFrac,
-    color: RING_COLORS[i % RING_COLORS.length],
+    color: entry.color ?? RING_COLORS[i % RING_COLORS.length],
     svgOffset: (i + 1) * RING_OFFSET,
+    onEdit: entry.onEdit,
   }));
 
   // Render order: outermost ring first (underneath), innermost last (on top)
@@ -190,6 +204,7 @@ export function CrossSectionDialog({ profileName, points, entries, onClose }: Cr
                   End locked to
                 </th>
                 <th className="h-9 px-4 text-left text-[12px] font-medium text-[#6b7280]">Layup</th>
+                <th className="h-9 w-[40px] px-2" />
               </tr>
             </thead>
             <tbody>
@@ -224,6 +239,19 @@ export function CrossSectionDialog({ profileName, points, entries, onClose }: Cr
                     </td>
                     <td className="px-4 py-2.5 text-[#374151]">{entry.endLockedTo}</td>
                     <td className="px-4 py-2.5 text-[#374151]">{entry.layupName}</td>
+                    <td className="px-2 py-2.5">
+                      {entry.onEdit && (
+                        <button
+                          type="button"
+                          onClick={entry.onEdit}
+                          aria-label="Edit boundary"
+                          title="Edit boundary"
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-[#006496] hover:bg-[#eef9ff]"
+                        >
+                          <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
