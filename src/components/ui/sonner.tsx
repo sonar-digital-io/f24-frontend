@@ -8,6 +8,7 @@ function Toaster({ ...props }: ToasterProps) {
     <Sonner
       theme="light"
       position="top-center"
+      closeButton
       className="toaster group"
       icons={{
         success: <CircleCheck className="h-4 w-4" />,
