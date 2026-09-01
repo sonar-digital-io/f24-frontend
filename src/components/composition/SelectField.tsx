@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
+import { usePortalDropdown } from '@/hooks/usePortalDropdown';
 
 /** Reusable dropdown matching the LayupPicker / Select pattern used elsewhere.
  *  Rendered via portal so it can escape a scrollable ancestor's clipping
@@ -20,40 +20,7 @@ export function SelectField({
   placeholder = 'Select',
   highlight,
 }: SelectFieldProps) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const dropdownRef = useRef<HTMLUListElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      const target = e.target as Node;
-      if (
-        wrapperRef.current &&
-        !wrapperRef.current.contains(target) &&
-        dropdownRef.current &&
-        !dropdownRef.current.contains(target)
-      ) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  function handleToggle() {
-    if (!open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPos({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-      });
-    }
-    setOpen((o) => !o);
-  }
+  const { open, pos, wrapperRef, buttonRef, dropdownRef, toggle, close } = usePortalDropdown();
 
   const selectedLabel = options.find((o) => o.value === value)?.label;
 
@@ -81,7 +48,7 @@ export function SelectField({
                     onMouseDown={(e) => {
                       e.preventDefault();
                       onChange(opt.value);
-                      setOpen(false);
+                      close();
                     }}
                     className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] leading-5 ${
                       selected ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
@@ -103,7 +70,7 @@ export function SelectField({
       <button
         ref={buttonRef}
         type="button"
-        onClick={handleToggle}
+        onClick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={`flex h-8 w-full items-center justify-between rounded-md border border-[#e2e8f0] px-2 py-1 text-left text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors ${

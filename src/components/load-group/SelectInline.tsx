@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
+import { usePortalDropdown } from '@/hooks/usePortalDropdown';
 
 interface SelectInlineProps {
   value: string;
@@ -11,40 +11,7 @@ interface SelectInlineProps {
 
 /** Small custom dropdown rendered via portal so it can escape table/overflow clipping. */
 export function SelectInline({ value, onChange, options, className = '' }: SelectInlineProps) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const dropdownRef = useRef<HTMLUListElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      const target = e.target as Node;
-      if (
-        wrapperRef.current &&
-        !wrapperRef.current.contains(target) &&
-        dropdownRef.current &&
-        !dropdownRef.current.contains(target)
-      ) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  function handleToggle() {
-    if (!open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setPos({
-        top: rect.bottom + window.scrollY + 2,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-      });
-    }
-    setOpen((o) => !o);
-  }
+  const { open, pos, wrapperRef, buttonRef, dropdownRef, toggle, close } = usePortalDropdown(2);
 
   const dropdown =
     open && pos
@@ -67,10 +34,12 @@ export function SelectInline({ value, onChange, options, className = '' }: Selec
                   onMouseDown={(e) => {
                     e.preventDefault();
                     onChange(opt);
-                    setOpen(false);
+                    close();
                   }}
                   className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-[13px] ${
-                    opt === value ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
+                    opt === value
+                      ? 'bg-[#eef9ff] text-[#171717]'
+                      : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
                   }`}
                 >
                   {opt}
@@ -79,7 +48,7 @@ export function SelectInline({ value, onChange, options, className = '' }: Selec
               </li>
             ))}
           </ul>,
-          document.body
+          document.body,
         )
       : null;
 
@@ -88,7 +57,7 @@ export function SelectInline({ value, onChange, options, className = '' }: Selec
       <button
         ref={buttonRef}
         type="button"
-        onClick={handleToggle}
+        onClick={toggle}
         className="flex h-8 w-full items-center justify-between gap-1 rounded-md border border-[#e2e8f0] bg-white px-2 text-[13px] text-[#0a0a0a] hover:bg-[#f9fafb]"
       >
         <span className="truncate">{value}</span>

@@ -599,13 +599,16 @@ export function CompositionNew() {
     setBezierFor(null);
     // These three tabs all read `layupOptions`/`layups` off the composition
     // detail — refetch it on entry so a layup created elsewhere (or since
-    // this page's initial load) shows up immediately instead of only after
-    // a full reload.
+    // this page's initial load) shows up without a full reload. Not
+    // awaited: the tab switches immediately, and the dropdown options
+    // update reactively off the query cache whenever the response lands —
+    // no reason to stall the switch on network latency for a background
+    // refresh.
     if (
       isEditing &&
       (tab === 'layup' || tab === 'layup-mapping' || tab === 'transversal-mapping')
     ) {
-      await detailQuery.refetch();
+      void detailQuery.refetch();
     }
     if (tab === 'transversal-mapping') await ensureTransversalMappingReady();
     setActiveTab(tab);

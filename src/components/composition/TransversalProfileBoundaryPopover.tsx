@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { SelectField } from '@/components/composition/SelectField';
 import { usePointerDrag } from '@/hooks/usePointerDrag';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   PROFILE_VIEWBOX,
   computeFitTransform,
@@ -67,6 +68,7 @@ export function TransversalProfileBoundaryPopover({
   onClose,
 }: TransversalProfileBoundaryPopoverProps) {
   useEscapeKey(onClose);
+  useBodyScrollLock(true);
   const svgRef = useRef<SVGSVGElement>(null);
   const { dragging, startDrag, endDrag } = usePointerDrag<'start' | 'end'>();
 
@@ -88,22 +90,17 @@ export function TransversalProfileBoundaryPopover({
         .join(' ') + (close ? ' Z' : '')
     );
   }
+  /** Handle position (SVG px) at a boundary fraction, or null if there's no
+   *  position yet or the profile outline hasn't loaded. */
+  function handleAt(fraction: number | null) {
+    if (fraction == null || !pts.length) return null;
+    const p = pointAtArcFraction(pts, fraction);
+    return toPx([p.x, p.y]);
+  }
 
   const outlinePath = pts.length ? pathFor(pts, true) : '';
-  const startHandle =
-    boundary.startPosition != null && pts.length
-      ? toPx(
-          (({ x, y }) => [x, y] as [number, number])(
-            pointAtArcFraction(pts, boundary.startPosition),
-          ),
-        )
-      : null;
-  const endHandle =
-    boundary.endPosition != null && pts.length
-      ? toPx(
-          (({ x, y }) => [x, y] as [number, number])(pointAtArcFraction(pts, boundary.endPosition)),
-        )
-      : null;
+  const startHandle = handleAt(boundary.startPosition);
+  const endHandle = handleAt(boundary.endPosition);
   const highlightPath =
     boundary.startPosition != null && boundary.endPosition != null && pts.length
       ? pathFor(arcSegment(pts, boundary.startPosition, boundary.endPosition), false)
@@ -128,7 +125,12 @@ export function TransversalProfileBoundaryPopover({
   return (
     <div className="flex max-h-[90vh] w-[900px] max-w-[95vw] flex-col gap-3 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white p-4 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[16px] font-semibold leading-6 text-[#0a0a0a]">{profileName}</h3>
+        <h3
+          id="boundary-editor-title"
+          className="text-[16px] font-semibold leading-6 text-[#0a0a0a]"
+        >
+          {profileName}
+        </h3>
         <button
           type="button"
           onClick={onClose}

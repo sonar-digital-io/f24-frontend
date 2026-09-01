@@ -356,6 +356,9 @@ export function TransversalMappingSection({
 
         {editingMapping && editingProfileId != null && (
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="boundary-editor-title"
             className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 p-4"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget) setBoundaryEditor(null);
