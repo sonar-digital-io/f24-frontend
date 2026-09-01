@@ -107,16 +107,52 @@ export function segD(pts: [number, number][]): string {
   return 'M ' + pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' L ');
 }
 
-/** Fit arbitrary data-space points into an SVG viewport: uniform scale (both
- *  axes, so the true shape/aspect ratio is preserved), centered within the
+/** Shared viewBox for every profile cross-section rendering (the Cross-section
+ *  view dialog and the transversal-mapping boundary editor) — kept identical
+ *  across both so the same profile renders at the same scale in either one. */
+export const PROFILE_VIEWBOX = { width: 800, height: 200, padX: 24, padY: 16 };
+
+/** Fallback color palette, cycled by index — used only when a Cross-section
+ *  ring has no more specific color assigned. */
+export const LAYUP_COLORS = [
+  '#22c55e',
+  '#3b82f6',
+  '#f59e0b',
+  '#e11d48',
+  '#8b5cf6',
+  '#0891b2',
+  '#64748b',
+  '#ca8a04',
+];
+
+/** Layup-mapping (longitudinal upper/lower boundary strip) reference-region
+ *  colors — blue for the upper side, yellow/amber for the lower side. Shared
+ *  by the Cross-section view's rings and the 3D preview's per-part mesh
+ *  color, so a layup reads as the same color in both. */
+export const LAYUP_MAPPING_COLORS = { upper: '#2563eb', lower: '#eab308' };
+
+/** Transversal-mapping colors — green/red, cycled by index. Shared by the
+ *  Cross-section view's rings and the 3D preview's per-part mesh color. */
+export const TRANSVERSAL_MAPPING_COLORS = ['#22c55e', '#e11d48'];
+
+export interface FitTransform {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  xMin: number;
+  yMax: number;
+}
+
+/** Uniform data-space → SVG-viewport transform for a set of points: one scale
+ *  for both axes (true shape/aspect ratio preserved), centered within the
  *  padded area, Y flipped (data-space up = smaller SVG y). */
-export function fitPointsToSvg(
+export function computeFitTransform(
   points: [number, number][],
   innerW: number,
   innerH: number,
   padX: number,
   padY: number,
-): [number, number][] {
+): FitTransform {
   const xs = points.map((p) => p[0]);
   const ys = points.map((p) => p[1]);
   const xMin = Math.min(...xs);
@@ -128,11 +164,34 @@ export function fitPointsToSvg(
   const scale = Math.min(innerW / xRange, innerH / yRange);
   const drawW = xRange * scale;
   const drawH = yRange * scale;
-  const offsetX = padX + (innerW - drawW) / 2;
-  const offsetY = padY + (innerH - drawH) / 2;
-  return points.map(([x, y]) => [
-    offsetX + (x - xMin) * scale,
-    offsetY + (yMax - y) * scale,
-  ]);
+  return {
+    scale,
+    offsetX: padX + (innerW - drawW) / 2,
+    offsetY: padY + (innerH - drawH) / 2,
+    xMin,
+    yMax,
+  };
 }
 
+export function applyFitTransform([x, y]: [number, number], t: FitTransform): [number, number] {
+  return [t.offsetX + (x - t.xMin) * t.scale, t.offsetY + (t.yMax - y) * t.scale];
+}
+
+/** Inverse of `applyFitTransform` — SVG-viewport point back to data space. */
+export function invertFitTransform(px: number, py: number, t: FitTransform): [number, number] {
+  return [t.xMin + (px - t.offsetX) / t.scale, t.yMax - (py - t.offsetY) / t.scale];
+}
+
+/** Fit arbitrary data-space points into an SVG viewport: uniform scale (both
+ *  axes, so the true shape/aspect ratio is preserved), centered within the
+ *  padded area, Y flipped (data-space up = smaller SVG y). */
+export function fitPointsToSvg(
+  points: [number, number][],
+  innerW: number,
+  innerH: number,
+  padX: number,
+  padY: number,
+): [number, number][] {
+  const t = computeFitTransform(points, innerW, innerH, padX, padY);
+  return points.map((p) => applyFitTransform(p, t));
+}

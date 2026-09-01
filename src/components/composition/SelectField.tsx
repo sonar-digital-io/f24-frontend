@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
-import { useClickOutside } from '@/hooks/useClickOutside';
+import { usePortalDropdown } from '@/hooks/usePortalDropdown';
 
-/** Reusable dropdown matching the LayupPicker / Select pattern used elsewhere. */
+/** Reusable dropdown matching the LayupPicker / Select pattern used elsewhere.
+ *  Rendered via portal so it can escape a scrollable ancestor's clipping
+ *  (e.g. a modal with `overflow-y-auto`) instead of being cut off. */
 export interface SelectFieldProps {
   value: string;
   onChange: (value: string) => void;
@@ -18,16 +20,57 @@ export function SelectField({
   placeholder = 'Select',
   highlight,
 }: SelectFieldProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useClickOutside<HTMLDivElement>(open, () => setOpen(false));
+  const { open, pos, wrapperRef, buttonRef, dropdownRef, toggle, close } = usePortalDropdown();
 
   const selectedLabel = options.find((o) => o.value === value)?.label;
 
+  const dropdown =
+    open && pos
+      ? createPortal(
+          <ul
+            ref={dropdownRef}
+            role="listbox"
+            style={{
+              position: 'absolute',
+              top: pos.top,
+              left: pos.left,
+              minWidth: pos.width,
+              zIndex: 9999,
+            }}
+            className="max-h-64 overflow-y-auto whitespace-nowrap rounded-md border border-[#e5e7eb] bg-white py-1 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"
+          >
+            {options.map((opt) => {
+              const selected = opt.value === value;
+              return (
+                <li key={opt.value} role="option" aria-selected={selected}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onChange(opt.value);
+                      close();
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] leading-5 ${
+                      selected ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {selected && <Check className="h-3.5 w-3.5" strokeWidth={2} />}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>,
+          document.body,
+        )
+      : null;
+
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={wrapperRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={`flex h-8 w-full items-center justify-between rounded-md border border-[#e2e8f0] px-2 py-1 text-left text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] transition-colors ${
@@ -42,33 +85,7 @@ export function SelectField({
           strokeWidth={2}
         />
       </button>
-      {open && (
-        <ul
-          role="listbox"
-          className="absolute left-0 top-[calc(100%+4px)] z-50 max-h-64 min-w-full overflow-y-auto whitespace-nowrap rounded-md border border-[#e5e7eb] bg-white py-1 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"
-        >
-          {options.map((opt) => {
-            const selected = opt.value === value;
-            return (
-              <li key={opt.value} role="option" aria-selected={selected}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange(opt.value);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] leading-5 ${
-                    selected ? 'bg-[#eef9ff] text-[#171717]' : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
-                  }`}
-                >
-                  <span>{opt.label}</span>
-                  {selected && <Check className="h-3.5 w-3.5" strokeWidth={2} />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {dropdown}
     </div>
   );
 }

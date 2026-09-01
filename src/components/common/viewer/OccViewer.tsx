@@ -33,9 +33,20 @@ import * as THREE from 'three';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { getOcc } from '@/lib/occ-init';
 import { loadIgesShapes, tessellate } from '@/lib/occGeometry';
-import { looksLikeAsciiStl, looksLikeZip, hexDump, parseAsciiStl, parseBinaryStl } from '@/lib/stlParsing';
+import {
+  looksLikeAsciiStl,
+  looksLikeZip,
+  hexDump,
+  parseAsciiStl,
+  parseBinaryStl,
+} from '@/lib/stlParsing';
 import { createViewerScene, fitViewerSceneToBounds, updateGroundFade } from '@/lib/viewerScene';
-import { createDampedOrbitControls, createWireframeOverlay, disposeSceneObjects } from '@/lib/threeViewerSetup';
+import {
+  createDampedOrbitControls,
+  createWireframeOverlay,
+  disposeSceneObjects,
+} from '@/lib/threeViewerSetup';
+import { TRANSVERSAL_MAPPING_COLORS } from '@/lib/crossSectionGeometry';
 
 export interface OccViewerProps {
   className?: string;
@@ -52,12 +63,25 @@ export interface OccViewerProps {
   onStatusChange?: (status: 'loading' | 'ready' | 'error') => void;
   /** Show/hide 3MF objects whose name matches /blade/i. Composition preview only — ignored (all visible) when no such object exists. Defaults to true. */
   showBlade?: boolean;
-  /** Show/hide every other named 3MF object (layups). Composition preview only. Defaults to true. */
-  showLayups?: boolean;
-  /** Overlay the mesh's true wireframe (every triangle edge of the actual geometry, via
-   *  THREE.WireframeGeometry) on top of the solid object — independent of showBlade/
-   *  showLayups, so it stays visible even with the solid fill toggled off. Defaults to
-   *  false. */
+  /** Per-name visibility for every other named 3MF object (layups) — a name
+   *  absent from the map defaults to visible. Composition preview only. */
+  layupVisibility?: Record<string, boolean>;
+  /** Fires once a 3MF result loads, with the distinct non-blade object names
+   *  found — lets callers build one checkbox per layup. Composition preview
+   *  only; never fires for STL/IGES, which have no per-part names. */
+  onLayupNames?: (names: string[]) => void;
+  /** Explicit color for a non-blade 3MF object, by exact name — a part's own
+   *  name (e.g. a layup mapping's user-given name) carries no reliable
+   *  "upper"/"lower" signal on its own, so the caller resolves that from the
+   *  composition's `longitudinal_mapping.upper_side`/`lower_side` names and
+   *  passes it down here. A name absent from the map is assumed to be a
+   *  transversal mapping part and cycles the green/red pair instead. */
+  layupColorOverride?: Record<string, string>;
+  /** Overlay the blade's true wireframe (every triangle edge of its actual
+   *  geometry, via THREE.WireframeGeometry) on top of the solid object —
+   *  independent of showBlade, so it stays visible even with the solid fill
+   *  toggled off. Composition preview only shows the blade's own wireframe,
+   *  never layups'. Defaults to false. */
   showWebView?: boolean;
   /** Skips the by-name blade/layup check for a 3MF result and treats every part as the
    *  blade — for callers with no blade/layup distinction at all (the plain Geometry page,
@@ -77,30 +101,45 @@ export function OccViewer({
   stlScale = 1,
   onStatusChange,
   showBlade = true,
-  showLayups = true,
+  layupVisibility,
+  onLayupNames,
+  layupColorOverride,
   showWebView = false,
   treatAsBlade = false,
   showResetButton = false,
 }: OccViewerProps) {
-  const containerRef  = useRef<HTMLDivElement>(null);
-  const meshesRef     = useRef<THREE.Mesh[]>([]);
-  const resetViewRef  = useRef<(() => void) | null>(null);
-  const webLineRef    = useRef<THREE.LineSegments[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const meshesRef = useRef<THREE.Mesh[]>([]);
+  const resetViewRef = useRef<(() => void) | null>(null);
+  const webLineRef = useRef<THREE.LineSegments[]>([]);
   const showWebViewRef = useRef(showWebView);
-  const bladeObjectsRef  = useRef<THREE.Object3D[]>([]);
-  const layupObjectsRef  = useRef<THREE.Object3D[]>([]);
-  const showBladeRef  = useRef(showBlade);
-  const showLayupsRef = useRef(showLayups);
+  const layupColorOverrideRef = useRef(layupColorOverride);
+  layupColorOverrideRef.current = layupColorOverride;
+  const bladeObjectsRef = useRef<THREE.Object3D[]>([]);
+  // Per-name groups of every non-blade 3MF object, so each layup's
+  // visibility can be toggled independently instead of as one lump.
+  const layupObjectsRef = useRef<Map<string, THREE.Object3D[]>>(new Map());
+  const showBladeRef = useRef(showBlade);
+  const layupVisibilityRef = useRef(layupVisibility);
+  const onLayupNamesRef = useRef(onLayupNames);
+  onLayupNamesRef.current = onLayupNames;
 
   useEffect(() => {
     showBladeRef.current = showBlade;
-    bladeObjectsRef.current.forEach((o) => { o.visible = showBlade; });
+    bladeObjectsRef.current.forEach((o) => {
+      o.visible = showBlade;
+    });
   }, [showBlade]);
 
   useEffect(() => {
-    showLayupsRef.current = showLayups;
-    layupObjectsRef.current.forEach((o) => { o.visible = showLayups; });
-  }, [showLayups]);
+    layupVisibilityRef.current = layupVisibility;
+    layupObjectsRef.current.forEach((objs, name) => {
+      const visible = layupVisibility?.[name] ?? true;
+      objs.forEach((o) => {
+        o.visible = visible;
+      });
+    });
+  }, [layupVisibility]);
   const [status, setStatusState] = useState<'loading' | 'ready' | 'error'>('loading');
   const onStatusChangeRef = useRef(onStatusChange);
   onStatusChangeRef.current = onStatusChange;
@@ -113,14 +152,16 @@ export function OccViewer({
   // of showBlade/showLayups; never touches mesh opacity.
   useEffect(() => {
     showWebViewRef.current = showWebView;
-    webLineRef.current.forEach((l) => { l.visible = showWebView; });
+    webLineRef.current.forEach((l) => {
+      l.visible = showWebView;
+    });
   }, [showWebView]);
 
   useEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
 
-    const w = container.clientWidth  || 800;
+    const w = container.clientWidth || 800;
     const h = container.clientHeight || 600;
 
     // ── Scene / camera / renderer / lights / ground / loading ring ──────────
@@ -179,7 +220,7 @@ export function OccViewer({
     let disposed = false;
     setStatus('loading');
     bladeObjectsRef.current = [];
-    layupObjectsRef.current = [];
+    layupObjectsRef.current = new Map();
 
     // `roots`: top-level objects to auto-fit the camera against. For STL/IGES
     // this is just the meshes themselves (direct children of the scene); for
@@ -187,17 +228,28 @@ export function OccViewer({
     // an object whose own world matrix it can (re)compute — calling it on a
     // deeply-nested child directly would use its parent's possibly-stale
     // matrixWorld instead of freshly computing it top-down.
-    async function loadStl(): Promise<{ newMeshes: THREE.Mesh[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+    async function loadStl(): Promise<{
+      newMeshes: THREE.Mesh[];
+      newWebLines: THREE.LineSegments[];
+      roots: THREE.Object3D[];
+    }> {
       let positions: Float32Array;
       if (typeof stlData === 'string') {
         positions = parseAsciiStl(stlData);
       } else {
         const buf = stlData as ArrayBuffer;
-        positions = looksLikeAsciiStl(buf) ? parseAsciiStl(new TextDecoder().decode(buf)) : parseBinaryStl(buf);
+        positions = looksLikeAsciiStl(buf)
+          ? parseAsciiStl(new TextDecoder().decode(buf))
+          : parseBinaryStl(buf);
       }
       if (positions.length === 0) {
-        const diag = typeof stlData === 'string' ? stlData.slice(0, 200) : hexDump(stlData as ArrayBuffer, 128);
-        throw new Error(`No vertices found in STL — empty or unrecognized file. First bytes: ${diag}`);
+        const diag =
+          typeof stlData === 'string'
+            ? stlData.slice(0, 200)
+            : hexDump(stlData as ArrayBuffer, 128);
+        throw new Error(
+          `No vertices found in STL — empty or unrecognized file. First bytes: ${diag}`,
+        );
       }
 
       const geo = new THREE.BufferGeometry();
@@ -226,19 +278,22 @@ export function OccViewer({
       return { newMeshes: [mesh], newWebLines: [webLines], roots: [mesh] };
     }
 
-    async function loadIges(url: string): Promise<{ newMeshes: THREE.Mesh[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+    async function loadIges(url: string): Promise<{
+      newMeshes: THREE.Mesh[];
+      newWebLines: THREE.LineSegments[];
+      roots: THREE.Object3D[];
+    }> {
       const oc = await getOcc();
 
       // Load IGES file
       const occShapes = await loadIgesShapes(oc, url);
 
       // Tessellate shapes
-      const newMeshes: THREE.Mesh[]         = [];
+      const newMeshes: THREE.Mesh[] = [];
       const newWebLines: THREE.LineSegments[] = [];
 
       for (const { shape, color, opacity } of occShapes) {
         try {
-
           const mesh = tessellate(oc, shape, color, opacity);
           if (!mesh) continue;
           const mat = mesh.material as THREE.MeshPhysicalMaterial;
@@ -261,7 +316,11 @@ export function OccViewer({
       return { newMeshes, newWebLines, roots: newMeshes };
     }
 
-    async function load3mf(): Promise<{ newMeshes: THREE.Mesh[]; newWebLines: THREE.LineSegments[]; roots: THREE.Object3D[] }> {
+    async function load3mf(): Promise<{
+      newMeshes: THREE.Mesh[];
+      newWebLines: THREE.LineSegments[];
+      roots: THREE.Object3D[];
+    }> {
       const loader = new ThreeMFLoader();
       const group = loader.parse(stlData as ArrayBuffer);
       group.scale.setScalar(stlScale);
@@ -269,6 +328,14 @@ export function OccViewer({
 
       const newMeshes: THREE.Mesh[] = [];
       const newWebLines: THREE.LineSegments[] = [];
+      // Non-blade parts split into the same two color groups the
+      // Cross-section view uses: a layup-mapping upper/lower side part
+      // (named accordingly) gets that side's fixed color; everything else is
+      // assumed to be a transversal mapping and cycles the green/red pair by
+      // discovery order — so a part reads as the same color in both views.
+      // Keyed by name so multiple mesh chunks sharing one part name stay the
+      // same color.
+      const transversalColorByName = new Map<string, string>();
 
       group.traverse((obj) => {
         if (!(obj instanceof THREE.Mesh)) return;
@@ -291,9 +358,23 @@ export function OccViewer({
         // would wrongly relabel an actual composition layup as the blade
         // whenever it happens to be the only part in that particular preview.
         const isBlade = treatAsBlade || /blade/i.test(obj.name);
+        const overrideColor = !isBlade ? layupColorOverrideRef.current?.[obj.name] : undefined;
+        let partColor: string | number = 0x94a3b8;
+        if (overrideColor) {
+          partColor = overrideColor;
+        } else if (!isBlade) {
+          if (!transversalColorByName.has(obj.name)) {
+            const next =
+              TRANSVERSAL_MAPPING_COLORS[
+                transversalColorByName.size % TRANSVERSAL_MAPPING_COLORS.length
+              ];
+            transversalColorByName.set(obj.name, next);
+          }
+          partColor = transversalColorByName.get(obj.name)!;
+        }
 
         const mat = new THREE.MeshPhysicalMaterial({
-          color: isBlade ? 0x94a3b8 : 0xf59e0b,
+          color: partColor,
           metalness: 0.3,
           roughness: 0.4,
           side: THREE.DoubleSide,
@@ -305,7 +386,9 @@ export function OccViewer({
         // every regenerate since the whole scene is rebuilt each time.
         const oldMat = obj.material as THREE.Material | THREE.Material[];
         (Array.isArray(oldMat) ? oldMat : [oldMat]).forEach((m) => {
-          Object.values(m).forEach((v) => { if (v instanceof THREE.Texture) v.dispose(); });
+          Object.values(m).forEach((v) => {
+            if (v instanceof THREE.Texture) v.dispose();
+          });
           m.dispose();
         });
         obj.material = mat;
@@ -313,21 +396,31 @@ export function OccViewer({
         obj.receiveShadow = true;
         newMeshes.push(obj);
 
-        (isBlade ? bladeObjectsRef : layupObjectsRef).current.push(obj);
-        obj.visible = isBlade ? showBladeRef.current : showLayupsRef.current;
+        if (isBlade) {
+          bladeObjectsRef.current.push(obj);
+          obj.visible = showBladeRef.current;
 
-        // Sibling of `obj`, not a child of it — a child would inherit `obj.visible`
-        // (see the showBlade/showLayups line above) and disappear along with the
-        // solid mesh, even though the wireframe should stay visible on its own.
-        const webLines = createWireframeOverlay(obj.geometry);
-        webLines.visible = showWebViewRef.current;
-        webLines.position.copy(obj.position);
-        webLines.quaternion.copy(obj.quaternion);
-        webLines.scale.copy(obj.scale);
-        (obj.parent ?? group).add(webLines);
-        newWebLines.push(webLines);
+          // Sibling of `obj`, not a child of it — a child would inherit
+          // `obj.visible` (see the showBlade line above) and disappear along
+          // with the solid mesh, even though the wireframe should stay
+          // visible on its own. Only the blade gets a wireframe overlay — it
+          // should trace exactly the blade's own geometry, not any layup's.
+          const webLines = createWireframeOverlay(obj.geometry);
+          webLines.visible = showWebViewRef.current;
+          webLines.position.copy(obj.position);
+          webLines.quaternion.copy(obj.quaternion);
+          webLines.scale.copy(obj.scale);
+          (obj.parent ?? group).add(webLines);
+          newWebLines.push(webLines);
+        } else {
+          const objs = layupObjectsRef.current.get(obj.name) ?? [];
+          objs.push(obj);
+          layupObjectsRef.current.set(obj.name, objs);
+          obj.visible = layupVisibilityRef.current?.[obj.name] ?? true;
+        }
       });
 
+      onLayupNamesRef.current?.(Array.from(layupObjectsRef.current.keys()));
       return { newMeshes, newWebLines, roots: [group] };
     }
 
@@ -337,7 +430,9 @@ export function OccViewer({
     // once `stlData` actually arrives.
     const loadPromise =
       stlData !== undefined
-        ? (typeof stlData !== 'string' && looksLikeZip(stlData) ? load3mf() : loadStl())
+        ? typeof stlData !== 'string' && looksLikeZip(stlData)
+          ? load3mf()
+          : loadStl()
         : igesUrl
           ? loadIges(igesUrl)
           : null;
@@ -351,7 +446,7 @@ export function OccViewer({
           loadedRoots = roots;
           fitMaxDim = fitViewerSceneToBounds(roots, camera, controls, ground);
 
-          meshesRef.current  = newMeshes;
+          meshesRef.current = newMeshes;
           webLineRef.current = newWebLines;
 
           scene.remove(ring);
@@ -386,10 +481,9 @@ export function OccViewer({
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
-      meshesRef.current  = [];
+      meshesRef.current = [];
       webLineRef.current = [];
     };
-
   }, [igesUrl, stlData, stlScale]);
 
   return (

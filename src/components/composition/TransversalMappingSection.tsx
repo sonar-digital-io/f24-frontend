@@ -1,17 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { CrossSectionDialog } from '@/components/composition/CrossSectionDialog';
+import {
+  CrossSectionDialog,
+  type TransversalMappingEntryForCs,
+} from '@/components/composition/CrossSectionDialog';
 import { CrossSectionProfileList } from '@/components/composition/CrossSectionProfileList';
 import { TransversalProfileBoundaryPopover } from '@/components/composition/TransversalProfileBoundaryPopover';
+import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
 import {
-  EMPTY_BOUNDARY,
   TransversalMappingRow,
+  getMappingBoundary,
+  type ProfileBoundary,
   type TransversalMapping,
 } from '@/components/composition/TransversalMappingRow';
 import { getApiErrorMessage } from '@/lib/apiError';
-import { describeIntersection, buildTransversalMappingPayload, hydrateTransversalMappings } from '@/lib/transversalMapping';
+import {
+  describeIntersection,
+  buildTransversalMappingPayload,
+  hydrateTransversalMappings,
+  resizeMappingRange,
+} from '@/lib/transversalMapping';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import {
   useCompositionDetail,
@@ -21,9 +31,22 @@ import {
 } from '@/hooks/api/useComposition';
 import { geometryKeys, useGeometryProfiles, useGeometryProfile } from '@/hooks/api/useGeometry';
 import { getGeometryProfile } from '@/api/geometry';
+import { LAYUP_MAPPING_COLORS, TRANSVERSAL_MAPPING_COLORS } from '@/lib/crossSectionGeometry';
 
 interface TransversalMappingSectionProps {
   compositionId: number;
+  /** The composition's current geometry id, as already resolved by the parent
+   *  (persisted `composition.geometry` once saved, or the locally-picked one
+   *  before the first save) — this component is always mounted (hidden via
+   *  CSS while another tab is active, so its own state survives tab
+   *  switches), so re-deriving this from its own `compositionDetail` fetch
+   *  would miss the not-yet-persisted case and leave the profile list
+   *  permanently empty during composition creation. */
+  geometryId: number;
+  /** Reports this section's own autosave pending/error state up to the page
+   *  header's shared save-status indicator — this table has no save
+   *  indicator of its own. */
+  onSaveStatusChange?: (status: { pending: boolean; error: boolean }) => void;
 }
 
 function newDraft(): TransversalMapping {
@@ -34,21 +57,26 @@ function newDraft(): TransversalMapping {
     layupId: null,
     startProfileId: null,
     endProfileId: null,
-    startProfileBoundary: EMPTY_BOUNDARY,
-    endProfileBoundary: EMPTY_BOUNDARY,
+    profileBoundaries: {},
   };
 }
 
 interface OpenBoundaryEditor {
   mappingId: string;
-  side: 'start' | 'end';
+  profileId: number;
 }
 
-export function TransversalMappingSection({ compositionId }: TransversalMappingSectionProps) {
+export function TransversalMappingSection({
+  compositionId,
+  geometryId,
+  onSaveStatusChange,
+}: TransversalMappingSectionProps) {
   const [mappings, setMappings] = useState<TransversalMapping[]>([]);
   const { data: compositionDetail } = useCompositionDetail(compositionId);
-  const layupOptions = (compositionDetail?.layups ?? []).map((l) => ({ value: String(l.id), label: l.name }));
-  const geometryId = typeof compositionDetail?.geometry === 'number' ? compositionDetail.geometry : NaN;
+  const layupOptions = (compositionDetail?.layups ?? []).map((l) => ({
+    value: String(l.id),
+    label: l.name,
+  }));
   const { data: geometryProfilesData } = useGeometryProfiles(geometryId);
   const crossSectionProfiles = geometryProfilesData?.profiles ?? [];
   const { data: transversalMappingData } = useCompositionMappingTransversal(compositionId);
@@ -56,6 +84,11 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
   const updateTransversalMutation = useUpdateCompositionMappingTransversal(compositionId);
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [boundaryEditor, setBoundaryEditor] = useState<OpenBoundaryEditor | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  // Snapshot of the last-persisted mapping state — drives the autosave
+  // debounce below, and is kept in sync with hydration so loading an
+  // already-saved composition doesn't immediately re-save it.
+  const [savedMappingsSnapshot, setSavedMappingsSnapshot] = useState<string | null>(null);
   // Real geometry profile id (as a string) for the Cross-section view.
   const [crossSectionProfile, setCrossSectionProfile] = useState<string | null>(null);
   const crossSectionProfileId = crossSectionProfile ? Number(crossSectionProfile) : NaN;
@@ -75,35 +108,118 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
     if (data) pointsByProfileId.set(p.id, data as [number, number][]);
   });
 
-  const profileOptions = crossSectionProfiles.map((p) => ({ value: String(p.id), label: `${p.name} (${p.position})` }));
+  const profileOptions = crossSectionProfiles.map((p) => ({
+    value: String(p.id),
+    label: `${p.name} (${p.position})`,
+  }));
 
   // Hydrate the editable table from whatever's already saved — group the
   // per-profile entries (GET's shape) back into rows by group_id.
-  useHydrateOnce(mappings.length === 0 && !!transversalMappingData && crossSectionProfiles.length > 0, () => {
-    setMappings(hydrateTransversalMappings(transversalMappingData!, crossSectionProfiles));
-  });
+  useHydrateOnce(
+    mappings.length === 0 && !!transversalMappingData && crossSectionProfiles.length > 0,
+    () => {
+      const hydrated = hydrateTransversalMappings(transversalMappingData!, crossSectionProfiles);
+      setMappings(hydrated);
+      setSavedMappingsSnapshot(JSON.stringify(hydrated));
+    },
+  );
 
-  // Saved mapping rings per profile, for the list thumbnails — drawn from
-  // whatever the backend has (freshest right after a save, since the mutation
-  // writes its response straight into this same query's cache).
+  /** Every profile a mapping's start/end profile range covers, sorted by
+   *  span position — the same "which profiles does this row touch" logic
+   *  used by the span chart, the live cross-section rings below, and the
+   *  cross-section dialog's entries, so all three always agree. */
+  function getCoveredProfiles(mapping: TransversalMapping) {
+    if (mapping.startProfileId == null || mapping.endProfileId == null) return [];
+    const sorted = [...crossSectionProfiles].sort((a, b) => a.position - b.position);
+    const startIdx = sorted.findIndex((p) => p.id === mapping.startProfileId);
+    const endIdx = sorted.findIndex((p) => p.id === mapping.endProfileId);
+    if (startIdx === -1 || endIdx === -1) return [];
+    const [lo, hi] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+    return sorted.slice(lo, hi + 1);
+  }
+
+  /**
+   * Reference regions showing where each layup mapping (a longitudinal
+   * mapping's own upper/lower boundary strip, edited on the "Layup mapping"
+   * tab) sits on one profile — drawn even when no transversal mapping has
+   * been created yet. The backend already resolves each longitudinal
+   * mapping's two edges into `type: 'mapping'` intersections (`index` 0/1)
+   * for every profile, in the same 0..1 perimeter-fraction space transversal
+   * mappings use, so this just pairs them up rather than re-deriving
+   * anything from the mapping's own (longitudinal_position, transversal_
+   * position) curve (a different, blade-relative coordinate space).
+   */
+  function longitudinalMappingEntriesForProfile(profileId: number): TransversalMappingEntryForCs[] {
+    const list = intersectionsData?.find((p) => p.profile_id === profileId)?.intersections ?? [];
+    const bySideAndMapping = new Map<string, typeof list>();
+    list.forEach((i) => {
+      if (i.type !== 'mapping' || i.longitudinal_mapping_id == null || i.side == null) return;
+      const key = `${i.longitudinal_mapping_id}:${i.side}`;
+      const arr = bySideAndMapping.get(key) ?? [];
+      arr.push(i);
+      bySideAndMapping.set(key, arr);
+    });
+    const longitudinalEntries = [
+      ...(compositionDetail?.longitudinal_mapping?.upper_side ?? []),
+      ...(compositionDetail?.longitudinal_mapping?.lower_side ?? []),
+    ];
+    const result: TransversalMappingEntryForCs[] = [];
+    bySideAndMapping.forEach((arr, key) => {
+      if (arr.length < 2) return; // need both edges to draw a region
+      const [a, b] = [...arr].sort((x, y) => (x.index ?? 0) - (y.index ?? 0));
+      const [longitudinalMappingId, side] = key.split(':');
+      const lmEntry = longitudinalEntries.find((e) => String(e.id) === longitudinalMappingId);
+      result.push({
+        id: `lm-${key}`,
+        name: a.longitudinal_mapping_name ?? 'Layup mapping',
+        layupName:
+          layupOptions.find((l) => l.value === String(lmEntry?.layup))?.label ?? 'Layup mapping',
+        startFrac: a.position,
+        endFrac: b.position,
+        startLockedToLabel: describeIntersection(a),
+        endLockedToLabel: describeIntersection(b),
+        color: side === 'upper' ? LAYUP_MAPPING_COLORS.upper : LAYUP_MAPPING_COLORS.lower,
+      });
+    });
+    return result;
+  }
+
+  // Mapping rings per profile, for the list thumbnails — drawn from the
+  // live editable `mappings` state (not the last-saved GET response), so an
+  // in-progress, not-yet-saved mapping shows up here immediately too.
   const ringsByProfileId = new Map<number, { startFrac: number; endFrac: number }[]>();
-  transversalMappingData?.transversal_mapping.forEach((p) => {
-    ringsByProfileId.set(
-      p.profile_id,
-      p.mappings.map((m) => ({ startFrac: m.start_position, endFrac: m.end_position })),
-    );
+  mappings.forEach((m) => {
+    getCoveredProfiles(m).forEach((profile) => {
+      const b = getMappingBoundary(m, profile.id);
+      if (b.startPosition == null || b.endPosition == null) return;
+      const rings = ringsByProfileId.get(profile.id) ?? [];
+      rings.push({ startFrac: b.startPosition, endFrac: b.endPosition });
+      ringsByProfileId.set(profile.id, rings);
+    });
   });
 
   function updateMapping(id: string, patch: Partial<TransversalMapping>) {
-    setMappings((arr) => arr.map((m) => (m.id === id ? { ...m, ...patch } : m)));
-  }
-
-  function updateBoundary(id: string, side: 'start' | 'end', patch: Partial<TransversalMapping['startProfileBoundary']>) {
     setMappings((arr) =>
       arr.map((m) => {
         if (m.id !== id) return m;
-        const key = side === 'start' ? 'startProfileBoundary' : 'endProfileBoundary';
-        return { ...m, [key]: { ...m[key], ...patch } };
+        const next = { ...m, ...patch };
+        if ('startProfileId' in patch || 'endProfileId' in patch) {
+          return resizeMappingRange(next, crossSectionProfiles);
+        }
+        return next;
+      }),
+    );
+  }
+
+  function updateBoundary(id: string, profileId: number, patch: Partial<ProfileBoundary>) {
+    setMappings((arr) =>
+      arr.map((m) => {
+        if (m.id !== id) return m;
+        const current = getMappingBoundary(m, profileId);
+        return {
+          ...m,
+          profileBoundaries: { ...m.profileBoundaries, [profileId]: { ...current, ...patch } },
+        };
       }),
     );
   }
@@ -112,51 +228,71 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
     setMappings((arr) => arr.filter((m) => m.id !== id));
   }
 
-  async function handleSave() {
-    const { payload, incomplete } = buildTransversalMappingPayload(mappings, crossSectionProfiles, intersectionsData);
-    if (incomplete > 0) {
-      toast.error(
-        incomplete === 1
-          ? 'One transversal mapping is missing a profile, layup, or boundary position and was not saved.'
-          : `${incomplete} transversal mappings are missing a profile, layup, or boundary position and were not saved.`,
-      );
-    }
-    try {
-      await updateTransversalMutation.mutateAsync(payload);
-    } catch (err) {
-      toast.error(getApiErrorMessage(err));
-    }
+  function confirmDeleteMapping() {
+    if (!pendingDeleteId) return;
+    deleteMapping(pendingDeleteId);
+    setPendingDeleteId(null);
   }
 
-  const editingMapping = boundaryEditor ? mappings.find((m) => m.id === boundaryEditor.mappingId) : undefined;
-  const editingProfileId = editingMapping
-    ? boundaryEditor!.side === 'start'
-      ? editingMapping.startProfileId
-      : editingMapping.endProfileId
-    : null;
-  const editingIntersections = intersectionsData?.find((p) => p.profile_id === editingProfileId)?.intersections ?? [];
+  // Autosave — debounced so it fires after the user pauses editing, and only
+  // once every row is actually complete (a row still missing a profile/layup/
+  // boundary position is silently left out of the request rather than
+  // treated as an error; the user just hasn't finished it yet). A failed
+  // save is attempted once per distinct mapping state — it does not retry in
+  // a loop; it tries again only once the user changes something.
+  const mappingsKey = JSON.stringify(mappings);
+  const hasUnsavedMappings = mappings.length > 0 && mappingsKey !== savedMappingsSnapshot;
+  const lastMappingsAttemptRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!hasUnsavedMappings || updateTransversalMutation.isPending) return;
+    if (updateTransversalMutation.isError && lastMappingsAttemptRef.current === mappingsKey) return;
+
+    const { payload, incomplete } = buildTransversalMappingPayload(
+      mappings,
+      crossSectionProfiles,
+      intersectionsData,
+    );
+    if (incomplete > 0) return;
+
+    const timer = setTimeout(() => {
+      lastMappingsAttemptRef.current = mappingsKey;
+      updateTransversalMutation.mutate(payload, {
+        onSuccess: () => setSavedMappingsSnapshot(mappingsKey),
+        onError: (err) => toast.error(getApiErrorMessage(err)),
+      });
+    }, 800);
+    return () => clearTimeout(timer);
+    // updateTransversalMutation is a fresh object every render; only the
+    // tracked values below should gate the debounce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    mappingsKey,
+    hasUnsavedMappings,
+    updateTransversalMutation.isPending,
+    updateTransversalMutation.isError,
+  ]);
+
+  useEffect(() => {
+    onSaveStatusChange?.({
+      pending: updateTransversalMutation.isPending,
+      error: updateTransversalMutation.isError,
+    });
+    // onSaveStatusChange is a fresh closure every render; only the tracked
+    // mutation flags below should re-report.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateTransversalMutation.isPending, updateTransversalMutation.isError]);
+
+  const editingMapping = boundaryEditor
+    ? mappings.find((m) => m.id === boundaryEditor.mappingId)
+    : undefined;
+  const editingProfileId = editingMapping ? boundaryEditor!.profileId : null;
+  const editingIntersections =
+    intersectionsData?.find((p) => p.profile_id === editingProfileId)?.intersections ?? [];
   const editingLockOptions = [
     { value: 'unlocked', label: 'Unlocked' },
     ...editingIntersections.map((i) => ({ value: String(i.id), label: describeIntersection(i) })),
   ];
-  // Other mappings that also touch this same profile at one of their own
-  // ends — shown as context when "Show all layups" is checked.
-  const otherRings =
-    editingMapping && editingProfileId != null
-      ? mappings
-          .filter((m) => m.id !== editingMapping.id)
-          .flatMap((m) => {
-            const rings: { startFrac: number; endFrac: number }[] = [];
-            if (m.startProfileId === editingProfileId && m.startProfileBoundary.startPosition != null && m.startProfileBoundary.endPosition != null) {
-              rings.push({ startFrac: m.startProfileBoundary.startPosition, endFrac: m.startProfileBoundary.endPosition });
-            }
-            if (m.endProfileId === editingProfileId && m.endProfileBoundary.startPosition != null && m.endProfileBoundary.endPosition != null) {
-              rings.push({ startFrac: m.endProfileBoundary.startPosition, endFrac: m.endProfileBoundary.endPosition });
-            }
-            return rings;
-          })
-      : [];
-
   return (
     <div className="flex flex-col gap-6">
       {/* Top: transversal mapping table */}
@@ -165,9 +301,13 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
           <thead>
             <tr className="border-b border-[#e5e7eb]">
               <th className="h-8 w-[140px] px-2 text-left font-medium text-[#6b7280]">Name</th>
-              <th className="h-8 w-[160px] px-2 text-left font-medium text-[#6b7280]">Layup</th>
-              <th className="h-8 px-2 text-left font-medium text-[#6b7280]">Start profile</th>
-              <th className="h-8 px-2 text-left font-medium text-[#6b7280]">End profile</th>
+              <th className="h-8 w-[140px] px-2 text-left font-medium text-[#6b7280]">Layup</th>
+              <th className="h-8 w-[190px] px-2 text-left font-medium text-[#6b7280]">
+                Start profile
+              </th>
+              <th className="h-8 w-[190px] px-2 text-left font-medium text-[#6b7280]">
+                End profile
+              </th>
               <th className="h-8 w-[40px] px-2" />
             </tr>
           </thead>
@@ -182,9 +322,13 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
                 onStartEditingName={() => setEditingNameId(m.id)}
                 onStopEditingName={() => setEditingNameId(null)}
                 onUpdate={(next) => updateMapping(m.id, next)}
-                onEditStartProfile={() => setBoundaryEditor({ mappingId: m.id, side: 'start' })}
-                onEditEndProfile={() => setBoundaryEditor({ mappingId: m.id, side: 'end' })}
-                onDelete={() => deleteMapping(m.id)}
+                onEditStartBoundary={() =>
+                  setBoundaryEditor({ mappingId: m.id, profileId: m.startProfileId! })
+                }
+                onEditEndBoundary={() =>
+                  setBoundaryEditor({ mappingId: m.id, profileId: m.endProfileId! })
+                }
+                onDelete={() => setPendingDeleteId(m.id)}
               />
             ))}
           </tbody>
@@ -198,25 +342,50 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
             <Plus className="h-4 w-4" strokeWidth={2} />
             Add transversal mapping
           </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={updateTransversalMutation.isPending || mappings.length === 0}
-            className="inline-flex h-8 items-center gap-2 rounded-md bg-[#006496] px-3 text-[12px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {updateTransversalMutation.isPending ? 'Saving…' : 'Save'}
-          </button>
         </div>
 
+        <ConfirmDialog
+          open={pendingDeleteId != null}
+          title="Delete transversal mapping"
+          message="This removes the mapping and saves automatically. This can't be undone."
+          confirmLabel="Delete"
+          danger
+          onConfirm={confirmDeleteMapping}
+          onCancel={() => setPendingDeleteId(null)}
+        />
+
         {editingMapping && editingProfileId != null && (
-          <div className="absolute left-0 top-[calc(100%+8px)] z-40">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="boundary-editor-title"
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/20 p-4"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setBoundaryEditor(null);
+            }}
+          >
             <TransversalProfileBoundaryPopover
-              profileName={profileOptions.find((p) => p.value === String(editingProfileId))?.label ?? ''}
+              profileName={
+                profileOptions.find((p) => p.value === String(editingProfileId))?.label ?? ''
+              }
               points={pointsByProfileId.get(editingProfileId)}
-              boundary={boundaryEditor!.side === 'start' ? editingMapping.startProfileBoundary : editingMapping.endProfileBoundary}
+              boundary={getMappingBoundary(editingMapping, editingProfileId)}
               lockOptions={editingLockOptions}
-              otherRings={otherRings}
-              onChange={(patch) => updateBoundary(editingMapping.id, boundaryEditor!.side, patch)}
+              // Picking a lock target should also move the point onto that
+              // landmark — the popover only knows the labels, so the caller
+              // fills in the intersection's own position.
+              onChange={(patch) => {
+                const enriched = { ...patch };
+                if (patch.startLockedTo != null) {
+                  const i = editingIntersections.find((x) => x.id === patch.startLockedTo);
+                  if (i) enriched.startPosition = i.position;
+                }
+                if (patch.endLockedTo != null) {
+                  const i = editingIntersections.find((x) => x.id === patch.endLockedTo);
+                  if (i) enriched.endPosition = i.position;
+                }
+                updateBoundary(editingMapping.id, editingProfileId!, enriched);
+              }}
               onClose={() => setBoundaryEditor(null)}
             />
           </div>
@@ -234,35 +403,55 @@ export function TransversalMappingSection({ compositionId }: TransversalMappingS
         />
       </div>
 
-      {/* Cross-section view dialog — SVG rings + table both come straight
-          from GET /composition/:id/mapping/transversal/ for this profile. */}
-      {crossSectionProfile && crossSectionPoints && (() => {
-        const prof = crossSectionProfiles.find((p) => String(p.id) === crossSectionProfile);
-        if (!prof) return null;
-        const profileMappings =
-          transversalMappingData?.transversal_mapping.find((p) => p.profile_id === Number(crossSectionProfile))
-            ?.mappings ?? [];
-        const profileIntersections =
-          intersectionsData?.find((p) => p.profile_id === Number(crossSectionProfile))?.intersections ?? [];
-        const entries = profileMappings.map((m, i) => ({
-          id: m.group_id || `${crossSectionProfile}-${i}`,
-          name: m.name,
-          layupName: layupOptions.find((l) => Number(l.value) === m.layup)?.label ?? 'Unknown layup',
-          startFrac: m.start_position,
-          endFrac: m.end_position,
-          startLockedToLabel: describeIntersection(profileIntersections.find((i) => i.id === m.start_locked_to)),
-          endLockedToLabel: describeIntersection(profileIntersections.find((i) => i.id === m.end_locked_to)),
-        }));
+      {/* Cross-section view dialog — SVG rings + table both come from the
+          live editable `mappings` state (not the last-saved GET response),
+          so a mapping you've configured but not yet saved shows up here too. */}
+      {crossSectionProfile &&
+        crossSectionPoints &&
+        (() => {
+          const prof = crossSectionProfiles.find((p) => String(p.id) === crossSectionProfile);
+          if (!prof) return null;
+          const profileId = Number(crossSectionProfile);
+          const profileIntersections =
+            intersectionsData?.find((p) => p.profile_id === profileId)?.intersections ?? [];
+          const entries = mappings
+            .filter((m) => getCoveredProfiles(m).some((p) => p.id === profileId))
+            .map((m, i) => {
+              const b = getMappingBoundary(m, profileId);
+              return {
+                id: `${m.groupId}-${profileId}`,
+                name: m.name,
+                layupName:
+                  layupOptions.find((l) => l.value === m.layupId)?.label ?? 'Unknown layup',
+                startFrac: b.startPosition ?? 0,
+                endFrac: b.endPosition ?? 0,
+                startLockedToLabel: describeIntersection(
+                  profileIntersections.find((i) => i.id === b.startLockedTo),
+                ),
+                endLockedToLabel: describeIntersection(
+                  profileIntersections.find((i) => i.id === b.endLockedTo),
+                ),
+                color: TRANSVERSAL_MAPPING_COLORS[i % TRANSVERSAL_MAPPING_COLORS.length],
+                onEdit: () => setBoundaryEditor({ mappingId: m.id, profileId }),
+              };
+            });
+          // Layup-mapping reference regions (blue = upper, orange = lower)
+          // shown alongside — these exist independently of any transversal
+          // mapping, so they still show up even with an empty table above.
+          const allEntries: TransversalMappingEntryForCs[] = [
+            ...longitudinalMappingEntriesForProfile(profileId),
+            ...entries,
+          ];
 
-        return (
-          <CrossSectionDialog
-            profileName={prof.name}
-            points={crossSectionPoints as [number, number][]}
-            entries={entries}
-            onClose={() => setCrossSectionProfile(null)}
-          />
-        );
-      })()}
+          return (
+            <CrossSectionDialog
+              profileName={prof.name}
+              points={crossSectionPoints as [number, number][]}
+              entries={allEntries}
+              onClose={() => setCrossSectionProfile(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

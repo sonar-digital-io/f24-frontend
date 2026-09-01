@@ -1,29 +1,38 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { SelectField } from '@/components/composition/SelectField';
-import { useChartZoomPan } from '@/hooks/useChartZoomPan';
 import { usePointerDrag } from '@/hooks/usePointerDrag';
-import { ChartZoomControls } from '@/components/common/viewer/ChartZoomControls';
-import { ChartBackgroundRect } from '@/components/common/viewer/ChartBackgroundRect';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
-import { dataToPx, pxToData } from '@/lib/bezierMath';
-import { arcFractionNearestTo, pointAtArcFraction, profileDomainFromPoints } from '@/lib/profileGeometry';
-import type { ControlPoint } from '@/types';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import {
+  PROFILE_VIEWBOX,
+  computeFitTransform,
+  applyFitTransform,
+  invertFitTransform,
+} from '@/lib/crossSectionGeometry';
+import { arcFractionNearestTo, pointAtArcFraction } from '@/lib/profileGeometry';
 import type { ProfileBoundary } from '@/components/composition/TransversalMappingRow';
 
 const UNLOCKED = 'unlocked';
-const RING_COLORS = ['#0d9488', '#ca8a04', '#dc2626', '#2563eb', '#c026d3'];
 const ARC_STEPS = 48;
 
-function arcSegment(points: [number, number][], startFrac: number, endFrac: number): ControlPoint[] {
+const { width: VB_W, height: VB_H, padX: PAD_X, padY: PAD_Y } = PROFILE_VIEWBOX;
+const INNER_W = VB_W - 2 * PAD_X;
+const INNER_H = VB_H - 2 * PAD_Y;
+
+function arcSegment(
+  points: [number, number][],
+  startFrac: number,
+  endFrac: number,
+): [number, number][] {
   const span = endFrac >= startFrac ? endFrac - startFrac : 1 - startFrac + endFrac;
-  const out: ControlPoint[] = [];
+  const out: [number, number][] = [];
   for (let i = 0; i <= ARC_STEPS; i++) {
     const t = startFrac + (span * i) / ARC_STEPS;
-    out.push(pointAtArcFraction(points, t > 1 ? t - 1 : t));
+    const p = pointAtArcFraction(points, t > 1 ? t - 1 : t);
+    out.push([p.x, p.y]);
   }
   return out;
 }
@@ -34,17 +43,11 @@ function parsePosition(raw: string): number | null {
   return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null;
 }
 
-export interface OtherRing {
-  startFrac: number;
-  endFrac: number;
-}
-
 interface TransversalProfileBoundaryPopoverProps {
   profileName: string;
   points: [number, number][] | undefined;
   boundary: ProfileBoundary;
   lockOptions: { value: string; label: string }[];
-  otherRings: OtherRing[];
   onChange: (patch: Partial<ProfileBoundary>) => void;
   onClose: () => void;
 }
@@ -53,52 +56,51 @@ interface TransversalProfileBoundaryPopoverProps {
  * One profile's own boundary editor for a transversal mapping — the profile's
  * real cross-section outline, draggable start/end handles on it (both free to
  * move around the whole closed contour), and the numeric position + locked-to
- * fields the drag keeps in sync with. "Show all layups" overlays every other
- * mapping that also has its start or end on this same profile, for context.
+ * fields the drag keeps in sync with. Uses the same fixed viewBox/fit as
+ * `CrossSectionDialog` so a profile renders at the same size and scale in both.
  */
 export function TransversalProfileBoundaryPopover({
   profileName,
   points,
   boundary,
   lockOptions,
-  otherRings,
   onChange,
   onClose,
 }: TransversalProfileBoundaryPopoverProps) {
   useEscapeKey(onClose);
+  useBodyScrollLock(true);
   const svgRef = useRef<SVGSVGElement>(null);
   const { dragging, startDrag, endDrag } = usePointerDrag<'start' | 'end'>();
-  const [showAllLayups, setShowAllLayups] = useState(false);
-  const {
-    zoom,
-    viewX,
-    viewY,
-    viewW,
-    viewH,
-    panningPointerId,
-    screenToViewBox,
-    resetView,
-    bgPointerHandlers,
-    zoomControlProps,
-  } = useChartZoomPan(svgRef);
 
   const pts = points ?? [];
-  const { domainXMin, domainXMax, domainYMin, domainYMax } = profileDomainFromPoints(pts);
+  const transform = computeFitTransform(pts, INNER_W, INNER_H, PAD_X, PAD_Y);
 
-  function toPx(p: ControlPoint) {
-    return dataToPx(p, domainXMin, domainXMax, domainYMin, domainYMax);
+  function toPx(p: [number, number]) {
+    const [cx, cy] = applyFitTransform(p, transform);
+    return { cx, cy };
   }
-  function pathFor(segment: ControlPoint[], close: boolean) {
+  function pathFor(segment: [number, number][], close: boolean) {
     if (!segment.length) return '';
     return (
-      segment.map((p, i) => `${i === 0 ? 'M' : 'L'} ${toPx(p).cx.toFixed(1)} ${toPx(p).cy.toFixed(1)}`).join(' ') +
-      (close ? ' Z' : '')
+      segment
+        .map((p, i) => {
+          const { cx, cy } = toPx(p);
+          return `${i === 0 ? 'M' : 'L'} ${cx.toFixed(1)} ${cy.toFixed(1)}`;
+        })
+        .join(' ') + (close ? ' Z' : '')
     );
   }
+  /** Handle position (SVG px) at a boundary fraction, or null if there's no
+   *  position yet or the profile outline hasn't loaded. */
+  function handleAt(fraction: number | null) {
+    if (fraction == null || !pts.length) return null;
+    const p = pointAtArcFraction(pts, fraction);
+    return toPx([p.x, p.y]);
+  }
 
-  const outlinePath = pts.length ? pathFor(pts.map(([x, y]) => ({ x, y })), true) : '';
-  const startHandle = boundary.startPosition != null && pts.length ? toPx(pointAtArcFraction(pts, boundary.startPosition)) : null;
-  const endHandle = boundary.endPosition != null && pts.length ? toPx(pointAtArcFraction(pts, boundary.endPosition)) : null;
+  const outlinePath = pts.length ? pathFor(pts, true) : '';
+  const startHandle = handleAt(boundary.startPosition);
+  const endHandle = handleAt(boundary.endPosition);
   const highlightPath =
     boundary.startPosition != null && boundary.endPosition != null && pts.length
       ? pathFor(arcSegment(pts, boundary.startPosition, boundary.endPosition), false)
@@ -106,18 +108,29 @@ export function TransversalProfileBoundaryPopover({
 
   function handlePointerMove(e: React.PointerEvent) {
     if (!dragging || !pts.length) return;
-    const local = screenToViewBox(e.clientX, e.clientY);
-    if (!local) return;
-    const data = pxToData(local.x, local.y, domainXMin, domainXMax, domainYMin, domainYMax);
-    const t = arcFractionNearestTo(pts, data);
+    const svg = svgRef.current;
+    if (!svg) return;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const local = pt.matrixTransform(ctm.inverse());
+    const [x, y] = invertFitTransform(local.x, local.y, transform);
+    const t = arcFractionNearestTo(pts, { x, y });
     if (dragging === 'start') onChange({ startPosition: t });
     else onChange({ endPosition: t });
   }
 
   return (
-    <div className="flex w-[560px] flex-col gap-3 rounded-[14px] border border-[#e5e7eb] bg-white p-4 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]">
+    <div className="flex max-h-[90vh] w-[900px] max-w-[95vw] flex-col gap-3 overflow-y-auto rounded-[14px] border border-[#e5e7eb] bg-white p-4 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[16px] font-semibold leading-6 text-[#0a0a0a]">{profileName}</h3>
+        <h3
+          id="boundary-editor-title"
+          className="text-[16px] font-semibold leading-6 text-[#0a0a0a]"
+        >
+          {profileName}
+        </h3>
         <button
           type="button"
           onClick={onClose}
@@ -128,44 +141,33 @@ export function TransversalProfileBoundaryPopover({
         </button>
       </div>
 
-      <div className="relative h-[220px] w-full rounded-md border border-[#e5e7eb] bg-white">
-        <ChartZoomControls {...zoomControlProps} />
+      <div className="h-[180px] w-full rounded-md border border-[#e5e7eb] bg-white">
         {pts.length ? (
           <svg
             ref={svgRef}
-            viewBox={`${viewX} ${viewY} ${viewW} ${viewH}`}
+            viewBox={`0 0 ${VB_W} ${VB_H}`}
             className="h-full w-full touch-none"
             aria-label="Profile cross-section"
             onPointerMove={handlePointerMove}
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
           >
-            <ChartBackgroundRect
-              viewX={viewX}
-              viewY={viewY}
-              viewW={viewW}
-              viewH={viewH}
-              zoom={zoom}
-              panningPointerId={panningPointerId}
-              bgPointerHandlers={bgPointerHandlers}
-              onDoubleClick={resetView}
+            <path
+              d={outlinePath}
+              fill="none"
+              stroke="#0a0a0a"
+              strokeWidth={1.5}
+              vectorEffect="non-scaling-stroke"
             />
-            <path d={outlinePath} fill="none" stroke="#0a0a0a" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-
-            {showAllLayups &&
-              otherRings.map((ring, i) => (
-                <path
-                  key={i}
-                  d={pathFor(arcSegment(pts, ring.startFrac, ring.endFrac), false)}
-                  fill="none"
-                  stroke={RING_COLORS[i % RING_COLORS.length]}
-                  strokeWidth={2}
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
 
             {highlightPath && (
-              <path d={highlightPath} fill="none" stroke="#9333ea" strokeWidth={3} vectorEffect="non-scaling-stroke" />
+              <path
+                d={highlightPath}
+                fill="none"
+                stroke="#9333ea"
+                strokeWidth={3}
+                vectorEffect="non-scaling-stroke"
+              />
             )}
             {startHandle && (
               <circle
@@ -191,7 +193,9 @@ export function TransversalProfileBoundaryPopover({
             )}
           </svg>
         ) : (
-          <div className="flex h-full items-center justify-center text-[13px] text-[#6b7280]">Loading profile…</div>
+          <div className="flex h-full items-center justify-center text-[13px] text-[#6b7280]">
+            Loading profile…
+          </div>
         )}
       </div>
 
@@ -239,11 +243,6 @@ export function TransversalProfileBoundaryPopover({
           />
         </div>
       </div>
-
-      <label className="flex items-center gap-2 text-[13px] text-[#0a0a0a]">
-        <Checkbox checked={showAllLayups} onCheckedChange={setShowAllLayups} />
-        Show all layups
-      </label>
     </div>
   );
 }
