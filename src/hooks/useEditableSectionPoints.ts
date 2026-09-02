@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ControlPoint } from '@/types';
-import { applyXConstraints, clamp } from '@/lib/bezierMath';
+import { applyXConstraints } from '@/lib/bezierMath';
 
 type Field = 'x' | 'y';
 
@@ -25,6 +25,10 @@ export function useEditableSectionPoints<K extends string>(
   /** Fires when a point is added (footer button) or a table x/y edit is committed
    *  (blur) — not on every keystroke while typing. */
   onCommit?: () => void,
+  /** Fires while typing a table Y value that falls outside `getYBounds`' current
+   *  range — lets the caller widen its own Y-bounds state so the value is kept
+   *  (not clamped back down) and stays visible on the chart. */
+  onYOutOfBounds?: (key: K, value: number) => void,
 ) {
   const [sectionPoints, setSectionPoints] = useState<Record<K, ControlPoint[]>>(initial);
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
@@ -76,14 +80,17 @@ export function useEditableSectionPoints<K extends string>(
     setEditingValues((v) => ({ ...v, [fieldKey(section, idx, field)]: normalized }));
     const parsed = parseFloat(normalized);
     if (!Number.isFinite(parsed)) return;
+    if (field === 'y') {
+      const { min, max } = getYBounds(section);
+      if (parsed < min || parsed > max) onYOutOfBounds?.(section, parsed);
+    }
     setSectionPoints((current) => {
       const list = current[section];
-      const { min, max } = getYBounds(section);
       const nextList = list.map((p, i) => {
         if (i !== idx) return p;
         if (field === 'x')
           return { ...p, x: applyXConstraints(list, idx, parsed, 0, 1, getRootX?.(section)) };
-        return { ...p, y: clamp(parsed, min, max) };
+        return { ...p, y: parsed };
       });
       return { ...current, [section]: nextList };
     });

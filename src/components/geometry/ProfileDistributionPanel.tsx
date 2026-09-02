@@ -130,7 +130,7 @@ export function ProfileDistributionPanel({
     );
     return SECTION_KEYS.reduce(
       (acc, key) => {
-        acc[key] = parameterMap.get(SECTION_TO_REFERENCE[key])?.curve_type ?? 'spline';
+        acc[key] = parameterMap.get(SECTION_TO_REFERENCE[key])?.curve_type ?? 'bezier';
         return acc;
       },
       {} as Record<SectionKey, CurveType>,
@@ -140,6 +140,16 @@ export function ProfileDistributionPanel({
   const requestCommit = useDeferredCommit(() => {
     if (hasEnoughPoints) onCommit(buildParams());
   });
+
+  // A table Y edit outside the current range widens it (rather than clamping
+  // the typed value back down) so the point stays put and visible on the chart.
+  const [yBounds, setYBounds] = useState({ min: 0, max: Y_MAX });
+  function expandYBounds(_key: SectionKey, value: number) {
+    setYBounds((current) => ({
+      min: Math.min(current.min, value),
+      max: Math.max(current.max, value),
+    }));
+  }
 
   // This panel unmounts/remounts on tab switch, so mounting == opening the tab —
   // save immediately rather than waiting for the first field blur/point edit.
@@ -162,10 +172,11 @@ export function ProfileDistributionPanel({
         {} as Record<SectionKey, ControlPoint[]>,
       );
     })(),
-    () => ({ min: 0, max: Y_MAX }),
+    () => yBounds,
     2,
     () => rootX,
     requestCommit,
+    expandYBounds,
   );
 
   function handleCurveTypeChange(key: SectionKey, next: CurveType) {
@@ -246,7 +257,8 @@ export function ProfileDistributionPanel({
         onCommit={requestCommit}
         curveType={curveType[key]}
         onCurveTypeChange={(next) => handleCurveTypeChange(key, next)}
-        yMax={Y_MAX}
+        yMin={yBounds.min}
+        yMax={yBounds.max}
         rootX={rootX}
         valueLabel={valueLabel}
         idPrefix={key}

@@ -2,8 +2,8 @@ import { cn } from '@/lib/utils';
 import type { CurveType } from '@/types';
 
 const OPTIONS: { type: CurveType; label: string }[] = [
-  { type: 'spline', label: 'Spline' },
   { type: 'bezier', label: 'Bézier' },
+  { type: 'spline', label: 'Spline' },
 ];
 
 interface CurveTypeToggleProps {
