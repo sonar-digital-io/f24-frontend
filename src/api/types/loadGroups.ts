@@ -31,10 +31,14 @@ export interface LoadLimitRange {
   curve: LoadLimitCurvePoint[];
 }
 
+/** curve_type is UI-only (spline/bezier toggle) — the limits endpoint's schema
+ *  rejects it as an unknown property, so it's stripped before PUT. */
+export type LoadLimitRangePayload = Omit<LoadLimitRange, 'curve_type'>;
+
 export interface LoadGroupLimitsPayload {
-  rpm_thrust_limit: LoadLimitRange;
-  rpm_torque_limit: LoadLimitRange;
-  rpm_power_limit: LoadLimitRange;
+  rpm_thrust_limit: LoadLimitRangePayload;
+  rpm_torque_limit: LoadLimitRangePayload;
+  rpm_power_limit: LoadLimitRangePayload;
 }
 
 export type LoadCaseFlag = 'fix' | 'range';
