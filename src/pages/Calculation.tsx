@@ -12,14 +12,16 @@ import { ColumnFilterButton } from '@/components/common/list/ColumnFilterButton'
 import { ColumnFilterPanel } from '@/components/common/list/ColumnFilterPanel';
 import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
+import { DeleteConfirmDialog } from '@/components/common/list/DeleteConfirmDialog';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
+import { useDeleteConfirm } from '@/hooks/useDeleteConfirm';
 import { useSortState } from '@/hooks/useSortState';
 import { matchesDateRange, matchesQuery, paginate, sortItems } from '@/lib/listTable';
 import type { CalculationSortKey } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 import { type Calculation } from '@/data/calculations';
-import { useProjectList } from '@/hooks/api/useProjects';
+import { useDeleteProject, useProjectList } from '@/hooks/api/useProjects';
 import type { Project } from '@/api/types/projects';
 
 const PAGE_SIZE = 10;
@@ -53,6 +55,14 @@ export function Calculation() {
   const CALCULATIONS = useMemo(
     () => (backendProjects ?? []).map(toUiCalculation),
     [backendProjects],
+  );
+
+  // Project/calculation ids are UUID strings, unlike the other list pages'
+  // numeric backend ids — pass the id straight through instead of Number()-ing it.
+  const deleteMutation = useDeleteProject();
+  const { pendingDelete, setPendingDelete, handleConfirmDelete } = useDeleteConfirm<string>(
+    deleteMutation,
+    (id) => id,
   );
 
   const allStatuses = useMemo(
@@ -155,7 +165,13 @@ export function Calculation() {
                 loadingLabel="Loading calculations…"
                 errorLabel="Failed to load calculations from the server."
                 rows={pageRows}
-                renderRow={(item) => <CalculationRow key={item.id} item={item} />}
+                renderRow={(item) => (
+                  <CalculationRow
+                    key={item.id}
+                    item={item}
+                    onDelete={() => setPendingDelete({ id: item.id, name: item.name })}
+                  />
+                )}
                 emptyLabel={
                   CALCULATIONS.length === 0
                     ? 'No calculations yet. Click "New calculation" to get started.'
@@ -168,6 +184,15 @@ export function Calculation() {
       </main>
 
       <Footer />
+
+      <DeleteConfirmDialog
+        entityLabel="calculation"
+        pendingDelete={pendingDelete}
+        isPending={deleteMutation.isPending}
+        isError={deleteMutation.isError}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
 
       <ColumnFilterPanel
         open={statusFilter.open}
