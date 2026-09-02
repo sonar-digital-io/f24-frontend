@@ -76,15 +76,19 @@ interface EditPageToolbarActionsProps {
 }
 
 /**
- * Centered title + right-side Saved/Saving indicator / Exit button group
- * shared by all edit-page sub-toolbars (`EditPageToolbar`, `CalculationSubToolbar`).
- * Each caller renders its own tabs on the left, since those differ too much
- * (disabled states, tooltips) to share.
+ * Title (centered in the space between the tabs and the Saved/Saving+Exit
+ * group, not the whole toolbar — truncates with an ellipsis instead of
+ * overlapping either side when too long) + right-side Saved/Saving indicator
+ * / Exit button group, shared by all edit-page sub-toolbars (`EditPageToolbar`,
+ * `CalculationSubToolbar`). Each caller renders its own tabs on the left,
+ * since those differ too much (disabled states, tooltips) to share — the
+ * caller's container must be a `flex` row so this title's `flex-1` can claim
+ * the actual remaining space between tabs and actions.
  */
 export function EditPageToolbarActions({ title, onBack, status, children }: EditPageToolbarActionsProps) {
   return (
     <>
-      <h1 className="pointer-events-none absolute left-1/2 hidden -translate-x-1/2 text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
+      <h1 className="pointer-events-none hidden min-w-0 flex-1 truncate px-4 text-center text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
         {title}
       </h1>
 
