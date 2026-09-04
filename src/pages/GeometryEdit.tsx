@@ -457,7 +457,12 @@ export function GeometryEdit() {
     if (!g?.profiles?.length || g.edges?.length) return;
     if (defaultEdgesSentRef.current || updateEdgesMutation.isPending) return;
     defaultEdgesSentRef.current = true;
-    const nominalRadius = Number(props.nominal_radius) || 1;
+    // Read straight off the fresh GET response, not the `props` form state — that state
+    // only gets hydrated from this same `detailQuery.data` on a *later* render (see the
+    // useHydrateOnce above), so on the render where this effect first fires it's still
+    // pre-hydration and would silently divide by the wrong (fallback) radius.
+    const nominalRadiusSetting = g.settings?.find((kv) => kv.reference === 'nominal_radius');
+    const nominalRadius = Number(nominalRadiusSetting?.value) || 1;
     updateEdgesMutation
       .mutateAsync({ edges: buildDefaultEdges(nominalRadius) })
       .then(() => detailQuery.refetch())
@@ -467,7 +472,7 @@ export function GeometryEdit() {
         defaultEdgesSentRef.current = false;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNew, detailQuery.data, props.nominal_radius]);
+  }, [isNew, detailQuery.data]);
 
   // There's no dedicated "3D view" tab — the result is fetched/regenerated in the
   // background as soon as GET /geometry/:id/ reports everything it needs: non-empty

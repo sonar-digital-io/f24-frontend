@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import {
   TablePickerDialog,
   type TablePickerColumn,
@@ -53,11 +52,9 @@ export function MaterialPickerDialog({
   const materials = data ?? [];
   // Parameterless (no ?material=) sysconfig fetch — just need mech_prop_type's id->name catalog.
   const { data: sysconfigData } = useMaterialSysconfig(NaN);
-  const typeNameById = useMemo(() => {
-    const options = sysconfigData ? getMechPropTypeParameter(sysconfigData)?.options : undefined;
-    return new Map((options ?? []).map((o) => [o.id, toTitleCase(o.name)]));
-  }, [sysconfigData]);
-  const columns = useMemo(() => buildColumns(typeNameById), [typeNameById]);
+  const typeOptions = sysconfigData ? getMechPropTypeParameter(sysconfigData)?.options : undefined;
+  const typeNameById = new Map((typeOptions ?? []).map((o) => [o.id, toTitleCase(o.name)]));
+  const columns = buildColumns(typeNameById);
 
   return (
     <TablePickerDialog

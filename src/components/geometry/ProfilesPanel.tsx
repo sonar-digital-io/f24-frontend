@@ -1,11 +1,11 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Info, Plus, Trash2, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { INITIAL_PROFILES, type Profile } from '@/data/profiles';
 import { nextLocalId } from '@/lib/utils';
 import { ProfileDetailPopover } from '@/components/geometry/ProfileDetailPopover';
-import { useDeferredCommit } from '@/hooks/useDeferredCommit';
+import { useCommitOnce } from '@/hooks/useDeferredCommit';
 
 const HIDE_BANNER_KEY = 'f24_profiles_mode_hide';
 
@@ -29,22 +29,15 @@ export function ProfilesPanel({ geometryId, initialProfiles, onCommit }: Profile
     (initialProfiles ?? INITIAL_PROFILES)[0]?.id ?? null,
   );
 
-  // Tracks the signature of whatever profiles were last actually sent — closing the
-  // detail popover (onClose below) always requests a commit regardless of whether
-  // anything inside it actually changed, so this is what stops that from PUTting a
-  // no-op every time.
-  const lastCommittedRef = useRef<string | null>(JSON.stringify(profiles));
-  const requestCommit = useDeferredCommit(async () => {
-    const signature = JSON.stringify(profiles);
-    if (signature === lastCommittedRef.current) return;
-    try {
-      await onCommit?.(profiles);
-      lastCommittedRef.current = signature;
-    } catch {
-      // Left unmarked on failure (onCommit's own mutation already toasts) — the same
-      // value can be retried instead of being silently skipped as "already sent".
-    }
-  });
+  // Closing the detail popover (onClose below) always requests a commit regardless of
+  // whether anything inside it actually changed — useCommitOnce is what stops that from
+  // PUTting a no-op every time.
+  const requestCommit = useCommitOnce(
+    () => profiles,
+    async (value) => {
+      await onCommit?.(value);
+    },
+  );
 
   function handleUpdate(next: Profile) {
     setProfiles((current) => current.map((p) => (p.id === next.id ? next : p)));

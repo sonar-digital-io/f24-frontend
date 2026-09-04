@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useLoadCases, useUpdateLoadCases } from '@/hooks/api/useLoadGroups';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { loadCaseHasErrors } from '@/lib/loadCaseValidation';
+import { mapIdsByKey } from '@/lib/mergeSavedRows';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import type { LoadCase } from '@/api/types/loadGroups';
 
@@ -111,19 +112,10 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
     const sent = loadCasesRef.current;
     try {
       const saved = await updateLoadCasesMutation.mutateAsync({ load_cases: sent });
-      // Merge in only what the backend actually adds — ids assigned to
-      // freshly-created rows (needed by the fatigue profiles tab's load-case
-      // picker) — paired to the exact array this save sent, by position (a
-      // full-collection PUT echoes rows back in the same order it received
-      // them). Applied onto the *latest* state and keyed by __KEY__, which is
-      // never regenerated here: reassigning it on every save changes that
-      // row's React key, forcing a remount — which is what could steal focus
-      // out of a row the user was still editing.
-      const idByKey = new Map<string, number>();
-      sent.forEach((sentCase, i) => {
-        const savedCase = saved.load_cases[i];
-        if (savedCase?.id !== undefined) idByKey.set(sentCase.__KEY__, savedCase.id);
-      });
+      // Merge in only what the backend actually adds — ids assigned to freshly-created
+      // rows (needed by the fatigue profiles tab's load-case picker) — applied onto the
+      // *latest* state, not the `sent` snapshot.
+      const idByKey = mapIdsByKey(sent, saved.load_cases);
       setLoadCases((prev) => prev.map((c) => ({ ...c, id: idByKey.get(c.__KEY__) ?? c.id })));
       setDirty(false);
       setStatus('saved');

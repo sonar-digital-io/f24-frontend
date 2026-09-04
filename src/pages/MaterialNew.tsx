@@ -80,6 +80,38 @@ function mechanicalPropertiesPayload(
   });
 }
 
+/** Shared "keep a sysconfig-driven value set in sync with its fixed/first-seen
+ *  defaults" effect for the Mechanical and Fatigue tabs: re-derives `values` via
+ *  `withFixedDefaults` whenever `sections` changes (e.g. a Type switch), and once
+ *  hydrated persists the seeded value immediately via `mutate` — instead of just
+ *  patching local state, which would lose the default if the user navigated away
+ *  before ever blurring another field. */
+function useSyncFixedDefaults<TPayload>(
+  values: Record<string, string>,
+  setValues: (next: Record<string, string>) => void,
+  sections: FormSection[],
+  hydrated: boolean,
+  isEditing: boolean,
+  buildPayload: (next: Record<string, string>) => TPayload,
+  mutate: (payload: TPayload, opts: { onSuccess: () => void }) => void,
+  patchBaseline: (next: Record<string, string>) => void,
+) {
+  useEffect(() => {
+    const next = withFixedDefaults(values, sections);
+    if (next === values) return;
+    setValues(next);
+    if (!hydrated || !isEditing) {
+      patchBaseline(next);
+      return;
+    }
+    mutate(buildPayload(next), { onSuccess: () => patchBaseline(next) });
+    // values/isEditing/hydrated/buildPayload/mutate/patchBaseline intentionally excluded —
+    // this only needs to react to `sections` itself changing (e.g. a Type switch); the
+    // rest are read fresh via closure, and isEditing/hydrated never flip back to false.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections]);
+}
+
 /** Loading/error placeholder shared by the Mechanical and Fatigue tabs while
  *  `useMaterialSysconfig` resolves — both tabs' fields come from that one config. */
 function SysconfigLoadStatus({ isLoading, isError }: { isLoading: boolean; isError: boolean }) {
@@ -308,42 +340,29 @@ export function MaterialNew() {
   // Before that (still loading, or the material doesn't exist yet), just track it as
   // the new baseline: a not-yet-created material's defaults ride along in the initial
   // create payload instead (see saveGeneralFields/mechanicalPropertiesPayload).
-  useEffect(() => {
-    const next = withFixedDefaults(mechValues, mechanicalSections);
-    if (next === mechValues) return;
-    setMechValues(next);
-    if (!hydrated || !isEditing) {
-      setBaseline((prev) => (prev ? { ...prev, mechValues: next } : prev));
-      return;
-    }
-    updateMechanicalMutation.mutate(
-      {
-        payload: {
-          mechanical_properties: mechanicalPropertiesPayload(next, mechanicalSections, type),
-        },
-      },
-      { onSuccess: () => setBaseline((prev) => (prev ? { ...prev, mechValues: next } : prev)) },
-    );
-    // mechValues/type/updateMechanicalMutation/isEditing/hydrated intentionally excluded —
-    // this only needs to react to mechanicalSections itself changing (e.g. a Type switch);
-    // the rest are read fresh via closure, and isEditing/hydrated never flip back to false.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mechanicalSections]);
+  useSyncFixedDefaults(
+    mechValues,
+    setMechValues,
+    mechanicalSections,
+    hydrated,
+    isEditing,
+    (next) => ({
+      payload: { mechanical_properties: mechanicalPropertiesPayload(next, mechanicalSections, type) },
+    }),
+    updateMechanicalMutation.mutate,
+    (next) => setBaseline((prev) => (prev ? { ...prev, mechValues: next } : prev)),
+  );
 
-  useEffect(() => {
-    const next = withFixedDefaults(fatigueValues, fatigueSections);
-    if (next === fatigueValues) return;
-    setFatigueValues(next);
-    if (!hydrated || !isEditing) {
-      setBaseline((prev) => (prev ? { ...prev, fatigueValues: next } : prev));
-      return;
-    }
-    updateFatigueMutation.mutate(
-      { fatigue_properties: toKeyValueList(pickActiveFields(next, fatigueSections)) },
-      { onSuccess: () => setBaseline((prev) => (prev ? { ...prev, fatigueValues: next } : prev)) },
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fatigueSections]);
+  useSyncFixedDefaults(
+    fatigueValues,
+    setFatigueValues,
+    fatigueSections,
+    hydrated,
+    isEditing,
+    (next) => ({ fatigue_properties: toKeyValueList(pickActiveFields(next, fatigueSections)) }),
+    updateFatigueMutation.mutate,
+    (next) => setBaseline((prev) => (prev ? { ...prev, fatigueValues: next } : prev)),
+  );
 
   // Switching into the Mechanical or Fatigue tab re-fetches GET /material/:id/ and fully
   // re-syncs both tabs' fields from its mechanical_properties/fatigue_properties arrays —

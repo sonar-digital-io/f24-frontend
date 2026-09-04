@@ -41,7 +41,7 @@ interface CompositionEditToolbarProps {
    *  user can't switch away mid-save. */
   savingLocked: boolean;
   /** Upper or lower side layup mapping has two rows sharing a name. */
-  duplicateMappingNames: boolean;
+  hasDuplicateMappingNames: boolean;
 }
 
 /** Floating sub-toolbar shared by every CompositionNew tab — same tab-pill/title/
@@ -56,7 +56,7 @@ export function CompositionEditToolbar({
   layupsSaved,
   geometrySelected,
   savingLocked,
-  duplicateMappingNames,
+  hasDuplicateMappingNames,
 }: CompositionEditToolbarProps) {
   return (
     <div className="absolute inset-x-0 top-0 z-40 flex h-[52px] items-center gap-4 border-b border-[#e5e7eb]/70 px-4">
@@ -75,7 +75,7 @@ export function CompositionEditToolbar({
                   (!isSaved && t.value !== 'general') ||
                   (!layupsSaved && GATED_UNTIL_LAYUP_SAVED.includes(t.value)) ||
                   (!geometrySelected && GATED_UNTIL_GEOMETRY_SELECTED.includes(t.value)) ||
-                  (duplicateMappingNames && GATED_ON_DUPLICATE_MAPPING_NAMES.includes(t.value)) ||
+                  (hasDuplicateMappingNames && GATED_ON_DUPLICATE_MAPPING_NAMES.includes(t.value)) ||
                   (savingLocked && t.value !== activeTab)
                 }
                 className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] disabled:pointer-events-none disabled:opacity-40"

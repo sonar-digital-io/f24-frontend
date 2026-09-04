@@ -642,7 +642,7 @@ export function CompositionNew() {
           layupsSaved={layupsSaved}
           geometrySelected={Number.isFinite(geometryId)}
           savingLocked={anyAutosavePending}
-          duplicateMappingNames={hasDuplicateMappingNames}
+          hasDuplicateMappingNames={hasDuplicateMappingNames}
         />
         {saveError && (
           <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useFatigueProfiles, useUpdateFatigueProfiles } from '@/hooks/api/useLoadGroups';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { fatigueProfilesHaveErrors } from '@/lib/fatigueValidation';
+import { mapIdsByKey } from '@/lib/mergeSavedRows';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import type { FatigueCase, FatigueProfile } from '@/api/types/loadGroups';
 
@@ -166,26 +167,16 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
     setStatus('saving');
     try {
       const saved = await updateFatigueProfilesMutation.mutateAsync(profiles);
-      // Merge in only what the backend actually adds — ids assigned to
-      // freshly-created profiles/cases — paired to the exact `profiles`
-      // snapshot this save sent, by position (a full-collection PUT echoes
-      // rows back in the same order it received them). Applied onto the
-      // *latest* state (not replaced by the response) and keyed by __KEY__,
-      // which is never regenerated here: reassigning it on every save (the
-      // old matchSavedRows-based merge did, whenever a row failed to
-      // re-match) changes that row's React key, forcing a remount — which is
-      // what was stealing focus out of a row the user had just opened/was
-      // still editing.
-      const idByProfileKey = new Map<string, number>();
+      // Merge in only what the backend actually adds — ids assigned to freshly-created
+      // profiles/cases — applied onto the *latest* state (not replaced by the response).
+      const idByProfileKey = mapIdsByKey(profiles, saved);
       const idByCaseKey = new Map<string, number>();
       profiles.forEach((sentProfile, i) => {
         const savedProfile = saved[i];
         if (!savedProfile) return;
-        if (savedProfile.id !== undefined) idByProfileKey.set(sentProfile.__KEY__, savedProfile.id);
-        sentProfile.fatigue_cases.forEach((sentCase, j) => {
-          const savedCase = savedProfile.fatigue_cases[j];
-          if (savedCase?.id !== undefined) idByCaseKey.set(sentCase.__KEY__, savedCase.id);
-        });
+        for (const [key, id] of mapIdsByKey(sentProfile.fatigue_cases, savedProfile.fatigue_cases)) {
+          idByCaseKey.set(key, id);
+        }
       });
       setFatigueProfiles((current) =>
         current.map((p) => ({

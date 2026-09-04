@@ -1,5 +1,6 @@
 import { ChevronRight, Copy, GripVertical, Plus, Spline, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import {
   Tooltip,
   TooltipContent,
@@ -19,16 +20,23 @@ export interface LayupMapping {
   points?: ControlPoint[];
 }
 
-/** True if two or more mappings share the same (trimmed) name — the backend
- *  keys transversal-mapping data by name, so duplicates within a side corrupt it. */
-export function hasDuplicateMappingNames(mappings: LayupMapping[]): boolean {
+/** (Trimmed, non-empty) name -> how many mappings in the list use it — shared by
+ *  hasDuplicateMappingNames and the table's per-row duplicate highlight, so both
+ *  agree on what counts as a duplicate. */
+function mappingNameCounts(mappings: LayupMapping[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const m of mappings) {
     const key = m.name.trim();
     if (!key) continue;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  return [...counts.values()].some((count) => count > 1);
+  return counts;
+}
+
+/** True if two or more mappings share the same (trimmed) name — the backend
+ *  keys transversal-mapping data by name, so duplicates within a side corrupt it. */
+export function hasDuplicateMappingNames(mappings: LayupMapping[]): boolean {
+  return [...mappingNameCounts(mappings).values()].some((count) => count > 1);
 }
 
 export interface LayupMappingTableProps {
@@ -65,6 +73,9 @@ export function LayupMappingTable({
 }: LayupMappingTableProps) {
   const { draggingIdx, insertBeforeIdx, getHandleProps, getRowDragProps } = useDragReorder(onReorder);
 
+  // Built once per render instead of re-scanning the whole list per row.
+  const duplicateNameCounts = mappingNameCounts(mappings);
+
   return (
     <TooltipProvider>
     <div className="flex flex-col gap-3">
@@ -93,9 +104,7 @@ export function LayupMappingTable({
             const layupLabel = layupOptions.find((l) => String(l.id) === m.layupId)?.name;
             const isDragging = draggingIdx === idx;
             const trimmedName = m.name.trim();
-            const isDuplicateName =
-              trimmedName !== '' &&
-              mappings.some((other) => other.id !== m.id && other.name.trim() === trimmedName);
+            const isDuplicateName = trimmedName !== '' && (duplicateNameCounts.get(trimmedName) ?? 0) > 1;
             const insertLine = (key: string) => (
               <tr key={key} className="pointer-events-none">
                 <td colSpan={5} className="p-0">
@@ -129,11 +138,12 @@ export function LayupMappingTable({
                         onChange={(e) => onUpdate(m.id, { name: e.target.value })}
                         placeholder="Placeholder"
                         aria-invalid={isDuplicateName}
-                        className={`h-8 rounded-md px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] text-ellipsis ${
+                        className={cn(
+                          'h-8 rounded-md px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] text-ellipsis',
                           isDuplicateName
                             ? 'border-[#dc2626] focus-visible:ring-[#dc2626]'
-                            : 'border-[#e2e8f0]'
-                        }`}
+                            : 'border-[#e2e8f0]',
+                        )}
                       />
                     </TooltipTrigger>
                     {(isDuplicateName || m.name) && (
