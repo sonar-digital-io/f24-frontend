@@ -1,27 +1,38 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+
+/** How long to wait after the last `requestCommit()` call before actually firing
+ *  `onCommit` — shared by every curve/point editor autosave so a burst of rapid
+ *  edits (dragging a point, adding/deleting several in a row) collapses into a
+ *  single request instead of one per edit. */
+export const COMMIT_DEBOUNCE_MS = 1000;
 
 /**
- * Defers firing `onCommit` until after the triggering state update (a moved/added/
- * removed point, a field's new value, …) has actually been applied — `requestCommit()`
- * just marks one pending; the effect fires once React has committed the update, so a
- * commit requested mid-update never reads a stale pre-update value. Shared by
- * ProfileDistributionPanel/StackingPanel/ProfilesPanel's identical autosave-after-edit
- * pattern.
+ * Debounces `onCommit` by `COMMIT_DEBOUNCE_MS` after the last `requestCommit()`
+ * call — a burst of point moves/adds/deletes (or field edits) collapses into a
+ * single commit once the user actually pauses, instead of one request per edit.
+ * `onCommit` is read via a ref updated on every render, so the debounced call
+ * always sees whatever state is current when it actually fires, never a stale
+ * snapshot from whichever render happened to request it. Shared by
+ * ProfileDistributionPanel/StackingPanel/ProfilesPanel's identical
+ * autosave-after-edit pattern.
  */
 export function useDeferredCommit(onCommit: () => void) {
-  const [commitTick, setCommitTick] = useState(0);
+  const onCommitRef = useRef(onCommit);
+  onCommitRef.current = onCommit;
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (commitTick === 0) return;
-    onCommit();
-    // Deliberately re-runs only on commitTick changes — onCommit reads whatever state
-    // is current as of the render that set that tick, not a dep that would refire this
-    // on every unrelated re-render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commitTick]);
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   return function requestCommit() {
-    setCommitTick((t) => t + 1);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      timeoutRef.current = null;
+      onCommitRef.current();
+    }, COMMIT_DEBOUNCE_MS);
   };
 }
 

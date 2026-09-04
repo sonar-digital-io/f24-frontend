@@ -3,6 +3,7 @@ import { useUpdateLoadGroupLimits } from '@/hooks/api/useLoadGroups';
 import { INITIAL_LOAD_LIMITS, type LimitsSubTab } from '@/data/loadGroupForm';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import type { LoadLimitRange, LoadLimitRangePayload } from '@/api/types/loadGroups';
+import { COMMIT_DEBOUNCE_MS } from '@/hooks/useDeferredCommit';
 import type { CurveType } from '@/types';
 
 /**
@@ -121,7 +122,7 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
 
   useEffect(() => {
     if (isNew || !dirty || !hasEnoughPoints) return;
-    const timer = setTimeout(commitLimits, 600);
+    const timer = setTimeout(commitLimits, COMMIT_DEBOUNCE_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [limits, dirty, isNew, hasEnoughPoints]);
