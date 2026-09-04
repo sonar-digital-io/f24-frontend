@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Info, Plus, Trash2, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -14,21 +14,36 @@ export interface ProfilesPanelProps {
   geometryId: number;
   /** Prefill from the backend (GET /geometry/:id/ nested `profiles`) instead of the mock defaults. */
   initialProfiles?: Profile[];
-  /** Autosaves on every add/delete and every field blur inside the detail popover. */
-  onCommit?: (profiles: Profile[]) => void;
+  /** Autosaves on every add/delete and every field blur inside the detail popover. Its
+   *  promise rejecting is how this panel knows a commit didn't actually go through, so
+   *  the same value can be retried instead of being treated as sent. */
+  onCommit?: (profiles: Profile[]) => Promise<void>;
 }
 
 export function ProfilesPanel({ geometryId, initialProfiles, onCommit }: ProfilesPanelProps) {
   const [bannerVisible, setBannerVisible] = useState(
-    () => localStorage.getItem(HIDE_BANNER_KEY) !== 'true'
+    () => localStorage.getItem(HIDE_BANNER_KEY) !== 'true',
   );
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles ?? INITIAL_PROFILES);
   const [selectedId, setSelectedId] = useState<string | null>(
-    (initialProfiles ?? INITIAL_PROFILES)[0]?.id ?? null
+    (initialProfiles ?? INITIAL_PROFILES)[0]?.id ?? null,
   );
 
-  const requestCommit = useDeferredCommit(() => {
-    onCommit?.(profiles);
+  // Tracks the signature of whatever profiles were last actually sent — closing the
+  // detail popover (onClose below) always requests a commit regardless of whether
+  // anything inside it actually changed, so this is what stops that from PUTting a
+  // no-op every time.
+  const lastCommittedRef = useRef<string | null>(JSON.stringify(profiles));
+  const requestCommit = useDeferredCommit(async () => {
+    const signature = JSON.stringify(profiles);
+    if (signature === lastCommittedRef.current) return;
+    try {
+      await onCommit?.(profiles);
+      lastCommittedRef.current = signature;
+    } catch {
+      // Left unmarked on failure (onCommit's own mutation already toasts) — the same
+      // value can be retried instead of being silently skipped as "already sent".
+    }
   });
 
   function handleUpdate(next: Profile) {
@@ -173,7 +188,11 @@ export function ProfilesPanel({ geometryId, initialProfiles, onCommit }: Profile
           geometryId={geometryId}
           profile={selected}
           onChange={handleUpdate}
-          onClose={() => { sortByPosition(); setSelectedId(null); requestCommit(); }}
+          onClose={() => {
+            sortByPosition();
+            setSelectedId(null);
+            requestCommit();
+          }}
           onSort={sortByPosition}
           onCommit={requestCommit}
         />

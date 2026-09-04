@@ -14,7 +14,7 @@ import { GeometryCreatePanel } from '@/components/geometry/GeometryCreatePanel';
 import { GeometryGlobalPropertiesPanel } from '@/components/geometry/GeometryGlobalPropertiesPanel';
 import { ProfileDistributionPanel } from '@/components/geometry/ProfileDistributionPanel';
 import { ProfilesPanel } from '@/components/geometry/ProfilesPanel';
-import { StackingPanel } from '@/components/geometry/StackingPanel';
+import { StackingPanel, buildDefaultEdges } from '@/components/geometry/StackingPanel';
 import { CoordinateGizmo } from '@/components/common/viewer/CoordinateGizmo';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -33,7 +33,7 @@ import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { toUiProfile, toApiProfile } from '@/lib/geometryProfileMapping';
 import { getApiErrorMessage } from '@/lib/apiError';
-import { buildSysconfigSections } from '@/lib/sysconfigMapping';
+import { buildSysconfigSections, buildStandaloneGroup } from '@/lib/sysconfigMapping';
 import { isFormValid } from '@/lib/sysconfigFormValidation';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import { toKeyValueList, keyValueSignature } from '@/lib/keyValueMapping';
@@ -43,12 +43,16 @@ import type { GeometryEdgeInput, ProfileGeneratorParameters } from '@/api/types/
 const PANEL_WIDTH_NARROW = 'w-[516px] max-w-[calc(100vw-2rem)]';
 const PANEL_WIDTH_WIDE = 'w-[924px] max-w-[calc(100vw-2rem)]';
 
+// Pulled out of the normal grouped listing into its own standalone section below —
+// see globalPropertySections.
+const GLOBAL_PROPERTIES_PULLED_OUT = new Set(['nominal_radius']);
+
 /** The floating properties panel's width depends on the active tab (and, for
  *  the foldable tabs, whether their side panel is folded). */
 function getPanelWidthClass(
   activeTab: string,
   profileFolded: boolean,
-  stackingFolded: boolean
+  stackingFolded: boolean,
 ): string {
   switch (activeTab) {
     case 'create':
@@ -88,7 +92,9 @@ export function GeometryEdit() {
   // need to be remembered here — seeded from GET /geometry/:id/'s nested
   // profile_generator_parameters on load, then kept in sync with whatever
   // was last sent to PUT/POST /geometry/:id/tools/profile-generator/.
-  const [savedProfileParams, setSavedProfileParams] = useState<ProfileGeneratorParameters | undefined>(undefined);
+  const [savedProfileParams, setSavedProfileParams] = useState<
+    ProfileGeneratorParameters | undefined
+  >(undefined);
   const [resultStl, setResultStl] = useState<ArrayBuffer | undefined>(undefined);
   const [resultScale, setResultScale] = useState(1);
   // True while GET /geometry/:id/result/ is in flight for a *regeneration* — lets the
@@ -113,13 +119,34 @@ export function GeometryEdit() {
   // "nominal_radius"), sent via PUT /geometry/:id/settings/ as key/value pairs, and
   // hydrated below from the `settings` array nested in GET /geometry/:id/ when present.
   const sysconfigQuery = useGeometrySysconfig();
-  const globalPropertySections = useMemo(
-    () =>
-      sysconfigQuery.data
-        ? buildSysconfigSections(sysconfigQuery.data, sysconfigQuery.data.configuration.geometry_settings)
-        : [],
-    [sysconfigQuery.data]
-  );
+  const globalPropertySections = useMemo(() => {
+    if (!sysconfigQuery.data) return [];
+    // nominal_radius lives ungrouped in sysconfig's geometry_settings.parameters, not
+    // any of its groups — buildSysconfigSections alone never sees it, so it never
+    // renders as a field and never gets included in the settings PUT below (see
+    // handleGlobalPropertiesBlur). Pull it out into its own section, same pattern as
+    // CalculationNew's Configuration tab "Debug" field — first in the list (it's the
+    // blade's defining dimension, everything else is downstream of it) and always
+    // required, regardless of what sysconfig itself marks it as: this field is
+    // mandatory, full stop.
+    const nominalRadiusGroup = buildStandaloneGroup(
+      sysconfigQuery.data,
+      sysconfigQuery.data.configuration.geometry_settings,
+      'nominal_radius',
+      'Nominal radius',
+    ).map((section) => ({
+      ...section,
+      fields: section.fields.map((field) => ({ ...field, required: true })),
+    }));
+    return [
+      ...nominalRadiusGroup,
+      ...buildSysconfigSections(
+        sysconfigQuery.data,
+        sysconfigQuery.data.configuration.geometry_settings,
+        GLOBAL_PROPERTIES_PULLED_OUT,
+      ),
+    ];
+  }, [sysconfigQuery.data]);
   const [props, setProps] = useState<Record<string, string>>({});
   // Snapshot of `props` as last confirmed saved — null until the first hydrate/save,
   // same role as `baseline` below but for the global properties fields.
@@ -137,7 +164,7 @@ export function GeometryEdit() {
           if (field.fixed && field.value !== undefined && p[field.name] === undefined) {
             defaults[field.name] = field.value;
           }
-        })
+        }),
       );
       return Object.keys(defaults).length > 0 ? { ...defaults, ...p } : p;
     });
@@ -151,9 +178,11 @@ export function GeometryEdit() {
   const [newName, setNewName] = useState('');
   const [newDate, setNewDate] = useState(todayISO());
   const [newDescription, setNewDescription] = useState('');
-  const [baseline, setBaseline] = useState<{ name: string; date: string; description: string } | null>(
-    null
-  );
+  const [baseline, setBaseline] = useState<{
+    name: string;
+    date: string;
+    description: string;
+  } | null>(null);
   // Blur can fire again while a create is still in flight (e.g. tabbing through several
   // fields quickly) — this guards against firing a second, duplicate create.
   const creatingRef = useRef(false);
@@ -193,7 +222,9 @@ export function GeometryEdit() {
     setBaseline({ name: g.name, date: hydratedDate, description: hydratedDescription });
 
     if (g.settings) {
-      const hydratedProps = Object.fromEntries(g.settings.map((kv) => [kv.reference, String(kv.value)]));
+      const hydratedProps = Object.fromEntries(
+        g.settings.map((kv) => [kv.reference, String(kv.value)]),
+      );
       setProps(hydratedProps);
       setPropsBaseline(hydratedProps);
     }
@@ -204,13 +235,16 @@ export function GeometryEdit() {
   });
 
   useHydrateOnce(
-    isNew && Number.isFinite(duplicateSourceId) && !duplicateQuery.isFetching && !!duplicateQuery.data,
+    isNew &&
+      Number.isFinite(duplicateSourceId) &&
+      !duplicateQuery.isFetching &&
+      !!duplicateQuery.data,
     () => {
       const g = duplicateQuery.data!;
       setNewName(`${g.name}_copy`);
       setNewDate(toDateInputValue(g.created_at));
       setNewDescription(g.description ?? '');
-    }
+    },
   );
 
   function updateField(key: string, value: string) {
@@ -248,7 +282,11 @@ export function GeometryEdit() {
       return;
     }
     if (!baseline) return;
-    if (newName === baseline.name && newDate === baseline.date && newDescription === baseline.description) {
+    if (
+      newName === baseline.name &&
+      newDate === baseline.date &&
+      newDescription === baseline.description
+    ) {
       return;
     }
     try {
@@ -273,12 +311,14 @@ export function GeometryEdit() {
   // Every field here is mandatory, so — unlike Material's Mechanical/Fatigue tabs —
   // autosave itself waits for full completeness, not just in-range values.
   const globalPropertiesValid = isFormValid(globalPropertySections, props);
-  const globalPropertiesUnsaved = keyValueSignature(props) !== keyValueSignature(propsBaseline ?? {});
+  const globalPropertiesUnsaved =
+    keyValueSignature(props) !== keyValueSignature(propsBaseline ?? {});
 
   // Autosave the Global properties tab once every mandatory field is filled — fires
   // when focus leaves a field (blur) or the panel itself (click-out).
   async function handleGlobalPropertiesBlur() {
-    if (!globalPropertiesValid || !globalPropertiesUnsaved || updateSettingsMutation.isPending) return;
+    if (!globalPropertiesValid || !globalPropertiesUnsaved || updateSettingsMutation.isPending)
+      return;
     try {
       await updateSettingsMutation.mutateAsync({ settings: toKeyValueList(props) });
       setPropsBaseline(props);
@@ -294,7 +334,8 @@ export function GeometryEdit() {
   // is `[]` and `props`/`propsBaseline` are both still `{}`, which reads as trivially valid
   // and saved before there's any real data behind it.
   const globalPropertiesLoaded = hydrated && !sysconfigQuery.isLoading && !!sysconfigQuery.data;
-  const globalPropertiesSaved = globalPropertiesLoaded && globalPropertiesValid && !globalPropertiesUnsaved;
+  const globalPropertiesSaved =
+    globalPropertiesLoaded && globalPropertiesValid && !globalPropertiesUnsaved;
   const globalPropertiesStatus: SaveStatus | undefined = updateSettingsMutation.isPending
     ? 'saving'
     : globalPropertiesSaved
@@ -302,7 +343,9 @@ export function GeometryEdit() {
       : undefined;
 
   async function handleSaveProfiles(profiles: Profile[]) {
-    const result = await updateProfilesMutation.mutateAsync({ profiles: profiles.map(toApiProfile) });
+    const result = await updateProfilesMutation.mutateAsync({
+      profiles: profiles.map(toApiProfile),
+    });
     setHydratedProfiles(result.profiles.map(toUiProfile));
     await detailQuery.refetch();
   }
@@ -310,34 +353,34 @@ export function GeometryEdit() {
   // Autosaves the Profile distribution tab on every field blur and every bezier point
   // move — PUT the parameters first, then (only once that succeeds) POST to regenerate
   // the profiles from them. Both mutations already toast on failure via the global
-  // mutation cache, so there's nothing more to surface here beyond the in-flight spinner.
+  // mutation cache. Deliberately lets a rejection propagate to the caller
+  // (ProfileDistributionPanel) instead of swallowing it — it only marks the just-sent
+  // params as "committed" once this resolves, so a failed attempt (validation error,
+  // network blip) can be retried with the exact same value instead of silently no-oping.
   async function handleProfileGeneratorCommit(params: ProfileGeneratorParameters) {
-    try {
-      await updateGeneratorMutation.mutateAsync({ geometryId, payload: { profile_generator_parameters: params } });
-    } catch {
-      return;
-    }
+    await updateGeneratorMutation.mutateAsync({
+      geometryId,
+      payload: { profile_generator_parameters: params },
+    });
     setSavedProfileParams(params);
-    try {
-      const generated = await runGeneratorMutation.mutateAsync({
-        geometryId,
-        payload: { profile_generator_parameters: params },
-      });
-      // Persist the generated profiles — same shape as the write payload (no id/file) —
-      // so they show up on the Profiles tab and unlock Stacking.
-      const saved = await updateProfilesMutation.mutateAsync({ profiles: generated.profiles });
-      setHydratedProfiles(saved.profiles.map(toUiProfile));
-      await detailQuery.refetch();
-    } catch {
-      // runGeneratorMutation's/updateProfilesMutation's onError (global mutation cache) already toasts.
-    }
+    const generated = await runGeneratorMutation.mutateAsync({
+      geometryId,
+      payload: { profile_generator_parameters: params },
+    });
+    // Persist the generated profiles — same shape as the write payload (no id/file) —
+    // so they show up on the Profiles tab and unlock Stacking.
+    const saved = await updateProfilesMutation.mutateAsync({ profiles: generated.profiles });
+    setHydratedProfiles(saved.profiles.map(toUiProfile));
+    await detailQuery.refetch();
   }
 
   // Drives the toolbar's Saved/Saving indicator while on the Profile distribution tab —
   // "saving" for either half of the commit chain (PUT parameters, then POST regenerate
   // + PUT profiles), "saved" once the whole chain last completed successfully.
   const profileDistributionStatus: SaveStatus | undefined =
-    updateGeneratorMutation.isPending || runGeneratorMutation.isPending || updateProfilesMutation.isPending
+    updateGeneratorMutation.isPending ||
+    runGeneratorMutation.isPending ||
+    updateProfilesMutation.isPending
       ? 'saving'
       : updateGeneratorMutation.isSuccess && runGeneratorMutation.isSuccess
         ? 'saved'
@@ -401,6 +444,31 @@ export function GeometryEdit() {
     }
   }
 
+  // Generation (below) needs edges too, not just profiles — but Stacking only ever
+  // saves them when the user actually opens that tab and edits/blurs something there
+  // (see StackingPanel/handleSaveEdges). Once profiles exist and edges still don't, send
+  // the same default sweep/dihedral/twist/chord curves Stacking itself would start from,
+  // so the 3D result isn't blocked on a tab visit that hasn't happened yet — the user can
+  // still open Stacking later and edit these defaults normally.
+  const defaultEdgesSentRef = useRef(false);
+  useEffect(() => {
+    if (isNew) return;
+    const g = detailQuery.data;
+    if (!g?.profiles?.length || g.edges?.length) return;
+    if (defaultEdgesSentRef.current || updateEdgesMutation.isPending) return;
+    defaultEdgesSentRef.current = true;
+    const nominalRadius = Number(props.nominal_radius) || 1;
+    updateEdgesMutation
+      .mutateAsync({ edges: buildDefaultEdges(nominalRadius) })
+      .then(() => detailQuery.refetch())
+      .catch(() => {
+        // Allow retrying on the next detailQuery refetch (e.g. another tab switch) —
+        // updateEdgesMutation's onError (global mutation cache) already toasts.
+        defaultEdgesSentRef.current = false;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, detailQuery.data, props.nominal_radius]);
+
   // There's no dedicated "3D view" tab — the result is fetched/regenerated in the
   // background as soon as GET /geometry/:id/ reports everything it needs: non-empty
   // settings, profile_generator_parameters, profiles and edges. Re-fetches only when
@@ -409,9 +477,18 @@ export function GeometryEdit() {
   useEffect(() => {
     if (isNew) return;
     const g = detailQuery.data;
-    const ready = !!g?.settings?.length && !!g?.profile_generator_parameters && !!g?.profiles?.length && !!g?.edges?.length;
+    const ready =
+      !!g?.settings?.length &&
+      !!g?.profile_generator_parameters &&
+      !!g?.profiles?.length &&
+      !!g?.edges?.length;
     if (!ready) return;
-    const signature = JSON.stringify([g.settings, g.profile_generator_parameters, g.profiles, g.edges]);
+    const signature = JSON.stringify([
+      g.settings,
+      g.profile_generator_parameters,
+      g.profiles,
+      g.edges,
+    ]);
     if (signature === lastResultSignature) return;
     handleGenerateResult(signature);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -420,8 +497,13 @@ export function GeometryEdit() {
   // Only meaningful once the geometry actually exists — a blank, not-yet-created draft
   // has nothing incomplete to warn about.
   const isIncomplete = !isNew && (!projectConfigValid || !globalPropertiesValid);
-  const { showExitConfirm, showMissingFieldErrors, handleExit, handleExitAnyway, handleStayAndReview } =
-    useExitConfirm(exitTarget, isIncomplete);
+  const {
+    showExitConfirm,
+    showMissingFieldErrors,
+    handleExit,
+    handleExitAnyway,
+    handleStayAndReview,
+  } = useExitConfirm(exitTarget, isIncomplete);
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-[#f8fafc]">
@@ -471,14 +553,19 @@ export function GeometryEdit() {
         <aside
           className={`absolute left-4 top-[52px] z-30 ${getPanelWidthClass(activeTab, profileFolded, stackingFolded)}`}
         >
-          {activeTab === 'create' && !isNew && !hydrated && (detailQuery.isLoading || detailQuery.isFetching) && (
-            <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
-              <p className="text-[14px] text-[#6b7280]">Loading geometry…</p>
-            </div>
-          )}
+          {activeTab === 'create' &&
+            !isNew &&
+            !hydrated &&
+            (detailQuery.isLoading || detailQuery.isFetching) && (
+              <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+                <p className="text-[14px] text-[#6b7280]">Loading geometry…</p>
+              </div>
+            )}
           {activeTab === 'create' && !isNew && detailQuery.isError && (
             <div className="rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
-              <p className="text-[14px] text-[#dc2626]">Failed to load this geometry from the server.</p>
+              <p className="text-[14px] text-[#dc2626]">
+                Failed to load this geometry from the server.
+              </p>
             </div>
           )}
           {activeTab === 'create' && (isNew || (hydrated && !detailQuery.isError)) && (
@@ -540,13 +627,13 @@ export function GeometryEdit() {
             activeTab !== 'profile-distribution' &&
             activeTab !== 'profiles' &&
             activeTab !== 'stacking' && (
-            <div className="flex flex-col items-center justify-center gap-2 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
-              <p className="text-[14px] font-semibold text-[#0a0a0a]">
-                {activeTab.replace('-', ' ').replace(/^./, (c) => c.toUpperCase())}
-              </p>
-              <p className="text-[14px] text-[#6b7280]">Coming soon.</p>
-            </div>
-          )}
+              <div className="flex flex-col items-center justify-center gap-2 rounded-[14px] border border-[#e5e7eb] bg-white/95 p-6 text-center shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)] backdrop-blur-sm">
+                <p className="text-[14px] font-semibold text-[#0a0a0a]">
+                  {activeTab.replace('-', ' ').replace(/^./, (c) => c.toUpperCase())}
+                </p>
+                <p className="text-[14px] text-[#6b7280]">Coming soon.</p>
+              </div>
+            )}
         </aside>
 
         {/* Blade/Wireframe display toggles (top-center, gap below toolbar matches gap above tab pill = 8px) */}

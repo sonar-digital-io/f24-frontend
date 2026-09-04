@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FoldHorizontal } from 'lucide-react';
 import type { ControlPoint, CurveType } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
@@ -71,8 +71,10 @@ interface ProfileDistributionPanelProps {
   initialParameters?: ProfileGeneratorParameters;
   /** Autosaves on every field blur and every completed bezier point move: PUTs the
    *  parameters (same as the old "Save parameters" button), then — only once that
-   *  succeeds — POSTs to regenerate the profiles (same as the old "Generate" button). */
-  onCommit: (params: ProfileGeneratorParameters) => void;
+   *  succeeds — POSTs to regenerate the profiles (same as the old "Generate" button).
+   *  Its promise rejecting is how this panel knows a commit didn't actually go
+   *  through, so the same value can be retried instead of being treated as sent. */
+  onCommit: (params: ProfileGeneratorParameters) => Promise<void>;
 }
 
 export function ProfileDistributionPanel({
@@ -137,8 +139,22 @@ export function ProfileDistributionPanel({
     );
   });
 
-  const requestCommit = useDeferredCommit(() => {
-    if (hasEnoughPoints) onCommit(buildParams());
+  // Tracks the signature of whatever params were last actually sent — a blur/point-edit
+  // (or the mount-time commit below) that doesn't change anything must not PUT+regenerate
+  // a no-op. Seeded once sectionPoints is ready, further below.
+  const lastCommittedRef = useRef<string | null>(null);
+  const requestCommit = useDeferredCommit(async () => {
+    if (!hasEnoughPoints) return;
+    const params = buildParams();
+    const signature = JSON.stringify(params);
+    if (signature === lastCommittedRef.current) return;
+    try {
+      await onCommit(params);
+      lastCommittedRef.current = signature;
+    } catch {
+      // Left unmarked on failure (onCommit's own mutation already toasts) — the same
+      // value can be retried instead of being silently skipped as "already sent".
+    }
   });
 
   // A table Y edit outside the current range widens it (rather than clamping
@@ -179,8 +195,21 @@ export function ProfileDistributionPanel({
     expandYBounds,
   );
 
+  // Seed the "last committed" snapshot once, from the initial (already-saved)
+  // parameters — runs after sectionPoints/curveType above are all in place.
+  useEffect(() => {
+    lastCommittedRef.current = JSON.stringify(buildParams());
+    // Deliberately runs once on mount only — later commits update the ref themselves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function handleCurveTypeChange(key: SectionKey, next: CurveType) {
     setCurveType((current) => ({ ...current, [key]: next }));
+    // Point 0's x always tracks the Start position field — keep that in sync on reset too.
+    setPointsForSection(
+      key,
+      INITIAL_SECTION_POINTS[key].map((p, i) => (i === 0 ? { ...p, x: rootX } : p)),
+    );
     requestCommit();
   }
 

@@ -47,7 +47,10 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
   }
 
   function updateLimitCurveType(sub: LimitsSubTab, curveType: CurveType) {
-    setLimits((prev) => ({ ...prev, [sub]: { ...prev[sub], curve_type: curveType } }));
+    setLimits((prev) => ({
+      ...prev,
+      [sub]: { ...prev[sub], curve_type: curveType, curve: INITIAL_LOAD_LIMITS[sub].curve },
+    }));
     markDirty();
   }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FoldHorizontal, Loader2 } from 'lucide-react';
 import type { ControlPoint, CurveType } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
@@ -80,8 +80,10 @@ interface StackingPanelProps {
    *  same value as Profile distribution's Start position, as a fraction. */
   rootRadiusPercent?: string;
   /** Autosaves on every field blur and every completed bezier point move/add/remove:
-   *  PUT /geometry/:id/edges/ with the current sweep/dihedral/twist/chord curves. */
-  onCommit?: (edges: GeometryEdgeInput[]) => void;
+   *  PUT /geometry/:id/edges/ with the current sweep/dihedral/twist/chord curves. Its
+   *  promise rejecting is how this panel knows a commit didn't actually go through, so
+   *  the same value can be retried instead of being treated as sent. */
+  onCommit?: (edges: GeometryEdgeInput[]) => Promise<void>;
   committing?: boolean;
   saveError?: boolean;
   /** Global properties' nominal radius (m) — sweep/dihedral/chord's ymin/ymax
@@ -169,8 +171,23 @@ export function StackingPanel({
     };
   });
 
-  const requestCommit = useDeferredCommit(() => {
-    if (hasEnoughPoints) onCommit?.(buildEdges());
+  // Tracks the signature of whatever edges were last actually sent (seeded from the
+  // initial, already-saved ones below, once sectionPoints/yBounds/curveType are all
+  // set up) — a blur/point-edit that doesn't change anything (e.g. clicking into a
+  // Y-bound field and back out) must not PUT a no-op.
+  const lastCommittedRef = useRef<string | null>(null);
+  const requestCommit = useDeferredCommit(async () => {
+    if (!hasEnoughPoints) return;
+    const edges = buildEdges();
+    const signature = JSON.stringify(edges);
+    if (signature === lastCommittedRef.current) return;
+    try {
+      await onCommit?.(edges);
+      lastCommittedRef.current = signature;
+    } catch {
+      // Left unmarked on failure (onCommit's own mutation already toasts) — the same
+      // value can be retried instead of being silently skipped as "already sent".
+    }
   });
 
   // A table Y edit outside the current Y min/max widens the bound itself
@@ -202,8 +219,17 @@ export function StackingPanel({
     expandYBounds,
   );
 
+  // Seed the "last committed" snapshot once, from the initial (already-saved) edges —
+  // runs after sectionPoints/yBounds/curveType above are all in place.
+  useEffect(() => {
+    lastCommittedRef.current = JSON.stringify(buildEdges());
+    // Deliberately runs once on mount only — later commits update the ref themselves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function handleCurveTypeChange(key: SectionKey, next: CurveType) {
     setCurveType((current) => ({ ...current, [key]: next }));
+    setPointsForSection(key, INITIAL_SECTION_POINTS[key]);
     requestCommit();
   }
 
