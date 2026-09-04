@@ -39,7 +39,7 @@ export function EditPageToolbar({
   actions,
 }: EditPageToolbarProps) {
   return (
-    <div className="relative flex h-[52px] w-full shrink-0 items-center justify-between bg-[#f8fafc] px-4 py-2">
+    <div className="flex h-[52px] w-full shrink-0 items-center gap-4 bg-[#f8fafc] px-4 py-2">
       <Tabs value={activeTab} onValueChange={onTabChange} className="h-9 shrink-0">
         <TabsList className="h-9 gap-0 rounded-[10px] bg-[#f3f4f6] p-[3px]">
           {tabs.map((tab) => (

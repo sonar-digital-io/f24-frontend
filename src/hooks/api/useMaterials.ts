@@ -40,7 +40,8 @@ export function useCreateMaterial() {
 export function useUpdateMaterial(materialId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: MaterialGeneralPayload) => materialsApi.updateMaterial(materialId, payload),
+    mutationFn: (payload: MaterialGeneralPayload) =>
+      materialsApi.updateMaterial(materialId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) });
       queryClient.invalidateQueries({ queryKey: materialKeys.list() });
@@ -66,7 +67,9 @@ export function useUpdateMechanicalProperties(materialId: number) {
     mutationFn: ({ payload }: UpdateMechanicalPropertiesVariables) =>
       materialsApi.updateMechanicalProperties(materialId, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) });
+      // Deliberately NOT invalidating materialKeys.detail here — the edit form fills
+      // itself from this same save's response plus the freshly-resolved sysconfig
+      // (invalidated below), not from a second GET /material/:id/ round-trip.
       // Also refresh the list — `type` lives on this endpoint and is shown there.
       queryClient.invalidateQueries({ queryKey: materialKeys.list() });
       // Any mechanical value, not just Type, can change which fields sysconfig resolves
@@ -79,11 +82,11 @@ export function useUpdateMechanicalProperties(materialId: number) {
 export function useUpdateFatigueProperties(materialId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: MaterialFatiguePropertiesPayload) => materialsApi.updateFatigueProperties(materialId, payload),
+    mutationFn: (payload: MaterialFatiguePropertiesPayload) =>
+      materialsApi.updateFatigueProperties(materialId, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: materialKeys.detail(materialId) });
-      // Same reasoning as useUpdateMechanicalProperties above — fatigue values changing
-      // can change which fields sysconfig resolves as active/fixed for this material.
+      // See useUpdateMechanicalProperties above — no materialKeys.detail invalidation;
+      // the form fills from sysconfig's freshly-resolved values, not a second GET.
       queryClient.invalidateQueries({ queryKey: materialSysconfigKeys.detail(materialId) });
     },
   });

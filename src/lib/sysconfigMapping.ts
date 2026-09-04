@@ -1,16 +1,27 @@
-import type { SysconfigParameter, SysconfigParamEntry, SysconfigResponse, SysconfigProjectSettings } from '@/api/types/sysconfig';
+import type {
+  SysconfigParameter,
+  SysconfigParamEntry,
+  SysconfigResponse,
+  SysconfigProjectSettings,
+} from '@/api/types/sysconfig';
 import type { FormField, FormSection } from '@/data/materialFormFields';
 
 /** The "mech_prop_type" parameter — its `name` is the Type dropdown's label, its
  *  `options` are the real id/name values the dropdown must store, straight from the backend. */
-export function getMechPropTypeParameter(sysconfig: SysconfigResponse): SysconfigParameter | undefined {
+export function getMechPropTypeParameter(
+  sysconfig: SysconfigResponse,
+): SysconfigParameter | undefined {
   return sysconfig.parameters.find((p) => p.id === 'mech_prop_type');
 }
 
 /** The "mech_prop_type" entry's own state for this material — `fixed` disables the
  *  Type dropdown, same as any other backend-locked field. */
-export function getMechPropTypeEntry(sysconfig: SysconfigResponse): SysconfigParamEntry | undefined {
-  return sysconfig.configuration.mechanical_properties?.parameters?.find((p) => p.reference === 'mech_prop_type');
+export function getMechPropTypeEntry(
+  sysconfig: SysconfigResponse,
+): SysconfigParamEntry | undefined {
+  return sysconfig.configuration.mechanical_properties?.parameters?.find(
+    (p) => p.reference === 'mech_prop_type',
+  );
 }
 
 function unitSuffix(sysconfig: SysconfigResponse, unitId: string | undefined): string {
@@ -22,7 +33,10 @@ function unitSuffix(sysconfig: SysconfigResponse, unitId: string | undefined): s
 /** "Value must be between X and Y." / "...larger than X." / "...smaller than Y." —
  *  whichever bounds are actually defined. Shared by this file's static helper text and
  *  SysconfigFieldRow's live inline validation error, so the wording only lives once. */
-export function formatRangeMessage(min: string | undefined, max: string | undefined): string | undefined {
+export function formatRangeMessage(
+  min: string | undefined,
+  max: string | undefined,
+): string | undefined {
   if (min !== undefined && max !== undefined) return `Value must be between ${min} and ${max}.`;
   if (min !== undefined) return `Value must be larger than ${min}.`;
   if (max !== undefined) return `Value must be smaller than ${max}.`;
@@ -56,7 +70,7 @@ function buildField(sysconfig: SysconfigResponse, entry: SysconfigParamEntry): F
  */
 export function pickActiveFields(
   values: Record<string, string>,
-  sections: FormSection[]
+  sections: FormSection[],
 ): Record<string, string> {
   const activeNames = new Set(sections.flatMap((s) => s.fields.map((f) => f.name)));
   return Object.fromEntries(Object.entries(values).filter(([name]) => activeNames.has(name)));
@@ -66,13 +80,16 @@ export function pickActiveFields(
  * Builds PropertyFormTab sections from a sysconfig property section (mechanical/fatigue
  * properties, geometry settings, …). Labels/units/required come straight from the backend's
  * parameter catalog — no more hand-maintained, easily-mismatched labels. `active` is already
- * resolved server-side against the entity's current values, so it alone decides which
- * fields show at all (e.g. elastic_modulus_33 only for isotropic material types).
+ * resolved server-side against the entity's current values, and by default it alone decides
+ * which fields show at all (e.g. elastic_modulus_33 only for isotropic material types) —
+ * pass `includeInactive: true` for a section whose fields are all optional and should stay
+ * visible regardless (e.g. Fatigue properties), rather than disappearing based on `active`.
  */
 export function buildSysconfigSections(
   sysconfig: SysconfigResponse,
   section: SysconfigProjectSettings | undefined,
-  exclude?: Set<string>
+  exclude?: Set<string>,
+  includeInactive = false,
 ): FormSection[] {
   if (!section) return [];
   return (section.groups ?? [])
@@ -80,7 +97,7 @@ export function buildSysconfigSections(
       id: group.id,
       label: group.name,
       fields: (group.parameters ?? [])
-        .filter((entry) => entry.active && !exclude?.has(entry.reference))
+        .filter((entry) => (includeInactive || entry.active) && !exclude?.has(entry.reference))
         .map((entry) => buildField(sysconfig, entry)),
     }))
     .filter((s) => s.fields.length > 0);
@@ -96,11 +113,12 @@ export function buildStandaloneGroup(
   sysconfig: SysconfigResponse,
   section: SysconfigProjectSettings | undefined,
   reference: string,
-  label: string
+  label: string,
 ): FormSection[] {
-  const entry = [...(section?.parameters ?? []), ...(section?.groups ?? []).flatMap((g) => g.parameters ?? [])].find(
-    (e) => e.reference === reference
-  );
+  const entry = [
+    ...(section?.parameters ?? []),
+    ...(section?.groups ?? []).flatMap((g) => g.parameters ?? []),
+  ].find((e) => e.reference === reference);
   if (!entry || !entry.active) return [];
   return [{ id: reference, label, fields: [buildField(sysconfig, entry)] }];
 }

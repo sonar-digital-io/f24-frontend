@@ -5,7 +5,7 @@ import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
 import { StackingSectionBody } from '@/components/geometry/StackingSectionBody';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
-import { useDeferredCommit } from '@/hooks/useDeferredCommit';
+import { useCommitOnce } from '@/hooks/useDeferredCommit';
 import { clamp } from '@/lib/bezierMath';
 import type { GeometryEdge, GeometryEdgeInput } from '@/api/types/geometry';
 
@@ -80,8 +80,10 @@ interface StackingPanelProps {
    *  same value as Profile distribution's Start position, as a fraction. */
   rootRadiusPercent?: string;
   /** Autosaves on every field blur and every completed bezier point move/add/remove:
-   *  PUT /geometry/:id/edges/ with the current sweep/dihedral/twist/chord curves. */
-  onCommit?: (edges: GeometryEdgeInput[]) => void;
+   *  PUT /geometry/:id/edges/ with the current sweep/dihedral/twist/chord curves. Its
+   *  promise rejecting is how this panel knows a commit didn't actually go through, so
+   *  the same value can be retried instead of being treated as sent. */
+  onCommit?: (edges: GeometryEdgeInput[]) => Promise<void>;
   committing?: boolean;
   saveError?: boolean;
   /** Global properties' nominal radius (m) — sweep/dihedral/chord's ymin/ymax
@@ -98,6 +100,25 @@ function edgeMap(initialEdges?: GeometryEdge[]): Map<string, GeometryEdge> {
 // so it's sent/received as-is.
 function radiusDivisor(key: SectionKey, nominalRadius?: number): number {
   return key !== 'twist' && nominalRadius ? nominalRadius : 1;
+}
+
+/** The same sweep/dihedral/twist/chord curves this panel itself starts a brand new
+ *  geometry from (`INITIAL_SECTION_POINTS`/`SECTION_Y_MIN`/`SECTION_Y_MAX`, `'bezier'`
+ *  curve type) — as a standalone PUT /geometry/:id/edges/ payload. Lets a caller send a
+ *  sensible default Stacking before the user ever opens this tab, e.g. so 3D generation
+ *  (which needs edges, not just profiles) isn't blocked on a tab visit that hasn't
+ *  happened yet. */
+export function buildDefaultEdges(nominalRadius?: number): GeometryEdgeInput[] {
+  return SECTION_KEYS.map((key) => {
+    const divisor = radiusDivisor(key, nominalRadius);
+    return {
+      edge_type: key,
+      curve_type: 'bezier',
+      ymin: SECTION_Y_MIN[key] / divisor,
+      ymax: SECTION_Y_MAX[key] / divisor,
+      curve: INITIAL_SECTION_POINTS[key],
+    };
+  });
 }
 
 export function StackingPanel({
@@ -143,16 +164,37 @@ export function StackingPanel({
   const [curveType, setCurveType] = useState<Record<SectionKey, CurveType>>(() => {
     const map = edgeMap(initialEdges);
     return {
-      sweep: map.get('sweep')?.curve_type ?? 'spline',
-      dihedral: map.get('dihedral')?.curve_type ?? 'spline',
-      twist: map.get('twist')?.curve_type ?? 'spline',
-      chord: map.get('chord')?.curve_type ?? 'spline',
+      sweep: map.get('sweep')?.curve_type ?? 'bezier',
+      dihedral: map.get('dihedral')?.curve_type ?? 'bezier',
+      twist: map.get('twist')?.curve_type ?? 'bezier',
+      chord: map.get('chord')?.curve_type ?? 'bezier',
     };
   });
 
-  const requestCommit = useDeferredCommit(() => {
-    if (hasEnoughPoints) onCommit?.(buildEdges());
-  });
+  // useCommitOnce tracks the signature of whatever edges were last actually sent, so a
+  // blur/point-edit that doesn't change anything (e.g. clicking into a Y-bound field and
+  // back out) doesn't PUT a no-op. hasEnoughPoints is declared further below (it derives
+  // from sectionPoints, which itself needs requestCommit) — enabled is a closure so it
+  // reads that binding at commit time, not here.
+  const requestCommit: () => void = useCommitOnce(
+    buildEdges,
+    async (edges) => {
+      await onCommit?.(edges);
+    },
+    () => hasEnoughPoints,
+  );
+
+  // A table Y edit outside the current Y min/max widens the bound itself
+  // (rather than clamping the typed value back down) so the point stays put
+  // and visible on the chart.
+  function expandYBounds(key: SectionKey, value: number) {
+    setYBounds((current) => {
+      const b = current[key];
+      const next = { min: Math.min(b.min, value), max: Math.max(b.max, value) };
+      if (next.min === b.min && next.max === b.max) return current;
+      return { ...current, [key]: next };
+    });
+  }
 
   const { sectionPoints, setPointsForSection, bindSection } = useEditableSectionPoints(
     (() => {
@@ -168,10 +210,12 @@ export function StackingPanel({
     5,
     () => rootX,
     requestCommit,
+    expandYBounds,
   );
 
   function handleCurveTypeChange(key: SectionKey, next: CurveType) {
     setCurveType((current) => ({ ...current, [key]: next }));
+    setPointsForSection(key, INITIAL_SECTION_POINTS[key]);
     requestCommit();
   }
 

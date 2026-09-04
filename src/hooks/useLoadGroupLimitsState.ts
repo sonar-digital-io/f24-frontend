@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useUpdateLoadGroupLimits } from '@/hooks/api/useLoadGroups';
 import { INITIAL_LOAD_LIMITS, type LimitsSubTab } from '@/data/loadGroupForm';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
-import type { LoadLimitRange } from '@/api/types/loadGroups';
+import type { LoadLimitRange, LoadLimitRangePayload } from '@/api/types/loadGroups';
 import type { CurveType } from '@/types';
 
 /**
@@ -47,7 +47,10 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
   }
 
   function updateLimitCurveType(sub: LimitsSubTab, curveType: CurveType) {
-    setLimits((prev) => ({ ...prev, [sub]: { ...prev[sub], curve_type: curveType } }));
+    setLimits((prev) => ({
+      ...prev,
+      [sub]: { ...prev[sub], curve_type: curveType, curve: INITIAL_LOAD_LIMITS[sub].curve },
+    }));
     markDirty();
   }
 
@@ -84,6 +87,12 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
   dirtyRef.current = dirty;
   const retrySaveRef = useRef(false);
 
+  // curve_type is UI-only — the backend's limits schema rejects it as an
+  // unknown property, so strip it before PUT.
+  function toPayloadRange({ curve_type: _curve_type, ...rest }: LoadLimitRange): LoadLimitRangePayload {
+    return rest;
+  }
+
   async function commitLimits() {
     if (updateLimitsMutation.isPending) {
       retrySaveRef.current = true;
@@ -94,9 +103,9 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
     try {
       const { thrust, torque, power } = limitsRef.current;
       await updateLimitsMutation.mutateAsync({
-        rpm_thrust_limit: thrust,
-        rpm_torque_limit: torque,
-        rpm_power_limit: power,
+        rpm_thrust_limit: toPayloadRange(thrust),
+        rpm_torque_limit: toPayloadRange(torque),
+        rpm_power_limit: toPayloadRange(power),
       });
       setDirty(false);
       setStatus('saved');

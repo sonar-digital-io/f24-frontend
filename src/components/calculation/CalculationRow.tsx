@@ -64,7 +64,7 @@ function StatusBadge({ status, timestamp }: { status: CalculationStatus; timesta
 
 // ─── Row actions ──────────────────────────────────────────────────────────────
 
-function MoreMenu({ itemId: _itemId }: { itemId: string }) {
+function MoreMenu({ onDelete }: { onDelete: () => void }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -91,9 +91,9 @@ function MoreMenu({ itemId: _itemId }: { itemId: string }) {
   }
 
   const items = [
-    { label: 'Duplicate', icon: Copy, danger: false },
-    { label: 'Export', icon: Download, danger: false },
-    { label: 'Delete', icon: Trash2, danger: true },
+    { label: 'Duplicate', icon: Copy, danger: false, onClick: () => {} },
+    { label: 'Export', icon: Download, danger: false, onClick: () => {} },
+    { label: 'Delete', icon: Trash2, danger: true, onClick: onDelete },
   ] as const;
 
   return (
@@ -118,11 +118,11 @@ function MoreMenu({ itemId: _itemId }: { itemId: string }) {
             style={{ top: pos.top, left: pos.left }}
             className="absolute z-[300] w-[160px] overflow-hidden rounded-xl border border-[#e5e7eb] bg-white py-1 shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)]"
           >
-            {items.map(({ label, icon: Icon, danger }) => (
+            {items.map(({ label, icon: Icon, danger, onClick }) => (
               <button
                 key={label}
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setOpen(false); }}
+                onClick={(e) => { e.stopPropagation(); setOpen(false); onClick(); }}
                 className={`flex w-full items-center gap-3 px-4 py-2.5 text-[14px] transition-colors hover:bg-[#f9fafb] ${
                   danger ? 'text-[#dc2626]' : 'text-[#0a0a0a]'
                 }`}
@@ -138,7 +138,7 @@ function MoreMenu({ itemId: _itemId }: { itemId: string }) {
   );
 }
 
-function RowActions({ item }: { item: Calculation }) {
+function RowActions({ item, onDelete }: { item: Calculation; onDelete: () => void }) {
   const navigate = useNavigate();
   const isRunning = item.status === 'Running';
 
@@ -154,7 +154,7 @@ function RowActions({ item }: { item: Calculation }) {
         <>
           <RowIconButton label="Edit" icon={Pencil} onClick={() => navigate(`/calculation/${item.id}`)} />
           <RowIconButton label="Start" icon={Play} onClick={() => {}} />
-          <MoreMenu itemId={item.id} />
+          <MoreMenu onDelete={onDelete} />
         </>
       )}
     </div>
@@ -165,9 +165,10 @@ function RowActions({ item }: { item: Calculation }) {
 
 export interface CalculationRowProps {
   item: Calculation;
+  onDelete: () => void;
 }
 
-export function CalculationRow({ item }: CalculationRowProps) {
+export function CalculationRow({ item, onDelete }: CalculationRowProps) {
   const navigate = useNavigate();
   return (
     <tr
@@ -185,7 +186,7 @@ export function CalculationRow({ item }: CalculationRowProps) {
         {formatDateTime(item.lastUpdated)}
       </td>
       <td className="w-[148px] px-3 py-4 align-top" onClick={(e) => e.stopPropagation()}>
-        <RowActions item={item} />
+        <RowActions item={item} onDelete={onDelete} />
       </td>
     </tr>
   );

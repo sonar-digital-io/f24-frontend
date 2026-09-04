@@ -9,6 +9,9 @@ const RING_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#e11d48', '#8b5cf6'];
 export interface CrossSectionThumbnailRing {
   startFrac: number;
   endFrac: number;
+  /** Overrides the auto-cycled ring color — used for the layup-mapping
+   *  reference regions (blue = upper side, yellow = lower side). */
+  color?: string;
 }
 
 interface CrossSectionThumbnailProps {
@@ -34,7 +37,7 @@ function CrossSectionThumbnail({ points, rings }: CrossSectionThumbnailProps) {
             key={i}
             d={segD(pts)}
             fill="none"
-            stroke={RING_COLORS[i % RING_COLORS.length]}
+            stroke={r.color ?? RING_COLORS[i % RING_COLORS.length]}
             strokeWidth={1.5}
             vectorEffect="non-scaling-stroke"
           />

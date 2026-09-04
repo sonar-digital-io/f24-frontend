@@ -11,6 +11,7 @@ interface ProfileDistributionSectionBodyProps extends PointsTableEditCallbacks {
   onCommit?: () => void;
   curveType: CurveType;
   onCurveTypeChange: (next: CurveType) => void;
+  yMin: number;
   yMax: number;
   rootX: number;
   valueLabel: string;
@@ -30,6 +31,7 @@ export function ProfileDistributionSectionBody({
   onCommit,
   curveType,
   onCurveTypeChange,
+  yMin,
   yMax,
   rootX,
   valueLabel,
@@ -58,7 +60,7 @@ export function ProfileDistributionSectionBody({
             <CurveTypeToggle value={curveType} onChange={onCurveTypeChange} />
           </div>
           {showDistribution && (
-            <CurveEditor curveType={curveType} points={points} onChange={onChange} onCommit={onCommit} yMax={yMax} rootX={rootX} />
+            <CurveEditor curveType={curveType} points={points} onChange={onChange} onCommit={onCommit} yMin={yMin} yMax={yMax} rootX={rootX} />
           )}
         </div>
 

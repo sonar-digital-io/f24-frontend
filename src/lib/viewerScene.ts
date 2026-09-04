@@ -22,7 +22,9 @@ export function createViewerScene(width: number, height: number) {
   scene.background = new THREE.CanvasTexture(bgCanvas);
 
   const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 5000);
-  camera.position.set(12, 7, 16);
+  // Pulled back to keep the 100-unit reference grid mostly in frame by default
+  // (auto-fit is disabled, so this initial framing is what most loads see).
+  camera.position.set(30, 18, 40);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(width, height);
@@ -66,6 +68,16 @@ export function createViewerScene(width: number, height: number) {
   ground.position.y = -2;
   ground.receiveShadow = true;
   scene.add(ground);
+
+  // Fixed-size scale reference: with auto-fit disabled, the camera no longer
+  // zooms to match each loaded object's bounding box, so two objects with
+  // different real-world scale (e.g. different nominal_radius) actually look
+  // different-sized — this grid gives the eye something stationary to judge
+  // that size against. 100 world units across, 5-unit cells, sitting on the
+  // same plane as the shadow ground.
+  const grid = new THREE.GridHelper(100, 20, 0x94a3b8, 0xd1d5db);
+  grid.position.y = -2;
+  scene.add(grid);
 
   const ringGeo = new THREE.TorusGeometry(2, 0.15, 16, 60);
   const ringMat = new THREE.MeshBasicMaterial({ color: 0xcbd5e1, wireframe: true });

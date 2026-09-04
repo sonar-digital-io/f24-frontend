@@ -6,7 +6,7 @@ import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
 import { ProfileGeneratorTopRow } from '@/components/geometry/ProfileGeneratorTopRow';
 import { ProfileDistributionSectionBody } from '@/components/geometry/ProfileDistributionSectionBody';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
-import { useDeferredCommit } from '@/hooks/useDeferredCommit';
+import { useCommitOnce } from '@/hooks/useDeferredCommit';
 import type { ProfileGeneratorParameters } from '@/api/types/geometry';
 
 // Only NACA 4 digit is supported by the backend right now.
@@ -71,8 +71,10 @@ interface ProfileDistributionPanelProps {
   initialParameters?: ProfileGeneratorParameters;
   /** Autosaves on every field blur and every completed bezier point move: PUTs the
    *  parameters (same as the old "Save parameters" button), then — only once that
-   *  succeeds — POSTs to regenerate the profiles (same as the old "Generate" button). */
-  onCommit: (params: ProfileGeneratorParameters) => void;
+   *  succeeds — POSTs to regenerate the profiles (same as the old "Generate" button).
+   *  Its promise rejecting is how this panel knows a commit didn't actually go
+   *  through, so the same value can be retried instead of being treated as sent. */
+  onCommit: (params: ProfileGeneratorParameters) => Promise<void>;
 }
 
 export function ProfileDistributionPanel({
@@ -130,16 +132,37 @@ export function ProfileDistributionPanel({
     );
     return SECTION_KEYS.reduce(
       (acc, key) => {
-        acc[key] = parameterMap.get(SECTION_TO_REFERENCE[key])?.curve_type ?? 'spline';
+        acc[key] = parameterMap.get(SECTION_TO_REFERENCE[key])?.curve_type ?? 'bezier';
         return acc;
       },
       {} as Record<SectionKey, CurveType>,
     );
   });
 
-  const requestCommit = useDeferredCommit(() => {
-    if (hasEnoughPoints) onCommit(buildParams());
+  // useCommitOnce tracks the signature of whatever params were last actually sent, so a
+  // blur/point-edit (or the mount-time commit below) that doesn't change anything doesn't
+  // PUT+regenerate a no-op. hasEnoughPoints is declared further below (it derives from
+  // sectionPoints, which itself needs requestCommit) — enabled is a closure so it reads
+  // that binding at commit time, not here.
+  const requestCommit: () => void = useCommitOnce(buildParams, onCommit, () => hasEnoughPoints);
+
+  // A table Y edit outside the current range widens it (rather than clamping
+  // the typed value back down) so the point stays put and visible on the chart —
+  // kept per section (like StackingPanel's yBounds) so widening one curve's range
+  // doesn't distort the other two, which have no reason to share a Y scale.
+  const [yBounds, setYBounds] = useState<Record<SectionKey, { min: number; max: number }>>({
+    'maximum-camber': { min: 0, max: Y_MAX },
+    'maximum-camber-position': { min: 0, max: Y_MAX },
+    thickness: { min: 0, max: Y_MAX },
   });
+  function expandYBounds(key: SectionKey, value: number) {
+    setYBounds((current) => {
+      const b = current[key];
+      const next = { min: Math.min(b.min, value), max: Math.max(b.max, value) };
+      if (next.min === b.min && next.max === b.max) return current;
+      return { ...current, [key]: next };
+    });
+  }
 
   // This panel unmounts/remounts on tab switch, so mounting == opening the tab —
   // save immediately rather than waiting for the first field blur/point edit.
@@ -162,14 +185,21 @@ export function ProfileDistributionPanel({
         {} as Record<SectionKey, ControlPoint[]>,
       );
     })(),
-    () => ({ min: 0, max: Y_MAX }),
+    (key) => yBounds[key],
     2,
     () => rootX,
     requestCommit,
+    expandYBounds,
   );
+
 
   function handleCurveTypeChange(key: SectionKey, next: CurveType) {
     setCurveType((current) => ({ ...current, [key]: next }));
+    // Point 0's x always tracks the Start position field — keep that in sync on reset too.
+    setPointsForSection(
+      key,
+      INITIAL_SECTION_POINTS[key].map((p, i) => (i === 0 ? { ...p, x: rootX } : p)),
+    );
     requestCommit();
   }
 
@@ -246,7 +276,8 @@ export function ProfileDistributionPanel({
         onCommit={requestCommit}
         curveType={curveType[key]}
         onCurveTypeChange={(next) => handleCurveTypeChange(key, next)}
-        yMax={Y_MAX}
+        yMin={yBounds[key].min}
+        yMax={yBounds[key].max}
         rootX={rootX}
         valueLabel={valueLabel}
         idPrefix={key}

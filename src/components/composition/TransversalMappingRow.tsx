@@ -48,9 +48,6 @@ interface TransversalMappingRowProps {
   mapping: TransversalMapping;
   layupOptions: { value: string; label: string }[];
   profileOptions: { value: string; label: string }[];
-  editingName: boolean;
-  onStartEditingName: () => void;
-  onStopEditingName: () => void;
   onUpdate: (next: Partial<TransversalMapping>) => void;
   onEditStartBoundary: () => void;
   onEditEndBoundary: () => void;
@@ -64,9 +61,6 @@ export function TransversalMappingRow({
   mapping: m,
   layupOptions,
   profileOptions,
-  editingName,
-  onStartEditingName,
-  onStopEditingName,
   onUpdate,
   onEditStartBoundary,
   onEditEndBoundary,
@@ -75,29 +69,12 @@ export function TransversalMappingRow({
   return (
     <tr className="group border-b border-[#e5e7eb] last:border-b-0">
       <td className="px-2 py-2">
-        {m.name && !editingName ? (
-          <button
-            type="button"
-            onClick={onStartEditingName}
-            title="Edit name"
-            className="inline-flex h-8 items-center rounded-md bg-[#ede9fe] px-2 text-[12px] font-semibold uppercase tracking-wide text-[#5b21b6] hover:bg-[#ddd6fe]"
-          >
-            {m.name}
-          </button>
-        ) : (
-          <Input
-            value={m.name}
-            autoFocus={editingName}
-            onFocus={onStartEditingName}
-            onChange={(e) => onUpdate({ name: e.target.value })}
-            onBlur={onStopEditingName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onStopEditingName();
-            }}
-            placeholder="Name"
-            className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
-          />
-        )}
+        <Input
+          value={m.name}
+          onChange={(e) => onUpdate({ name: e.target.value })}
+          placeholder="Name"
+          className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+        />
       </td>
       <td className="px-2 py-2">
         <SelectField

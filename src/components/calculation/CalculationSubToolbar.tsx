@@ -28,7 +28,7 @@ export function CalculationSubToolbar({
   onRunCalculation,
 }: CalculationSubToolbarProps) {
   return (
-    <div className="relative flex h-[52px] w-full shrink-0 items-center justify-between bg-[#f8fafc] px-4 py-2">
+    <div className="flex h-[52px] w-full shrink-0 items-center gap-4 bg-[#f8fafc] px-4 py-2">
       <Tabs
         value={(() => {
           if (analysisMethod === 'Modal' && (activeTab === 'load-group' || activeTab === 'fatigue-profile')) return 'configuration';

@@ -23,6 +23,10 @@ const GATED_UNTIL_LAYUP_SAVED: CompositionTab[] = ['layup-mapping', 'transversal
 /** Preview needs a geometry to render against. */
 const GATED_UNTIL_GEOMETRY_SELECTED: CompositionTab[] = ['preview'];
 
+/** Duplicate mapping names within a side would corrupt the backend's
+ *  name-keyed transversal-mapping computation — block entry until resolved. */
+const GATED_ON_DUPLICATE_MAPPING_NAMES: CompositionTab[] = ['transversal-mapping'];
+
 interface CompositionEditToolbarProps {
   activeTab: CompositionTab;
   onTabChange: (tab: CompositionTab) => void;
@@ -36,6 +40,8 @@ interface CompositionEditToolbarProps {
   /** An autosave is in flight — lock every tab but the active one so the
    *  user can't switch away mid-save. */
   savingLocked: boolean;
+  /** Upper or lower side layup mapping has two rows sharing a name. */
+  hasDuplicateMappingNames: boolean;
 }
 
 /** Floating sub-toolbar shared by every CompositionNew tab — same tab-pill/title/
@@ -50,10 +56,11 @@ export function CompositionEditToolbar({
   layupsSaved,
   geometrySelected,
   savingLocked,
+  hasDuplicateMappingNames,
 }: CompositionEditToolbarProps) {
   return (
-    <div className="absolute inset-x-0 top-0 z-40 h-[52px] border-b border-[#e5e7eb]/70">
-      <div className="absolute inset-y-0 left-4 flex items-center">
+    <div className="absolute inset-x-0 top-0 z-40 flex h-[52px] items-center gap-4 border-b border-[#e5e7eb]/70 px-4">
+      <div className="flex shrink-0 items-center">
         <Tabs
           value={activeTab}
           onValueChange={(v) => onTabChange(v as CompositionTab)}
@@ -68,6 +75,7 @@ export function CompositionEditToolbar({
                   (!isSaved && t.value !== 'general') ||
                   (!layupsSaved && GATED_UNTIL_LAYUP_SAVED.includes(t.value)) ||
                   (!geometrySelected && GATED_UNTIL_GEOMETRY_SELECTED.includes(t.value)) ||
+                  (hasDuplicateMappingNames && GATED_ON_DUPLICATE_MAPPING_NAMES.includes(t.value)) ||
                   (savingLocked && t.value !== activeTab)
                 }
                 className="h-full rounded-[8px] px-3 py-1 text-[14px] font-medium leading-5 text-[#0a0a0a] data-[state=active]:bg-white data-[state=active]:shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_0px_rgba(0,0,0,0.1)] disabled:pointer-events-none disabled:opacity-40"
@@ -79,11 +87,11 @@ export function CompositionEditToolbar({
         </Tabs>
       </div>
 
-      <h1 className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
+      <h1 className="pointer-events-none hidden min-w-0 flex-1 truncate text-center text-[18px] font-semibold leading-7 text-[#0a0a0a] lg:block">
         {titleText}
       </h1>
 
-      <div className="absolute inset-y-0 right-4 flex items-center">
+      <div className="flex shrink-0 items-center">
         <SaveStatusAndExit status={saveStatus} onExit={onExit} floating />
       </div>
     </div>

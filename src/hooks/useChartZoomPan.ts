@@ -1,7 +1,9 @@
 import { useRef, useState, type PointerEvent, type RefObject } from 'react';
 import { VB_WIDTH, VB_HEIGHT, clamp } from '@/lib/bezierMath';
 
-export const CHART_ZOOM_MIN = 1;
+// Default zoom (1) sits strictly above the min so both the zoom-in and
+// zoom-out buttons are enabled as soon as a chart opens, not just zoom-in.
+export const CHART_ZOOM_MIN = 0.5;
 export const CHART_ZOOM_MAX = 8;
 export const CHART_ZOOM_STEP = 1.25;
 

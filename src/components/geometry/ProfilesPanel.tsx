@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { INITIAL_PROFILES, type Profile } from '@/data/profiles';
 import { nextLocalId } from '@/lib/utils';
 import { ProfileDetailPopover } from '@/components/geometry/ProfileDetailPopover';
-import { useDeferredCommit } from '@/hooks/useDeferredCommit';
+import { useCommitOnce } from '@/hooks/useDeferredCommit';
 
 const HIDE_BANNER_KEY = 'f24_profiles_mode_hide';
 
@@ -14,22 +14,30 @@ export interface ProfilesPanelProps {
   geometryId: number;
   /** Prefill from the backend (GET /geometry/:id/ nested `profiles`) instead of the mock defaults. */
   initialProfiles?: Profile[];
-  /** Autosaves on every add/delete and every field blur inside the detail popover. */
-  onCommit?: (profiles: Profile[]) => void;
+  /** Autosaves on every add/delete and every field blur inside the detail popover. Its
+   *  promise rejecting is how this panel knows a commit didn't actually go through, so
+   *  the same value can be retried instead of being treated as sent. */
+  onCommit?: (profiles: Profile[]) => Promise<void>;
 }
 
 export function ProfilesPanel({ geometryId, initialProfiles, onCommit }: ProfilesPanelProps) {
   const [bannerVisible, setBannerVisible] = useState(
-    () => localStorage.getItem(HIDE_BANNER_KEY) !== 'true'
+    () => localStorage.getItem(HIDE_BANNER_KEY) !== 'true',
   );
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles ?? INITIAL_PROFILES);
   const [selectedId, setSelectedId] = useState<string | null>(
-    (initialProfiles ?? INITIAL_PROFILES)[0]?.id ?? null
+    (initialProfiles ?? INITIAL_PROFILES)[0]?.id ?? null,
   );
 
-  const requestCommit = useDeferredCommit(() => {
-    onCommit?.(profiles);
-  });
+  // Closing the detail popover (onClose below) always requests a commit regardless of
+  // whether anything inside it actually changed — useCommitOnce is what stops that from
+  // PUTting a no-op every time.
+  const requestCommit = useCommitOnce(
+    () => profiles,
+    async (value) => {
+      await onCommit?.(value);
+    },
+  );
 
   function handleUpdate(next: Profile) {
     setProfiles((current) => current.map((p) => (p.id === next.id ? next : p)));
@@ -173,7 +181,11 @@ export function ProfilesPanel({ geometryId, initialProfiles, onCommit }: Profile
           geometryId={geometryId}
           profile={selected}
           onChange={handleUpdate}
-          onClose={() => { sortByPosition(); setSelectedId(null); requestCommit(); }}
+          onClose={() => {
+            sortByPosition();
+            setSelectedId(null);
+            requestCommit();
+          }}
           onSort={sortByPosition}
           onCommit={requestCommit}
         />

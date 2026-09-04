@@ -15,7 +15,7 @@ export interface CompositionLayup {
 export interface CompositionLayupTabProps {
   compositionId: number;
   layups: CompositionLayup[];
-  onAddLayup: (name: string) => void;
+  onAddLayup: (name: string) => string;
   onRenameLayup: (layupId: string, name: string) => void;
   onDeleteLayup: (layupId: string) => void;
   onUpdateLayupPlies: (layupId: string, updater: (current: Ply[]) => Ply[]) => void;
@@ -42,7 +42,7 @@ export function CompositionLayupTab({
 
   function handleAdd() {
     if (!name.trim()) return;
-    onAddLayup(name.trim());
+    setExpandedId(onAddLayup(name.trim()));
     setName('');
     setFormOpen(false);
   }

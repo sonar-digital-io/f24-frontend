@@ -37,7 +37,12 @@ import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 /** A fixed field's value is entirely backend-controlled, via sysconfig's own resolved
  *  `entry.value` — always snapped to it, never left at whatever was there before, since a
  *  dependency on some *other* field (e.g. a formula-driven modulus) can recompute it any
- *  time sysconfig re-resolves. Returns `values` itself, unchanged, when nothing needs it. */
+ *  time sysconfig re-resolves. A non-fixed field is user-editable, but still gets seeded
+ *  from `entry.value` the first time it appears with no local value yet (e.g. a field that
+ *  only applies to isotropic ply becomes active after switching Type, carrying sysconfig's
+ *  already-resolved value for it) — once the field has a local value, editing it is left
+ *  alone here; only `fixed` fields keep re-snapping after that. Returns `values` itself,
+ *  unchanged, when nothing needs it. */
 function withFixedDefaults(
   values: Record<string, string>,
   sections: FormSection[],
@@ -45,13 +50,66 @@ function withFixedDefaults(
   let next = values;
   sections.forEach((section) =>
     section.fields.forEach((field) => {
-      if (field.fixed && field.value !== undefined && next[field.name] !== field.value) {
+      if (field.value === undefined) return;
+      const shouldApply = field.fixed
+        ? next[field.name] !== field.value
+        : next[field.name] === undefined;
+      if (shouldApply) {
         if (next === values) next = { ...values };
         next[field.name] = field.value;
       }
     }),
   );
   return next;
+}
+
+/** Every `mechanical_properties` PUT — from the initial create through every later
+ *  blur-autosave — must always carry `mech_prop_type`, even though it's not a
+ *  `mechanicalSections` field: it lives in sysconfig's ungrouped
+ *  `mechanical_properties.parameters`, not any of its `groups`, so
+ *  `buildSysconfigSections`/`pickActiveFields` never see it and would otherwise drop
+ *  it from every save. */
+function mechanicalPropertiesPayload(
+  mechValues: Record<string, string>,
+  mechanicalSections: FormSection[],
+  type: string,
+) {
+  return toKeyValueList({
+    ...pickActiveFields(mechValues, mechanicalSections),
+    [MECH_PROP_TYPE_REFERENCE]: mechValues[MECH_PROP_TYPE_REFERENCE] || type,
+  });
+}
+
+/** Shared "keep a sysconfig-driven value set in sync with its fixed/first-seen
+ *  defaults" effect for the Mechanical and Fatigue tabs: re-derives `values` via
+ *  `withFixedDefaults` whenever `sections` changes (e.g. a Type switch), and once
+ *  hydrated persists the seeded value immediately via `mutate` — instead of just
+ *  patching local state, which would lose the default if the user navigated away
+ *  before ever blurring another field. */
+function useSyncFixedDefaults<TPayload>(
+  values: Record<string, string>,
+  setValues: (next: Record<string, string>) => void,
+  sections: FormSection[],
+  hydrated: boolean,
+  isEditing: boolean,
+  buildPayload: (next: Record<string, string>) => TPayload,
+  mutate: (payload: TPayload, opts: { onSuccess: () => void }) => void,
+  patchBaseline: (next: Record<string, string>) => void,
+) {
+  useEffect(() => {
+    const next = withFixedDefaults(values, sections);
+    if (next === values) return;
+    setValues(next);
+    if (!hydrated || !isEditing) {
+      patchBaseline(next);
+      return;
+    }
+    mutate(buildPayload(next), { onSuccess: () => patchBaseline(next) });
+    // values/isEditing/hydrated/buildPayload/mutate/patchBaseline intentionally excluded —
+    // this only needs to react to `sections` itself changing (e.g. a Type switch); the
+    // rest are read fresh via closure, and isEditing/hydrated never flip back to false.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sections]);
 }
 
 /** Loading/error placeholder shared by the Mechanical and Fatigue tabs while
@@ -114,7 +172,11 @@ export function MaterialNew() {
   // the just-typed value with the pre-edit server snapshot.
   const pendingSaveRef = useRef<Promise<unknown> | null>(null);
 
-  const type = mechValues[MECH_PROP_TYPE_REFERENCE] ?? 'ud_ply';
+  // A material cannot exist without a type — an empty value from hydration
+  // (an existing material saved before this field was required, or a
+  // duplicate source missing it) falls back to the same default a brand new
+  // material starts with, never an empty string.
+  const type = mechValues[MECH_PROP_TYPE_REFERENCE] || 'ud_ply';
 
   // Always fetched — with `?material=:id` once the material exists, or without it for a
   // brand new one (materialId is NaN) — drives the General tab's Type options plus the
@@ -138,40 +200,29 @@ export function MaterialNew() {
         : [],
     [sysconfigQuery.data],
   );
+  // Fatigue properties are all optional — shown regardless of sysconfig's resolved
+  // `active`, unlike Mechanical properties, where `active` gates visibility.
   const fatigueSections = useMemo(
     () =>
       sysconfigQuery.data
         ? buildSysconfigSections(
             sysconfigQuery.data,
             sysconfigQuery.data.configuration.fatigue_properties,
+            undefined,
+            true,
           )
         : [],
     [sysconfigQuery.data],
   );
 
-  // Re-sync fixed fields to sysconfig's resolved value every time sysconfig itself
-  // changes — including right after a blur-autosave, now that saving mechanical/fatigue
-  // properties always invalidates sysconfig too. Patches `baseline` alongside the values
-  // so this backend-driven sync is never mistaken for an in-progress user edit.
-  useEffect(() => {
-    setMechValues((prev) => withFixedDefaults(prev, mechanicalSections));
-    setBaseline((prev) =>
-      prev ? { ...prev, mechValues: withFixedDefaults(prev.mechValues, mechanicalSections) } : prev,
-    );
-  }, [mechanicalSections]);
-
-  useEffect(() => {
-    setFatigueValues((prev) => withFixedDefaults(prev, fatigueSections));
-    setBaseline((prev) =>
-      prev ? { ...prev, fatigueValues: withFixedDefaults(prev.fatigueValues, fatigueSections) } : prev,
-    );
-  }, [fatigueSections]);
-
-  // Values (including Type) always come from GET /material/:id/ — the direct,
-  // authoritative source — not sysconfig, which only supplies structure (labels, units,
-  // required, min/max, active, fixed). This effect keeps fixed/computed fields and Type
-  // in sync every time the detail endpoint refetches (e.g. after a blur-autosave PUT).
-  // Non-fixed fields are left alone so this never clobbers an in-progress edit elsewhere.
+  // Re-syncs fixed/computed fields and Type whenever detailQuery.data itself changes —
+  // e.g. after the General tab's save (which does invalidate material detail) or the
+  // explicit refetch on tab switch below. A mechanical/fatigue property blur-save does
+  // NOT trigger this: it deliberately skips invalidating material detail, relying on
+  // sysconfig's own freshly-resolved values instead (see the withFixedDefaults effects
+  // further below and useUpdateMechanicalProperties/useUpdateFatigueProperties) rather
+  // than a second GET /material/:id/ round-trip. Non-fixed fields are left alone here so
+  // this never clobbers an in-progress edit elsewhere.
   useEffect(() => {
     if (!detailQuery.data) return;
 
@@ -279,6 +330,40 @@ export function MaterialNew() {
     },
   );
 
+  // Sysconfig can seed a field's value on its own — a fixed/computed field's resolved
+  // value, or (per withFixedDefaults) a newly-active field's default the user hasn't
+  // touched yet. That only updates local state; nothing has told the backend about it.
+  // Once initial hydration has actually settled (so this never fires on a fresh page
+  // load before the material's real saved values are in, which would otherwise PUT a
+  // half-loaded snapshot), persist the seeded value right away — otherwise it's lost
+  // the moment the user navigates away without happening to blur some other field.
+  // Before that (still loading, or the material doesn't exist yet), just track it as
+  // the new baseline: a not-yet-created material's defaults ride along in the initial
+  // create payload instead (see saveGeneralFields/mechanicalPropertiesPayload).
+  useSyncFixedDefaults(
+    mechValues,
+    setMechValues,
+    mechanicalSections,
+    hydrated,
+    isEditing,
+    (next) => ({
+      payload: { mechanical_properties: mechanicalPropertiesPayload(next, mechanicalSections, type) },
+    }),
+    updateMechanicalMutation.mutate,
+    (next) => setBaseline((prev) => (prev ? { ...prev, mechValues: next } : prev)),
+  );
+
+  useSyncFixedDefaults(
+    fatigueValues,
+    setFatigueValues,
+    fatigueSections,
+    hydrated,
+    isEditing,
+    (next) => ({ fatigue_properties: toKeyValueList(pickActiveFields(next, fatigueSections)) }),
+    updateFatigueMutation.mutate,
+    (next) => setBaseline((prev) => (prev ? { ...prev, fatigueValues: next } : prev)),
+  );
+
   // Switching into the Mechanical or Fatigue tab re-fetches GET /material/:id/ and fully
   // re-syncs both tabs' fields from its mechanical_properties/fatigue_properties arrays —
   // filling in whatever has a saved value, clearing whatever doesn't. Safe to overwrite
@@ -372,7 +457,7 @@ export function MaterialNew() {
         name,
         date: toIsoDateTime(date),
         description,
-        mechanical_properties: toKeyValueList(pickActiveFields(mechValues, mechanicalSections)),
+        mechanical_properties: mechanicalPropertiesPayload(mechValues, mechanicalSections, type),
         fatigue_properties: toKeyValueList(pickActiveFields(fatigueValues, fatigueSections)),
       };
       const created = await createMaterialMutation.mutateAsync(payload);
@@ -470,7 +555,7 @@ export function MaterialNew() {
     if (!mechanicalRangeValid || !mechanicalUnsaved || updateMechanicalMutation.isPending) return;
     const savePromise = updateMechanicalMutation.mutateAsync({
       payload: {
-        mechanical_properties: toKeyValueList(pickActiveFields(mechValues, mechanicalSections)),
+        mechanical_properties: mechanicalPropertiesPayload(mechValues, mechanicalSections, type),
       },
     });
     pendingSaveRef.current = savePromise;
@@ -511,8 +596,13 @@ export function MaterialNew() {
   // required field cleared there (which can't autosave — handleGeneralBlur requires
   // generalValid) doesn't silently slip past Exit with no warning.
   const isIncomplete = isEditing && (!generalValid || !mechanicalValid || !fatigueValid);
-  const { showExitConfirm, showMissingFieldErrors, handleExit, handleExitAnyway, handleStayAndReview } =
-    useExitConfirm(exitTarget, isIncomplete);
+  const {
+    showExitConfirm,
+    showMissingFieldErrors,
+    handleExit,
+    handleExitAnyway,
+    handleStayAndReview,
+  } = useExitConfirm(exitTarget, isIncomplete);
 
   const isDuplicating = !isEditing && Number.isFinite(duplicateSourceId);
   const showLoadingState =

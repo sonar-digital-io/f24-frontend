@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useLoadCases, useUpdateLoadCases } from '@/hooks/api/useLoadGroups';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { loadCaseHasErrors } from '@/lib/loadCaseValidation';
-import { matchSavedRows } from '@/lib/mergeSavedRows';
+import { mapIdsByKey } from '@/lib/mergeSavedRows';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import type { LoadCase } from '@/api/types/loadGroups';
 
@@ -31,7 +31,10 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
 
   useHydrateOnce(!isNew && !loadCasesQuery.isFetching && !!loadCasesQuery.data, () => {
     setLoadCases(
-      loadCasesQuery.data!.load_cases.map((lc) => ({ ...lc, __KEY__: lc.__KEY__ || crypto.randomUUID() }))
+      loadCasesQuery.data!.load_cases.map((lc) => ({
+        ...lc,
+        __KEY__: lc.__KEY__ || crypto.randomUUID(),
+      })),
     );
     setStatus('saved');
   });
@@ -106,17 +109,14 @@ export function useLoadGroupLoadCasesState(loadGroupId: number, isNew: boolean) 
     }
     if (isNew || !dirtyRef.current || loadCasesRef.current.some(loadCaseHasErrors)) return;
     setStatus('saving');
+    const sent = loadCasesRef.current;
     try {
-      const saved = await updateLoadCasesMutation.mutateAsync({ load_cases: loadCasesRef.current });
-      // The PUT response carries backend-assigned ids for newly-added rows
-      // (needed by the fatigue profiles tab's load-case picker) — merge them
-      // back in, keeping each row's client-side __KEY__ for React identity.
-      setLoadCases((prev) =>
-        matchSavedRows(saved.load_cases, prev).map(({ row, matchedPrev }) => ({
-          ...row,
-          __KEY__: matchedPrev?.__KEY__ || crypto.randomUUID(),
-        }))
-      );
+      const saved = await updateLoadCasesMutation.mutateAsync({ load_cases: sent });
+      // Merge in only what the backend actually adds — ids assigned to freshly-created
+      // rows (needed by the fatigue profiles tab's load-case picker) — applied onto the
+      // *latest* state, not the `sent` snapshot.
+      const idByKey = mapIdsByKey(sent, saved.load_cases);
+      setLoadCases((prev) => prev.map((c) => ({ ...c, id: idByKey.get(c.__KEY__) ?? c.id })));
       setDirty(false);
       setStatus('saved');
     } catch {

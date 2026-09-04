@@ -24,7 +24,11 @@ import { useSysconfig, sysconfigKeys } from '@/hooks/api/useSysconfig';
 import { getSysconfig } from '@/api/sysconfig';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { buildAnalysisSettingsPayload } from '@/lib/calculationSettings';
-import { buildSysconfigSections, buildStandaloneGroup } from '@/lib/sysconfigMapping';
+import {
+  buildSysconfigSections,
+  buildStandaloneGroup,
+  pickActiveFields,
+} from '@/lib/sysconfigMapping';
 import { toKeyValueList, keyValueSignature } from '@/lib/keyValueMapping';
 import { isFormRangeValid } from '@/lib/sysconfigFormValidation';
 import type { Tab } from '@/types';
@@ -88,12 +92,28 @@ export function CalculationNew() {
   const [analysisMethod, setAnalysisMethod] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(todayISO());
+  // Last-persisted name/description/date snapshot — null until the first hydrate/save,
+  // same role as Material/Composition/Geometry's `baseline`, so a blur with nothing
+  // actually changed doesn't PUT a no-op.
+  const [generalBaseline, setGeneralBaseline] = useState<{
+    name: string;
+    description: string;
+    date: string;
+  } | null>(null);
   useHydrateOnce(!isNew && !detailQuery.isFetching && !!detailQuery.data, () => {
     const p = detailQuery.data!;
+    const hydratedDescription = p.description ?? '';
+    const hydratedDate = toDateInputValue(p.created_at);
     setName(p.name);
-    setDescription(p.description ?? '');
-    setDate(toDateInputValue(p.created_at));
+    setDescription(hydratedDescription);
+    setDate(hydratedDate);
+    setGeneralBaseline({ name: p.name, description: hydratedDescription, date: hydratedDate });
   });
+  const generalUnsaved =
+    !generalBaseline ||
+    name !== generalBaseline.name ||
+    description !== generalBaseline.description ||
+    date !== generalBaseline.date;
 
   const isModalMethod = analysisMethod.startsWith('Modal');
   const isStaticStructural = analysisMethod.startsWith('Static structural');
@@ -116,7 +136,9 @@ export function CalculationNew() {
   // ── Configuration ─────────────────────────────────────────────────────────
   // Only fetched while the Configuration tab is actually open — drives every
   // field/group/unit shown there, no hardcoded field state on this page anymore.
-  const sysconfigQuery = useSysconfig(activeTab === 'configuration' ? effectiveProjectId ?? '' : '');
+  const sysconfigQuery = useSysconfig(
+    activeTab === 'configuration' ? (effectiveProjectId ?? '') : '',
+  );
   const configSections = useMemo(() => {
     if (!sysconfigQuery.data) return [];
     const projectSettings = sysconfigQuery.data.configuration.project_settings;
@@ -159,9 +181,16 @@ export function CalculationNew() {
   // mechanical/fatigue tabs — then refetch sysconfig so any dependency this change affects
   // (active/fixed/value on other fields) is reflected immediately.
   async function handleConfigFieldBlur() {
-    if (!effectiveProjectId || !configRangeValid || !configUnsaved || updateSettingsMutation.isPending) return;
+    if (
+      !effectiveProjectId ||
+      !configRangeValid ||
+      !configUnsaved ||
+      updateSettingsMutation.isPending
+    )
+      return;
     try {
-      await updateSettingsMutation.mutateAsync({ projectId: effectiveProjectId, settings: toKeyValueList(configValues) });
+      const settings = toKeyValueList(pickActiveFields(configValues, configSections));
+      await updateSettingsMutation.mutateAsync({ projectId: effectiveProjectId, settings });
       setConfigBaseline(configValues);
       await queryClient.fetchQuery({
         queryKey: sysconfigKeys.detail(effectiveProjectId),
@@ -185,7 +214,10 @@ export function CalculationNew() {
     // already current whenever the user gets to Configuration.
     setConfigValues({});
     setConfigBaseline({});
-    await queryClient.fetchQuery({ queryKey: sysconfigKeys.detail(pid), queryFn: () => getSysconfig(pid) });
+    await queryClient.fetchQuery({
+      queryKey: sysconfigKeys.detail(pid),
+      queryFn: () => getSysconfig(pid),
+    });
   }
 
   // ── Load group tab ────────────────────────────────────────────────────────
@@ -237,8 +269,14 @@ export function CalculationNew() {
   // exists — typing on a brand-new, still-untouched calculation shouldn't
   // create one by itself.
   async function handleGeneralFieldBlur() {
-    if (!effectiveProjectId) return;
-    await updateMutation.mutateAsync({ projectId: effectiveProjectId, name, description, created_at: toIsoDateTime(date) });
+    if (!effectiveProjectId || !generalUnsaved || updateMutation.isPending) return;
+    await updateMutation.mutateAsync({
+      projectId: effectiveProjectId,
+      name,
+      description,
+      created_at: toIsoDateTime(date),
+    });
+    setGeneralBaseline({ name, description, date });
   }
 
   async function handleRunCalculation() {
@@ -262,17 +300,22 @@ export function CalculationNew() {
   // ── Run calculation eligibility ───────────────────────────────────────────
   const canRunCalculation = (() => {
     const baseFields = name.trim() && description.trim();
-    if (analysisMethod === 'Aero only') return !!(baseFields && selectedCompositionId && selectedGroupId);
-    if (analysisMethod === 'Modal (RPM & Aero)') return !!(baseFields && selectedCompositionId && selectedGroupId);
+    if (analysisMethod === 'Aero only')
+      return !!(baseFields && selectedCompositionId && selectedGroupId);
+    if (analysisMethod === 'Modal (RPM & Aero)')
+      return !!(baseFields && selectedCompositionId && selectedGroupId);
     if (isModalMethod) return !!(baseFields && selectedCompositionId);
-    if (analysisMethod === 'Static structural (RPM & Aero)') return !!(baseFields && selectedCompositionId && selectedGroupId && selectedProfileId);
+    if (analysisMethod === 'Static structural (RPM & Aero)')
+      return !!(baseFields && selectedCompositionId && selectedGroupId && selectedProfileId);
     if (isStaticStructural) return !!(baseFields && selectedCompositionId && selectedGroupId);
     return !!name.trim();
   })();
 
   // ── Tab trigger class ─────────────────────────────────────────────────────
   return (
-    <div className={`flex w-full flex-col bg-[#f8fafc] ${activeTab === 'configuration' ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
+    <div
+      className={`flex w-full flex-col bg-[#f8fafc] ${activeTab === 'configuration' ? 'h-screen overflow-hidden' : 'min-h-screen'}`}
+    >
       <MainNav />
 
       <CalculationSubToolbar
@@ -287,108 +330,108 @@ export function CalculationNew() {
       />
 
       {/* ── Main content ──────────────────────────────────────────────────── */}
-      <main className={`flex-1 px-4 pt-4 ${activeTab === 'configuration' ? 'overflow-hidden pb-4' : 'overflow-auto pb-6'}`}>
+      <main
+        className={`flex-1 px-4 pt-4 ${activeTab === 'configuration' ? 'overflow-hidden pb-4' : 'overflow-auto pb-6'}`}
+      >
+        {/* ── GENERAL TAB ─────────────────────────────────────────────── */}
+        {activeTab === 'general' && (
+          <CalculationGeneralTab
+            name={name}
+            onNameChange={setName}
+            analysisMethod={analysisMethod}
+            onAnalysisMethodChange={handleAnalysisMethodChange}
+            description={description}
+            onDescriptionChange={setDescription}
+            date={date}
+            onDateChange={setDate}
+            onFieldBlur={handleGeneralFieldBlur}
+          />
+        )}
 
-          {/* ── GENERAL TAB ─────────────────────────────────────────────── */}
-          {activeTab === 'general' && (
-            <CalculationGeneralTab
-              name={name}
-              onNameChange={setName}
-              analysisMethod={analysisMethod}
-              onAnalysisMethodChange={handleAnalysisMethodChange}
-              description={description}
-              onDescriptionChange={setDescription}
-              date={date}
-              onDateChange={setDate}
-              onFieldBlur={handleGeneralFieldBlur}
-            />
-          )}
+        {/* ── COMPOSITION TAB ─────────────────────────────────────────── */}
+        {activeTab === 'composition' && (
+          <CalculationCompositionTab
+            isLoading={compositionsQuery.isLoading}
+            isError={compositionsQuery.isError}
+            search={compSearch}
+            onSearchChange={handleCompSearchChange}
+            sort={compSort}
+            onSort={handleCompSort}
+            pageRows={compPageRows}
+            page={compPage}
+            totalPages={compTotalPages}
+            onPageChange={setCompPage}
+            selectedCompositionId={selectedCompositionId}
+            onSelectComposition={handleSelectComposition}
+          />
+        )}
 
-          {/* ── COMPOSITION TAB ─────────────────────────────────────────── */}
-          {activeTab === 'composition' && (
-            <CalculationCompositionTab
-              isLoading={compositionsQuery.isLoading}
-              isError={compositionsQuery.isError}
-              search={compSearch}
-              onSearchChange={handleCompSearchChange}
-              sort={compSort}
-              onSort={handleCompSort}
-              pageRows={compPageRows}
-              page={compPage}
-              totalPages={compTotalPages}
-              onPageChange={setCompPage}
-              selectedCompositionId={selectedCompositionId}
-              onSelectComposition={handleSelectComposition}
-            />
-          )}
+        {/* ── CONFIGURATION TAB ───────────────────────────────────────── */}
+        {activeTab === 'configuration' && (
+          <>
+            {sysconfigQuery.isLoading && (
+              <div className="flex h-full w-full max-w-[1200px] items-center justify-center rounded-[14px] border border-[#e5e7eb] bg-white text-[14px] text-[#6b7280] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+                Loading configuration…
+              </div>
+            )}
+            {sysconfigQuery.isError && (
+              <div className="flex h-full w-full max-w-[1200px] items-center justify-center rounded-[14px] border border-[#e5e7eb] bg-white text-[14px] text-[#dc2626] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+                Failed to load configuration from the server.
+              </div>
+            )}
+            {!sysconfigQuery.isLoading && !sysconfigQuery.isError && (
+              <PropertyFormTab
+                sections={configSections}
+                values={configValues}
+                onChange={handleConfigFieldChange}
+                onBlur={handleConfigFieldBlur}
+              />
+            )}
+          </>
+        )}
 
-          {/* ── CONFIGURATION TAB ───────────────────────────────────────── */}
-          {activeTab === 'configuration' && (
-            <>
-              {sysconfigQuery.isLoading && (
-                <div className="flex h-full w-full max-w-[1200px] items-center justify-center rounded-[14px] border border-[#e5e7eb] bg-white text-[14px] text-[#6b7280] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-                  Loading configuration…
-                </div>
-              )}
-              {sysconfigQuery.isError && (
-                <div className="flex h-full w-full max-w-[1200px] items-center justify-center rounded-[14px] border border-[#e5e7eb] bg-white text-[14px] text-[#dc2626] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
-                  Failed to load configuration from the server.
-                </div>
-              )}
-              {!sysconfigQuery.isLoading && !sysconfigQuery.isError && (
-                <PropertyFormTab
-                  sections={configSections}
-                  values={configValues}
-                  onChange={handleConfigFieldChange}
-                  onBlur={handleConfigFieldBlur}
-                />
-              )}
-            </>
-          )}
+        {/* ── LOAD GROUP TAB ──────────────────────────────────────────── */}
+        {activeTab === 'load-group' && (
+          <CalculationLoadGroupTab
+            isLoading={loadGroupsQuery.isLoading}
+            isError={loadGroupsQuery.isError}
+            search={lgSearch}
+            onSearchChange={handleLgSearchChange}
+            sort={lgSort}
+            onSort={handleLgSort}
+            pageRows={lgPageRows}
+            page={lgPage}
+            totalPages={lgTotalPages}
+            onPageChange={setLgPage}
+            selectedGroupId={selectedGroupId}
+            onSelectGroup={handleSelectGroup}
+            expandedGroupIds={expandedGroupPreviewIds}
+            onTogglePreview={handleToggleGroupPreview}
+            expandedCaseIds={expandedGroupCaseIds}
+            onToggleCasePreview={handleToggleCasePreview}
+          />
+        )}
 
-          {/* ── LOAD GROUP TAB ──────────────────────────────────────────── */}
-          {activeTab === 'load-group' && (
-            <CalculationLoadGroupTab
-              isLoading={loadGroupsQuery.isLoading}
-              isError={loadGroupsQuery.isError}
-              search={lgSearch}
-              onSearchChange={handleLgSearchChange}
-              sort={lgSort}
-              onSort={handleLgSort}
-              pageRows={lgPageRows}
-              page={lgPage}
-              totalPages={lgTotalPages}
-              onPageChange={setLgPage}
-              selectedGroupId={selectedGroupId}
-              onSelectGroup={handleSelectGroup}
-              expandedGroupIds={expandedGroupPreviewIds}
-              onTogglePreview={handleToggleGroupPreview}
-              expandedCaseIds={expandedGroupCaseIds}
-              onToggleCasePreview={handleToggleCasePreview}
-            />
-          )}
-
-          {/* ── FATIGUE PROFILE TAB ─────────────────────────────────────── */}
-          {activeTab === 'fatigue-profile' && (
-            <CalculationFatigueProfileTab
-              hasSelectedGroup={selectedGroupId !== null}
-              selectedGroupName={selectedLoadGroup?.name ?? ''}
-              onGoToLoadGroupTab={() => setActiveTab('load-group')}
-              isLoading={fatigueProfilesQuery.isFetching || loadCasesQuery.isFetching}
-              isError={fatigueProfilesQuery.isError || loadCasesQuery.isError}
-              search={fpSearch}
-              onSearchChange={setFpSearch}
-              profiles={fpFilteredProfiles}
-              loadCasesById={loadCasesById}
-              expandedProfileIds={expandedProfileIds}
-              onToggleProfile={toggleFPProfile}
-              selectedProfileId={selectedProfileId}
-              onSelectProfile={handleSelectFatigueProfile}
-              expandedCaseIds={expandedCaseIds}
-              onToggleCase={toggleFPCase}
-            />
-          )}
-
+        {/* ── FATIGUE PROFILE TAB ─────────────────────────────────────── */}
+        {activeTab === 'fatigue-profile' && (
+          <CalculationFatigueProfileTab
+            hasSelectedGroup={selectedGroupId !== null}
+            selectedGroupName={selectedLoadGroup?.name ?? ''}
+            onGoToLoadGroupTab={() => setActiveTab('load-group')}
+            isLoading={fatigueProfilesQuery.isFetching || loadCasesQuery.isFetching}
+            isError={fatigueProfilesQuery.isError || loadCasesQuery.isError}
+            search={fpSearch}
+            onSearchChange={setFpSearch}
+            profiles={fpFilteredProfiles}
+            loadCasesById={loadCasesById}
+            expandedProfileIds={expandedProfileIds}
+            onToggleProfile={toggleFPProfile}
+            selectedProfileId={selectedProfileId}
+            onSelectProfile={handleSelectFatigueProfile}
+            expandedCaseIds={expandedCaseIds}
+            onToggleCase={toggleFPCase}
+          />
+        )}
       </main>
     </div>
   );

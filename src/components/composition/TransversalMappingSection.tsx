@@ -82,7 +82,6 @@ export function TransversalMappingSection({
   const { data: transversalMappingData } = useCompositionMappingTransversal(compositionId);
   const { data: intersectionsData } = useCompositionIntersections(compositionId);
   const updateTransversalMutation = useUpdateCompositionMappingTransversal(compositionId);
-  const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [boundaryEditor, setBoundaryEditor] = useState<OpenBoundaryEditor | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   // Snapshot of the last-persisted mapping state — drives the autosave
@@ -138,6 +137,16 @@ export function TransversalMappingSection({
     return sorted.slice(lo, hi + 1);
   }
 
+  /** A mapping's color, keyed to its position in the table (not the per-profile
+   *  filtered list) so it's the same green/red everywhere this mapping shows up —
+   *  the cross-section dialog's rings, the table, and the boundary editor's
+   *  highlight/handles — instead of drifting depending on which other mappings
+   *  happen to also cover the profile being viewed. */
+  function transversalMappingColorFor(mappingId: string): string {
+    const idx = mappings.findIndex((m) => m.id === mappingId);
+    return TRANSVERSAL_MAPPING_COLORS[(idx === -1 ? 0 : idx) % TRANSVERSAL_MAPPING_COLORS.length];
+  }
+
   /**
    * Reference regions showing where each layup mapping (a longitudinal
    * mapping's own upper/lower boundary strip, edited on the "Layup mapping"
@@ -186,8 +195,22 @@ export function TransversalMappingSection({
 
   // Mapping rings per profile, for the list thumbnails — drawn from the
   // live editable `mappings` state (not the last-saved GET response), so an
-  // in-progress, not-yet-saved mapping shows up here immediately too.
-  const ringsByProfileId = new Map<number, { startFrac: number; endFrac: number }[]>();
+  // in-progress, not-yet-saved mapping shows up here immediately too. Layup
+  // mapping reference regions are included for every profile up front — they
+  // exist independently of any transversal mapping, so the thumbnails should
+  // always carry them, same as the cross-section dialog does.
+  const ringsByProfileId = new Map<
+    number,
+    { startFrac: number; endFrac: number; color?: string }[]
+  >();
+  crossSectionProfiles.forEach((profile) => {
+    const layupRings = longitudinalMappingEntriesForProfile(profile.id).map((e) => ({
+      startFrac: e.startFrac,
+      endFrac: e.endFrac,
+      color: e.color,
+    }));
+    if (layupRings.length > 0) ringsByProfileId.set(profile.id, layupRings);
+  });
   mappings.forEach((m) => {
     getCoveredProfiles(m).forEach((profile) => {
       const b = getMappingBoundary(m, profile.id);
@@ -318,9 +341,6 @@ export function TransversalMappingSection({
                 mapping={m}
                 layupOptions={layupOptions}
                 profileOptions={profileOptions}
-                editingName={editingNameId === m.id}
-                onStartEditingName={() => setEditingNameId(m.id)}
-                onStopEditingName={() => setEditingNameId(null)}
                 onUpdate={(next) => updateMapping(m.id, next)}
                 onEditStartBoundary={() =>
                   setBoundaryEditor({ mappingId: m.id, profileId: m.startProfileId! })
@@ -368,6 +388,7 @@ export function TransversalMappingSection({
               profileName={
                 profileOptions.find((p) => p.value === String(editingProfileId))?.label ?? ''
               }
+              color={transversalMappingColorFor(editingMapping.id)}
               points={pointsByProfileId.get(editingProfileId)}
               boundary={getMappingBoundary(editingMapping, editingProfileId)}
               lockOptions={editingLockOptions}
@@ -416,7 +437,7 @@ export function TransversalMappingSection({
             intersectionsData?.find((p) => p.profile_id === profileId)?.intersections ?? [];
           const entries = mappings
             .filter((m) => getCoveredProfiles(m).some((p) => p.id === profileId))
-            .map((m, i) => {
+            .map((m) => {
               const b = getMappingBoundary(m, profileId);
               return {
                 id: `${m.groupId}-${profileId}`,
@@ -431,7 +452,7 @@ export function TransversalMappingSection({
                 endLockedToLabel: describeIntersection(
                   profileIntersections.find((i) => i.id === b.endLockedTo),
                 ),
-                color: TRANSVERSAL_MAPPING_COLORS[i % TRANSVERSAL_MAPPING_COLORS.length],
+                color: transversalMappingColorFor(m.id),
                 onEdit: () => setBoundaryEditor({ mappingId: m.id, profileId }),
               };
             });
