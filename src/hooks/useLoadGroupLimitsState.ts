@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useUpdateLoadGroupLimits } from '@/hooks/api/useLoadGroups';
 import { INITIAL_LOAD_LIMITS, type LimitsSubTab } from '@/data/loadGroupForm';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
-import type { LoadLimitCurvePoint, LoadLimitRange, LoadLimitRangePayload } from '@/api/types/loadGroups';
-import { convertCurvePoints } from '@/lib/bezierMath';
+import type { LoadLimitRange, LoadLimitRangePayload } from '@/api/types/loadGroups';
 import type { CurveType } from '@/types';
 
 /**
@@ -48,15 +47,10 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
   }
 
   function updateLimitCurveType(sub: LimitsSubTab, curveType: CurveType) {
-    setLimits((prev) => {
-      const current = prev[sub];
-      const converted = convertCurvePoints(
-        current.curve.map((c) => ({ x: c.rpm, y: c.value })),
-        current.curve_type,
-        curveType,
-      ).map((p): LoadLimitCurvePoint => ({ rpm: p.x, value: p.y }));
-      return { ...prev, [sub]: { ...current, curve_type: curveType, curve: converted } };
-    });
+    setLimits((prev) => ({
+      ...prev,
+      [sub]: { ...prev[sub], curve_type: curveType, curve: INITIAL_LOAD_LIMITS[sub].curve },
+    }));
     markDirty();
   }
 

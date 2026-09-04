@@ -6,7 +6,7 @@ import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
 import { StackingSectionBody } from '@/components/geometry/StackingSectionBody';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
 import { useCommitOnce } from '@/hooks/useDeferredCommit';
-import { clamp, convertCurvePoints } from '@/lib/bezierMath';
+import { clamp } from '@/lib/bezierMath';
 import type { GeometryEdge, GeometryEdgeInput } from '@/api/types/geometry';
 
 type SectionKey = 'sweep' | 'dihedral' | 'twist' | 'chord';
@@ -223,7 +223,7 @@ export function StackingPanel({
 
   function handleCurveTypeChange(key: SectionKey, next: CurveType) {
     setCurveType((current) => ({ ...current, [key]: next }));
-    setPointsForSection(key, convertCurvePoints(sectionPoints[key], curveType[key], next));
+    setPointsForSection(key, INITIAL_SECTION_POINTS[key]);
     requestCommit();
   }
 

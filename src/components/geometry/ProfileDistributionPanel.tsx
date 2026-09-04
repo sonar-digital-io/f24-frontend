@@ -7,7 +7,6 @@ import { ProfileGeneratorTopRow } from '@/components/geometry/ProfileGeneratorTo
 import { ProfileDistributionSectionBody } from '@/components/geometry/ProfileDistributionSectionBody';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
 import { useCommitOnce } from '@/hooks/useDeferredCommit';
-import { convertCurvePoints } from '@/lib/bezierMath';
 import type { ProfileGeneratorParameters } from '@/api/types/geometry';
 
 // Only NACA 4 digit is supported by the backend right now.
@@ -199,15 +198,12 @@ export function ProfileDistributionPanel({
     expandYBounds,
   );
 
-
   function handleCurveTypeChange(key: SectionKey, next: CurveType) {
     setCurveType((current) => ({ ...current, [key]: next }));
-    const converted = convertCurvePoints(sectionPoints[key], curveType[key], next);
-    // Point 0's x always tracks the Start position field — conversion already preserves
-    // it exactly, this just guards against float drift.
+    // Point 0's x always tracks the Start position field — keep that in sync on reset too.
     setPointsForSection(
       key,
-      converted.map((p, i) => (i === 0 ? { ...p, x: rootX } : p)),
+      INITIAL_SECTION_POINTS[key].map((p, i) => (i === 0 ? { ...p, x: rootX } : p)),
     );
     requestCommit();
   }
