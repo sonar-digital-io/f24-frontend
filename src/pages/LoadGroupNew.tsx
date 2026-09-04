@@ -65,8 +65,14 @@ export function LoadGroupNew() {
     // A freshly-created load group's limits come back with an empty curve
     // (no points saved yet) rather than being omitted — keep the default
     // 2-point curve in that case instead of collapsing the chart to nothing.
+    // Curve points are stripped to exactly {rpm,value} — some already-saved
+    // load groups carry extra fields (e.g. stray handle_in_x/handle_in_y from
+    // before the backend's schema went strict) that would otherwise ride
+    // along unchanged into the next PUT and get rejected as additionalProperties.
     const withCurve = (incoming: LoadLimitRange | undefined, fallback: LoadLimitRange) =>
-      incoming && incoming.curve.length >= 2 ? incoming : fallback;
+      incoming && incoming.curve.length >= 2
+        ? { ...incoming, curve: incoming.curve.map((c) => ({ rpm: c.rpm, value: c.value })) }
+        : fallback;
     setLimits((prev) => ({
       thrust: withCurve(g.rpm_thrust_limit, prev.thrust),
       torque: withCurve(g.rpm_torque_limit, prev.torque),

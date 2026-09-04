@@ -199,11 +199,19 @@ export function StackingPanel({
   const { sectionPoints, setPointsForSection, bindSection } = useEditableSectionPoints(
     (() => {
       const map = edgeMap(initialEdges);
+      // Strip to exactly {x,y} — some already-saved geometries carry extra fields (e.g.
+      // stray handle_in_x/handle_in_y from before the backend's schema went strict) that
+      // would otherwise ride along unchanged into the next PUT and get rejected as
+      // additionalProperties.
+      function curveFor(key: SectionKey): ControlPoint[] {
+        const edge = map.get(key);
+        return edge ? edge.curve.map((p) => ({ x: p.x, y: p.y })) : INITIAL_SECTION_POINTS[key];
+      }
       return {
-        sweep: map.get('sweep')?.curve ?? INITIAL_SECTION_POINTS.sweep,
-        dihedral: map.get('dihedral')?.curve ?? INITIAL_SECTION_POINTS.dihedral,
-        twist: map.get('twist')?.curve ?? INITIAL_SECTION_POINTS.twist,
-        chord: map.get('chord')?.curve ?? INITIAL_SECTION_POINTS.chord,
+        sweep: curveFor('sweep'),
+        dihedral: curveFor('dihedral'),
+        twist: curveFor('twist'),
+        chord: curveFor('chord'),
       };
     })(),
     (key) => yBounds[key],

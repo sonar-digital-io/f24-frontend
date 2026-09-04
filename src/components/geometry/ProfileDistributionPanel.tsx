@@ -180,7 +180,13 @@ export function ProfileDistributionPanel({
       return SECTION_KEYS.reduce(
         (acc, key) => {
           const saved = parameterMap.get(SECTION_TO_REFERENCE[key]);
-          acc[key] = saved?.control_points ?? INITIAL_SECTION_POINTS[key];
+          // Strip to exactly {x,y} — some already-saved geometries carry extra fields
+          // (e.g. stray handle_in_x/handle_in_y from before the backend's schema went
+          // strict) that would otherwise ride along unchanged into the next PUT and get
+          // rejected as additionalProperties.
+          acc[key] = saved
+            ? saved.control_points.map((p) => ({ x: p.x, y: p.y }))
+            : INITIAL_SECTION_POINTS[key];
           return acc;
         },
         {} as Record<SectionKey, ControlPoint[]>,
