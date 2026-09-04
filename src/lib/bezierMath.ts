@@ -429,8 +429,11 @@ function fitBezierControlPoints(samples: ControlPoint[], numControlPoints: numbe
   const xs = solveLinearSystem(a, bx);
   const ys = solveLinearSystem(a, by);
   // The fit is unconstrained, so an interior point's x can land slightly outside the
-  // curve's own endpoint range — clamp it back in so the result still reads as a
-  // point "along" the curve, not one that's drifted past where it starts/ends.
+  // curve's own endpoint range — clamp it back in so the result still reads as a point
+  // "along" the curve, not one that's drifted past where it starts/ends. Y is left
+  // unclamped: a Bézier's interior control point legitimately overshoots the curve's
+  // own peak/trough (that's how the curve reaches that height at all — see
+  // convertCurvePoints' doc comment), so clamping it would just flatten the fit.
   const xLo = Math.min(first.x, last.x);
   const xHi = Math.max(first.x, last.x);
   return [first, ...xs.map((x, j) => ({ x: clamp(x, xLo, xHi), y: ys[j] })), last];
