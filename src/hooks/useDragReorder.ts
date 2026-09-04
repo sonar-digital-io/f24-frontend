@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent } from 'react';
+import { useState, type DragEvent } from 'react';
 
 /**
  * HTML5 native drag-and-drop reordering for a list of rows/items, shared by
@@ -15,7 +15,13 @@ export function useDragReorder<Id extends string, T extends HTMLElement = HTMLTa
 ) {
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
   const [insertBeforeIdx, setInsertBeforeIdx] = useState<number | null>(null);
-  const dragFromHandleRef = useRef<Id | null>(null);
+  // Which row is currently authorized to be `draggable` — state (not a ref)
+  // so the DOM attribute itself flips off between drags. A row that's
+  // `draggable` all the time hijacks normal clicks/text-selection inside its
+  // own inputs (the browser's native drag engine can grab the gesture before
+  // React's click/focus logic sees it), so only the row whose handle was
+  // actually pressed gets it, and only for the duration of that drag.
+  const [armedId, setArmedId] = useState<Id | null>(null);
 
   function handleDragStart(idx: number, e: DragEvent<T>) {
     setDraggingIdx(idx);
@@ -52,7 +58,7 @@ export function useDragReorder<Id extends string, T extends HTMLElement = HTMLTa
   }
 
   function handleDragEnd() {
-    dragFromHandleRef.current = null;
+    setArmedId(null);
     setDraggingIdx(null);
     setInsertBeforeIdx(null);
   }
@@ -60,21 +66,17 @@ export function useDragReorder<Id extends string, T extends HTMLElement = HTMLTa
   /** Wire onto the grip element — only mousedown-on-handle authorizes the row's next drag. */
   function getHandleProps(id: Id) {
     return {
-      onMouseDown: () => {
-        dragFromHandleRef.current = id;
-      },
-      onMouseUp: () => {
-        dragFromHandleRef.current = null;
-      },
+      onMouseDown: () => setArmedId(id),
+      onMouseUp: () => setArmedId(null),
     };
   }
 
   /** Wire onto the draggable item (`<tr>`, `<div>`, ...). */
   function getRowDragProps(id: Id, idx: number) {
     return {
-      draggable: true,
+      draggable: armedId === id,
       onDragStart: (e: DragEvent<T>) => {
-        if (dragFromHandleRef.current !== id) {
+        if (armedId !== id) {
           e.preventDefault();
           return;
         }

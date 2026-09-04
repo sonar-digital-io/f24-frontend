@@ -4,7 +4,6 @@ import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { fatigueProfilesHaveErrors } from '@/lib/fatigueValidation';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
 import type { FatigueCase, FatigueProfile } from '@/api/types/loadGroups';
-import { matchSavedRows } from '@/lib/mergeSavedRows';
 
 /**
  * Fatigue profiles tab state: 0 by default until the user adds one, hydrated
@@ -56,7 +55,10 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
 
   function addFatigueProfile() {
     const key = crypto.randomUUID();
-    setFatigueProfiles((prev) => [...prev, { __KEY__: key, name: 'New fatigue profile', fatigue_cases: [] }]);
+    setFatigueProfiles((prev) => [
+      ...prev,
+      { __KEY__: key, name: 'New fatigue profile', fatigue_cases: [] },
+    ]);
     setOpenFatigueProfiles((prev) => ({ ...prev, [key]: true }));
     markDirty();
   }
@@ -83,7 +85,7 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
 
   function updateFatigueProfileName(profileKey: string, newName: string) {
     setFatigueProfiles((prev) =>
-      prev.map((p) => (p.__KEY__ === profileKey ? { ...p, name: newName } : p))
+      prev.map((p) => (p.__KEY__ === profileKey ? { ...p, name: newName } : p)),
     );
     markDirty();
   }
@@ -103,7 +105,7 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
           cycles: null,
         };
         return { ...p, fatigue_cases: [...p.fatigue_cases, fc] };
-      })
+      }),
     );
     markDirty();
   }
@@ -113,8 +115,8 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
       prev.map((p) =>
         p.__KEY__ === profileKey
           ? { ...p, fatigue_cases: p.fatigue_cases.filter((c) => c.__KEY__ !== caseKey) }
-          : p
-      )
+          : p,
+      ),
     );
     markDirty();
   }
@@ -138,7 +140,7 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
     profileKey: string,
     caseKey: string,
     field: K,
-    val: FatigueCase[K]
+    val: FatigueCase[K],
   ) {
     setFatigueProfiles((prev) =>
       prev.map((p) =>
@@ -146,9 +148,11 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
           ? p
           : {
               ...p,
-              fatigue_cases: p.fatigue_cases.map((c) => (c.__KEY__ === caseKey ? { ...c, [field]: val } : c)),
-            }
-      )
+              fatigue_cases: p.fatigue_cases.map((c) =>
+                c.__KEY__ === caseKey ? { ...c, [field]: val } : c,
+              ),
+            },
+      ),
     );
     markDirty();
   }
@@ -162,20 +166,36 @@ export function useLoadGroupFatigueProfilesState(loadGroupId: number, isNew: boo
     setStatus('saving');
     try {
       const saved = await updateFatigueProfilesMutation.mutateAsync(profiles);
-      // The PUT response carries backend-assigned ids for newly-added
-      // profiles/cases — merge them back in, keeping each row's client-side
-      // __KEY__ for React identity.
-      setFatigueProfiles((prev) =>
-        matchSavedRows(saved, prev).map(({ row, matchedPrev }) => ({
-          ...row,
-          __KEY__: matchedPrev?.__KEY__ || crypto.randomUUID(),
-          fatigue_cases: matchSavedRows(row.fatigue_cases, matchedPrev?.fatigue_cases ?? []).map(
-            ({ row: c, matchedPrev: matchedCase }) => ({
-              ...c,
-              __KEY__: matchedCase?.__KEY__ || crypto.randomUUID(),
-            })
-          ),
-        }))
+      // Merge in only what the backend actually adds — ids assigned to
+      // freshly-created profiles/cases — paired to the exact `profiles`
+      // snapshot this save sent, by position (a full-collection PUT echoes
+      // rows back in the same order it received them). Applied onto the
+      // *latest* state (not replaced by the response) and keyed by __KEY__,
+      // which is never regenerated here: reassigning it on every save (the
+      // old matchSavedRows-based merge did, whenever a row failed to
+      // re-match) changes that row's React key, forcing a remount — which is
+      // what was stealing focus out of a row the user had just opened/was
+      // still editing.
+      const idByProfileKey = new Map<string, number>();
+      const idByCaseKey = new Map<string, number>();
+      profiles.forEach((sentProfile, i) => {
+        const savedProfile = saved[i];
+        if (!savedProfile) return;
+        if (savedProfile.id !== undefined) idByProfileKey.set(sentProfile.__KEY__, savedProfile.id);
+        sentProfile.fatigue_cases.forEach((sentCase, j) => {
+          const savedCase = savedProfile.fatigue_cases[j];
+          if (savedCase?.id !== undefined) idByCaseKey.set(sentCase.__KEY__, savedCase.id);
+        });
+      });
+      setFatigueProfiles((current) =>
+        current.map((p) => ({
+          ...p,
+          id: idByProfileKey.get(p.__KEY__) ?? p.id,
+          fatigue_cases: p.fatigue_cases.map((c) => ({
+            ...c,
+            id: idByCaseKey.get(c.__KEY__) ?? c.id,
+          })),
+        })),
       );
       setDirty(false);
       setStatus('saved');
