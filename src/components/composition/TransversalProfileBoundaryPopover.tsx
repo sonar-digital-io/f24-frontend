@@ -48,6 +48,11 @@ interface TransversalProfileBoundaryPopoverProps {
   points: [number, number][] | undefined;
   boundary: ProfileBoundary;
   lockOptions: { value: string; label: string }[];
+  /** Same color this mapping is drawn in everywhere else (the Cross-section
+   *  dialog's rings, the 3D preview) — the highlight arc and drag handles use
+   *  it too, so editing a mapping never shows it in a different color than
+   *  the rest of the app does. */
+  color: string;
   onChange: (patch: Partial<ProfileBoundary>) => void;
   onClose: () => void;
 }
@@ -64,6 +69,7 @@ export function TransversalProfileBoundaryPopover({
   points,
   boundary,
   lockOptions,
+  color,
   onChange,
   onClose,
 }: TransversalProfileBoundaryPopoverProps) {
@@ -164,7 +170,7 @@ export function TransversalProfileBoundaryPopover({
               <path
                 d={highlightPath}
                 fill="none"
-                stroke="#9333ea"
+                stroke={color}
                 strokeWidth={3}
                 vectorEffect="non-scaling-stroke"
               />
@@ -174,8 +180,8 @@ export function TransversalProfileBoundaryPopover({
                 cx={startHandle.cx}
                 cy={startHandle.cy}
                 r={7}
-                fill="#9333ea"
-                stroke="#6b21a8"
+                fill={color}
+                stroke="#1f2937"
                 className="cursor-grab"
                 onPointerDown={(e) => startDrag('start', e)}
               />
@@ -185,8 +191,8 @@ export function TransversalProfileBoundaryPopover({
                 cx={endHandle.cx}
                 cy={endHandle.cy}
                 r={7}
-                fill="#9333ea"
-                stroke="#6b21a8"
+                fill={color}
+                stroke="#1f2937"
                 className="cursor-grab"
                 onPointerDown={(e) => startDrag('end', e)}
               />
