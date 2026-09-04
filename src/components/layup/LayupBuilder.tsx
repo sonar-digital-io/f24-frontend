@@ -121,10 +121,10 @@ export function LayupBuilder({ plies, onPliesChange }: LayupBuilderProps) {
         <button
           type="button"
           onClick={handleAdd}
-          aria-label="Add new layer"
-          className="inline-flex h-9 w-9 items-center justify-center self-start rounded-md bg-[#006496] text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
+          className="inline-flex h-9 items-center gap-2 self-start rounded-md bg-[#006496] px-3 text-[13px] font-medium text-[#fafafa] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#005580]"
         >
           <Plus className="h-4 w-4" strokeWidth={2.5} />
+          Add layer
         </button>
 
         {/* Ply table */}
