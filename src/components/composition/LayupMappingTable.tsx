@@ -19,6 +19,18 @@ export interface LayupMapping {
   points?: ControlPoint[];
 }
 
+/** True if two or more mappings share the same (trimmed) name — the backend
+ *  keys transversal-mapping data by name, so duplicates within a side corrupt it. */
+export function hasDuplicateMappingNames(mappings: LayupMapping[]): boolean {
+  const counts = new Map<string, number>();
+  for (const m of mappings) {
+    const key = m.name.trim();
+    if (!key) continue;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.values()].some((count) => count > 1);
+}
+
 export interface LayupMappingTableProps {
   title: string;
   copyLabel: string;
@@ -80,6 +92,10 @@ export function LayupMappingTable({
           {mappings.flatMap((m, idx) => {
             const layupLabel = layupOptions.find((l) => String(l.id) === m.layupId)?.name;
             const isDragging = draggingIdx === idx;
+            const trimmedName = m.name.trim();
+            const isDuplicateName =
+              trimmedName !== '' &&
+              mappings.some((other) => other.id !== m.id && other.name.trim() === trimmedName);
             const insertLine = (key: string) => (
               <tr key={key} className="pointer-events-none">
                 <td colSpan={5} className="p-0">
@@ -112,10 +128,19 @@ export function LayupMappingTable({
                         value={m.name}
                         onChange={(e) => onUpdate(m.id, { name: e.target.value })}
                         placeholder="Placeholder"
-                        className="h-8 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] text-ellipsis"
+                        aria-invalid={isDuplicateName}
+                        className={`h-8 rounded-md px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] text-ellipsis ${
+                          isDuplicateName
+                            ? 'border-[#dc2626] focus-visible:ring-[#dc2626]'
+                            : 'border-[#e2e8f0]'
+                        }`}
                       />
                     </TooltipTrigger>
-                    {m.name && <TooltipContent>{m.name}</TooltipContent>}
+                    {(isDuplicateName || m.name) && (
+                      <TooltipContent>
+                        {isDuplicateName ? 'Name already used in this list' : m.name}
+                      </TooltipContent>
+                    )}
                   </TooltipRoot>
                 </td>
                 <td className="px-2 py-2">

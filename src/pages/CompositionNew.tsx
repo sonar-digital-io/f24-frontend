@@ -21,7 +21,10 @@ import {
   type CompositionLayup,
 } from '@/components/composition/CompositionLayupTab';
 import { getMaterialColor, type Ply } from '@/components/layup/LayupBuilder';
-import { type LayupMapping } from '@/components/composition/LayupMappingTable';
+import {
+  hasDuplicateMappingNames as hasDuplicateMappingNamesInList,
+  type LayupMapping,
+} from '@/components/composition/LayupMappingTable';
 import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { getApiErrorMessage } from '@/lib/apiError';
 import { computeMappingBounds, computeProfilesBoundingRect, niceStep } from '@/lib/bezierMath';
@@ -169,7 +172,9 @@ export function CompositionNew() {
     [],
   );
   function addLayup(name: string) {
-    setLayups((arr) => [...arr, { id: nextLocalId('layup'), name, plies: [] }]);
+    const id = nextLocalId('layup');
+    setLayups((arr) => [...arr, { id, name, plies: [] }]);
+    return id;
   }
   function renameLayup(layupId: string, name: string) {
     setLayups((arr) => arr.map((l) => (l.id === layupId ? { ...l, name } : l)));
@@ -507,6 +512,8 @@ export function CompositionNew() {
 
   const mappingsKey = mappingsSnapshotKey(upperMappings, lowerMappings);
   const hasUnsavedMappings = mappingsKey !== savedMappingsSnapshot;
+  const hasDuplicateMappingNames =
+    hasDuplicateMappingNamesInList(upperMappings) || hasDuplicateMappingNamesInList(lowerMappings);
 
   // The bezier editor works in the blade's absolute (real) scale; the API
   // expects longitudinal/transversal position as a fraction of nominal_radius.
@@ -515,13 +522,16 @@ export function CompositionNew() {
   // (e.g. "u-kx3f2a1-4") and must not send one, so the backend creates it.
   async function saveLayupMappingData() {
     // A mapping row is nameless until the user types one — default it at
-    // save time rather than blocking the save, numbered continuously across
-    // both sides so upper/lower defaults never collide.
-    let unnamedCount = 0;
-    const withDefaultNames = (mappings: LayupMapping[]) =>
-      mappings.map((m) => (m.name.trim() ? m : { ...m, name: `layup_mapping_${++unnamedCount}` }));
-    const nextUpper = withDefaultNames(upperMappings);
-    const nextLower = withDefaultNames(lowerMappings);
+    // save time rather than blocking the save, numbered separately per side
+    // (upper/lower prefix already keeps the two sides from colliding).
+    const withDefaultNames = (mappings: LayupMapping[], side: 'upper' | 'lower') => {
+      let unnamedCount = 0;
+      return mappings.map((m) =>
+        m.name.trim() ? m : { ...m, name: `layup_map_${side}_${++unnamedCount}` },
+      );
+    };
+    const nextUpper = withDefaultNames(upperMappings, 'upper');
+    const nextLower = withDefaultNames(lowerMappings, 'lower');
     if (nextUpper.some((m, i) => m.name !== upperMappings[i].name)) setUpperMappings(nextUpper);
     if (nextLower.some((m, i) => m.name !== lowerMappings[i].name)) setLowerMappings(nextLower);
 
@@ -610,7 +620,10 @@ export function CompositionNew() {
     ) {
       void detailQuery.refetch();
     }
-    if (tab === 'transversal-mapping') await ensureTransversalMappingReady();
+    if (tab === 'transversal-mapping') {
+      if (hasDuplicateMappingNames) return;
+      await ensureTransversalMappingReady();
+    }
     setActiveTab(tab);
   }
 
@@ -629,6 +642,7 @@ export function CompositionNew() {
           layupsSaved={layupsSaved}
           geometrySelected={Number.isFinite(geometryId)}
           savingLocked={anyAutosavePending}
+          duplicateMappingNames={hasDuplicateMappingNames}
         />
         {saveError && (
           <div className="absolute inset-x-0 top-[52px] z-30 px-4 py-1 text-center text-[13px] text-[#dc2626]">
