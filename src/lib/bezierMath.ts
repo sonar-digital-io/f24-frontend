@@ -1,4 +1,4 @@
-import type { ControlPoint } from '@/types';
+import type { ControlPoint, CurveType } from '@/types';
 
 /** Pure, framework-independent math helpers for CurveEditor's data <-> pixel
  *  mapping and Catmull-Rom curve construction. */
@@ -295,6 +295,173 @@ export function catmullRomPath(
     d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.cx.toFixed(1)},${p2.cy.toFixed(1)}`;
   }
   return d;
+}
+
+/** De Casteljau evaluation of a control polygon at parameter `t` (0..1), in
+ *  data space (not pixels) — the same algorithm `bezierControlPolygonPath`
+ *  uses for rendering, factored out so curve-type conversion can sample raw
+ *  (x,y) points instead of an SVG path string. */
+function bezierPointAt(points: ControlPoint[], t: number): ControlPoint {
+  let layer = points;
+  while (layer.length > 1) {
+    const next: ControlPoint[] = [];
+    for (let i = 0; i < layer.length - 1; i++) {
+      next.push({
+        x: layer[i].x + (layer[i + 1].x - layer[i].x) * t,
+        y: layer[i].y + (layer[i + 1].y - layer[i].y) * t,
+      });
+    }
+    layer = next;
+  }
+  return layer[0];
+}
+
+/** Catmull-Rom evaluation at a global parameter `t` (0..1) spanning every
+ *  segment, in data space — same phantom-endpoint reflection and tension as
+ *  `catmullRomPath`, just evaluated directly instead of converted to a
+ *  per-segment cubic-Bézier SVG path. */
+function catmullRomPointAt(points: ControlPoint[], t: number): ControlPoint {
+  const segmentCount = points.length - 1;
+  const segmentT = clamp(t, 0, 1) * segmentCount;
+  const i = Math.min(Math.floor(segmentT), segmentCount - 1);
+  const localT = segmentT - i;
+  const p0 = i > 0 ? points[i - 1] : { x: 2 * points[0].x - points[1].x, y: 2 * points[0].y - points[1].y };
+  const p1 = points[i];
+  const p2 = points[i + 1];
+  const p3 =
+    i + 2 < points.length
+      ? points[i + 2]
+      : {
+          x: 2 * points[points.length - 1].x - points[points.length - 2].x,
+          y: 2 * points[points.length - 1].y - points[points.length - 2].y,
+        };
+  const t2 = localT * localT;
+  const t3 = t2 * localT;
+  const coeff = [
+    -t3 + 2 * t2 - localT,
+    3 * t3 - 5 * t2 + 2,
+    -3 * t3 + 4 * t2 + localT,
+    t3 - t2,
+  ];
+  return {
+    x: 0.5 * (coeff[0] * p0.x + coeff[1] * p1.x + coeff[2] * p2.x + coeff[3] * p3.x),
+    y: 0.5 * (coeff[0] * p0.y + coeff[1] * p1.y + coeff[2] * p2.y + coeff[3] * p3.y),
+  };
+}
+
+/** Samples `count` evenly-t-spaced points along a curve, in data space. */
+function sampleCurve(points: ControlPoint[], curveType: CurveType, count: number): ControlPoint[] {
+  const evalAt = curveType === 'bezier' ? bezierPointAt : catmullRomPointAt;
+  return Array.from({ length: count }, (_, i) => evalAt(points, i / (count - 1)));
+}
+
+function binomial(n: number, k: number): number {
+  let result = 1;
+  for (let i = 0; i < k; i++) result = (result * (n - i)) / (i + 1);
+  return result;
+}
+
+function bernstein(degree: number, i: number, t: number): number {
+  return binomial(degree, i) * Math.pow(t, i) * Math.pow(1 - t, degree - i);
+}
+
+/** Solves the small dense linear system `Ax = b` via Gaussian elimination with
+ *  partial pivoting — local to the Bézier curve fit below, not a general-purpose
+ *  matrix library (the systems here are a handful of control points, never large). */
+function solveLinearSystem(a: number[][], b: number[]): number[] {
+  const n = b.length;
+  const m = a.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let row = col + 1; row < n; row++) {
+      if (Math.abs(m[row][col]) > Math.abs(m[pivot][col])) pivot = row;
+    }
+    [m[col], m[pivot]] = [m[pivot], m[col]];
+    const pivotVal = m[col][col] || 1e-9;
+    for (let row = col + 1; row < n; row++) {
+      const factor = m[row][col] / pivotVal;
+      for (let k = col; k <= n; k++) m[row][k] -= factor * m[col][k];
+    }
+  }
+  const x = new Array(n).fill(0);
+  for (let row = n - 1; row >= 0; row--) {
+    let sum = m[row][n];
+    for (let col = row + 1; col < n; col++) sum -= m[row][col] * x[col];
+    x[row] = sum / (m[row][row] || 1e-9);
+  }
+  return x;
+}
+
+/**
+ * Least-squares fits a degree-(numControlPoints-1) Bézier control polygon to
+ * `samples`, pinning the first/last control point to samples' first/last
+ * point exactly (both curve families interpolate their own endpoints, so
+ * those already match) — the interior control points are the only unknowns,
+ * solved via the normal equations of the Bernstein basis (linear in the
+ * control points), independently for x and y.
+ */
+function fitBezierControlPoints(samples: ControlPoint[], numControlPoints: number): ControlPoint[] {
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  if (numControlPoints <= 2) return [first, last];
+
+  const degree = numControlPoints - 1;
+  const interior = numControlPoints - 2;
+  const basis = samples.map((_, i) => {
+    const t = i / (samples.length - 1);
+    return Array.from({ length: numControlPoints }, (_, j) => bernstein(degree, j, t));
+  });
+
+  const a: number[][] = Array.from({ length: interior }, () => new Array(interior).fill(0));
+  const bx = new Array(interior).fill(0);
+  const by = new Array(interior).fill(0);
+  samples.forEach((sample, i) => {
+    const row = basis[i];
+    const residualX = sample.x - row[0] * first.x - row[numControlPoints - 1] * last.x;
+    const residualY = sample.y - row[0] * first.y - row[numControlPoints - 1] * last.y;
+    for (let j = 0; j < interior; j++) {
+      for (let k = 0; k < interior; k++) a[j][k] += row[j + 1] * row[k + 1];
+      bx[j] += row[j + 1] * residualX;
+      by[j] += row[j + 1] * residualY;
+    }
+  });
+
+  const xs = solveLinearSystem(a, bx);
+  const ys = solveLinearSystem(a, by);
+  // The fit is unconstrained, so an interior point's x can land slightly outside the
+  // curve's own endpoint range — clamp it back in so the result still reads as a
+  // point "along" the curve, not one that's drifted past where it starts/ends.
+  const xLo = Math.min(first.x, last.x);
+  const xHi = Math.max(first.x, last.x);
+  return [first, ...xs.map((x, j) => ({ x: clamp(x, xLo, xHi), y: ys[j] })), last];
+}
+
+/**
+ * Converts a curve's control points from one curve type to the other,
+ * approximating the same visual shape instead of resetting to a default —
+ * used when the user switches a chart's Spline/Bézier toggle.
+ *
+ * Bézier -> Spline is close to exact: a spline interpolates whatever points
+ * it's given, so sampling the Bézier at N evenly-spaced parameter values and
+ * using those samples directly as the new spline points reproduces its shape.
+ *
+ * Spline -> Bézier can't reuse points directly — a Bézier's interior control
+ * points don't sit on the curve (only the first/last do), so matching the
+ * spline's shape needs a least-squares curve fit against many samples of it,
+ * not a 1:1 point reuse.
+ *
+ * Point count is preserved (same N in, N out) so the table/chart's point
+ * list doesn't change size out from under the user.
+ */
+export function convertCurvePoints(
+  points: ControlPoint[],
+  from: CurveType,
+  to: CurveType,
+): ControlPoint[] {
+  if (from === to || points.length < 2) return points;
+  if (from === 'bezier') return sampleCurve(points, 'bezier', points.length);
+  const samples = sampleCurve(points, 'spline', Math.max(points.length * 12, 40));
+  return fitBezierControlPoints(samples, points.length);
 }
 
 /** One step of De Casteljau's algorithm: lerp every adjacent pair by `t`. */
