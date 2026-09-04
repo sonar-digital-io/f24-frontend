@@ -1,3 +1,4 @@
+import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { OccViewer } from '@/components/common/viewer/OccViewer';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -84,6 +85,15 @@ export function CompositionPreviewTab({ compositionId, geometryId }: Composition
           </label>
         ))}
       </div>
+
+      {(previewQuery.isLoading || previewQuery.isFetching) && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-white/40 backdrop-blur-[1px]">
+          <div className="flex items-center gap-2 rounded-md bg-white/95 px-3 py-1.5 text-[13px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
+            <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+            Loading preview…
+          </div>
+        </div>
+      )}
 
       {previewQuery.isError && (
         <p className="pointer-events-none absolute inset-x-0 bottom-4 text-center text-[13px] text-[#dc2626]">
