@@ -21,10 +21,14 @@
  * (fractions of the geometry's nominal_radius), so `stlScale` must be set to
  * rescale them. `stlData` takes priority over `igesUrl` whenever it's set.
  *
- * Scene: IGES geometry with auto-fit camera + OrbitControls.
+ * Scene: fixed camera framing (see createViewerScene) + OrbitControls, with a
+ * reference grid/ground plane so objects of different real-world scale (e.g.
+ * different nominal_radius) render at visibly different sizes instead of
+ * being normalized away by an auto-fit camera.
  * OrbitControls: left-drag = rotate, right-drag / middle = pan, scroll = zoom.
  *
- * Camera and shadow ground auto-fit to the loaded geometry's bounding box.
+ * Camera does NOT auto-fit to the loaded geometry on load — `showResetButton`
+ * still offers fit-to-bounds as an explicit, opt-in action.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -442,9 +446,13 @@ export function OccViewer({
         .then(({ newMeshes, newWebLines, roots }) => {
           if (disposed) return;
 
-          // ── Auto-fit camera + ground to loaded geometry ─────────────────────
+          // Auto-fit disabled: the camera keeps createViewerScene's fixed default
+          // framing instead of zooming to match each object's bounding box, so
+          // objects with different real-world scale (e.g. different nominal_radius)
+          // actually render at different sizes against the reference grid/ground.
+          // `loadedRoots` is still kept for the manual "Reset view" button, which
+          // remains an explicit opt-in to the old fit-to-bounds behavior.
           loadedRoots = roots;
-          fitMaxDim = fitViewerSceneToBounds(roots, camera, controls, ground);
 
           meshesRef.current = newMeshes;
           webLineRef.current = newWebLines;
