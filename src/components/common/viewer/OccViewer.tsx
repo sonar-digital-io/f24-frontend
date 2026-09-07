@@ -50,7 +50,7 @@ import {
   createWireframeOverlay,
   disposeSceneObjects,
 } from '@/lib/threeViewerSetup';
-import { TRANSVERSAL_MAPPING_COLORS } from '@/lib/crossSectionGeometry';
+import { transversalMappingColorForName } from '@/lib/crossSectionGeometry';
 
 export interface OccViewerProps {
   className?: string;
@@ -335,11 +335,10 @@ export function OccViewer({
       // Non-blade parts split into the same two color groups the
       // Cross-section view uses: a layup-mapping upper/lower side part
       // (named accordingly) gets that side's fixed color; everything else is
-      // assumed to be a transversal mapping and cycles the green/red pair by
-      // discovery order — so a part reads as the same color in both views.
-      // Keyed by name so multiple mesh chunks sharing one part name stay the
-      // same color.
-      const transversalColorByName = new Map<string, string>();
+      // assumed to be a transversal mapping and colored by the same name-hash
+      // TransversalMappingSection uses — not by discovery order, which can
+      // differ from the mapping table's own order and desync the color a
+      // mapping reads as here from what it reads as in the Cross-section view.
 
       group.traverse((obj) => {
         if (!(obj instanceof THREE.Mesh)) return;
@@ -367,14 +366,7 @@ export function OccViewer({
         if (overrideColor) {
           partColor = overrideColor;
         } else if (!isBlade) {
-          if (!transversalColorByName.has(obj.name)) {
-            const next =
-              TRANSVERSAL_MAPPING_COLORS[
-                transversalColorByName.size % TRANSVERSAL_MAPPING_COLORS.length
-              ];
-            transversalColorByName.set(obj.name, next);
-          }
-          partColor = transversalColorByName.get(obj.name)!;
+          partColor = transversalMappingColorForName(obj.name);
         }
 
         const mat = new THREE.MeshPhysicalMaterial({

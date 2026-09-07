@@ -69,6 +69,16 @@ export function arcFractionNearestTo(points: [number, number][], target: Control
   return bestT;
 }
 
+/** Which of the profile's two arcs a position falls in, given its own real
+ *  trailing/leading edge positions (order-independent) — the actual border
+ *  between the upper and lower surface, not a fixed 0.5 split (see module
+ *  doc comment above: the leading edge's own fraction varies per profile). */
+export function sideOfPosition(position: number, edgeA: number, edgeB: number): boolean {
+  const lo = Math.min(edgeA, edgeB);
+  const hi = Math.max(edgeA, edgeB);
+  return position >= lo && position < hi;
+}
+
 export interface ProfileDomain {
   domainXMin: number;
   domainXMax: number;

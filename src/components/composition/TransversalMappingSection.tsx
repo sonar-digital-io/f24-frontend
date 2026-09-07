@@ -9,6 +9,7 @@ import {
 import { CrossSectionProfileList } from '@/components/composition/CrossSectionProfileList';
 import { TransversalProfileBoundaryPopover } from '@/components/composition/TransversalProfileBoundaryPopover';
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   TransversalMappingRow,
   getMappingBoundary,
@@ -19,6 +20,7 @@ import { getApiErrorMessage } from '@/lib/apiError';
 import {
   describeIntersection,
   buildTransversalMappingPayload,
+  getMappingSideIssues,
   hydrateTransversalMappings,
   resizeMappingRange,
 } from '@/lib/transversalMapping';
@@ -31,7 +33,7 @@ import {
 } from '@/hooks/api/useComposition';
 import { geometryKeys, useGeometryProfiles, useGeometryProfile } from '@/hooks/api/useGeometry';
 import { getGeometryProfile } from '@/api/geometry';
-import { LAYUP_MAPPING_COLORS, TRANSVERSAL_MAPPING_COLORS } from '@/lib/crossSectionGeometry';
+import { LAYUP_MAPPING_COLORS, transversalMappingColorForName } from '@/lib/crossSectionGeometry';
 
 interface TransversalMappingSectionProps {
   compositionId: number;
@@ -83,6 +85,18 @@ export function TransversalMappingSection({
     value: String(l.id),
     label: l.name,
   }));
+  // A transversal mapping can never share a layup (longitudinal) mapping's
+  // name — the backend reflects each layup mapping's own boundary into the
+  // transversal-mapping GET response too (so the cross-section view has
+  // something to draw before any real transversal mapping exists), and any
+  // group with one of these names is always that reflection, not a saved
+  // transversal mapping row.
+  const layupMappingNames = new Set(
+    [
+      ...(compositionDetail?.longitudinal_mapping?.upper_side ?? []),
+      ...(compositionDetail?.longitudinal_mapping?.lower_side ?? []),
+    ].map((e) => e.name.trim()),
+  );
   const { data: geometryProfilesData } = useGeometryProfiles(geometryId);
   const crossSectionProfiles = geometryProfilesData?.profiles ?? [];
   const { data: transversalMappingData } = useCompositionMappingTransversal(compositionId, enabled);
@@ -123,7 +137,11 @@ export function TransversalMappingSection({
   useHydrateOnce(
     mappings.length === 0 && !!transversalMappingData && crossSectionProfiles.length > 0,
     () => {
-      const hydrated = hydrateTransversalMappings(transversalMappingData!, crossSectionProfiles);
+      const hydrated = hydrateTransversalMappings(
+        transversalMappingData!,
+        crossSectionProfiles,
+        layupMappingNames,
+      );
       setMappings(hydrated);
       setSavedMappingsSnapshot(JSON.stringify(hydrated));
     },
@@ -143,14 +161,15 @@ export function TransversalMappingSection({
     return sorted.slice(lo, hi + 1);
   }
 
-  /** A mapping's color, keyed to its position in the table (not the per-profile
-   *  filtered list) so it's the same green/red everywhere this mapping shows up —
-   *  the cross-section dialog's rings, the table, and the boundary editor's
-   *  highlight/handles — instead of drifting depending on which other mappings
-   *  happen to also cover the profile being viewed. */
+  /** A mapping's color, keyed to its own name (hashed — see
+   *  transversalMappingColorForName) rather than its position in the table or
+   *  any per-profile list, so it's the same green/red everywhere this mapping
+   *  shows up: the Cross-section view list's thumbnails, the profile modal's
+   *  rings, the boundary editor's highlight/handles, and (by the same name,
+   *  independently, in OccViewer) the 3D preview's per-part mesh color. */
   function transversalMappingColorFor(mappingId: string): string {
-    const idx = mappings.findIndex((m) => m.id === mappingId);
-    return TRANSVERSAL_MAPPING_COLORS[(idx === -1 ? 0 : idx) % TRANSVERSAL_MAPPING_COLORS.length];
+    const mapping = mappings.find((m) => m.id === mappingId);
+    return transversalMappingColorForName(mapping?.name ?? '');
   }
 
   /**
@@ -222,7 +241,11 @@ export function TransversalMappingSection({
       const b = getMappingBoundary(m, profile.id);
       if (b.startPosition == null || b.endPosition == null) return;
       const rings = ringsByProfileId.get(profile.id) ?? [];
-      rings.push({ startFrac: b.startPosition, endFrac: b.endPosition });
+      rings.push({
+        startFrac: b.startPosition,
+        endFrac: b.endPosition,
+        color: transversalMappingColorForName(m.name),
+      });
       ringsByProfileId.set(profile.id, rings);
     });
   });
@@ -277,11 +300,7 @@ export function TransversalMappingSection({
     if (!hasUnsavedMappings || updateTransversalMutation.isPending) return;
     if (updateTransversalMutation.isError && lastMappingsAttemptRef.current === mappingsKey) return;
 
-    const { payload, incomplete } = buildTransversalMappingPayload(
-      mappings,
-      crossSectionProfiles,
-      intersectionsData,
-    );
+    const { payload, incomplete } = buildTransversalMappingPayload(mappings, crossSectionProfiles);
     if (incomplete > 0) return;
 
     const timer = setTimeout(() => {
@@ -322,10 +341,17 @@ export function TransversalMappingSection({
     { value: 'unlocked', label: 'Unlocked' },
     ...editingIntersections.map((i) => ({ value: String(i.id), label: describeIntersection(i) })),
   ];
+  // This profile's own trailing/leading edge positions — the real border
+  // between its upper and lower surface (see lib/profileGeometry's own doc
+  // comment: that fraction isn't a fixed 0.5, it varies per profile).
+  const editingEdgePositions = editingIntersections
+    .filter((i) => i.type === 'edge')
+    .map((i) => i.position);
   return (
     <div className="flex flex-col gap-6">
       {/* Top: transversal mapping table */}
       <div className="relative flex w-full max-w-[900px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+        <TooltipProvider>
         <table className="w-full border-collapse text-[13px]">
           <thead>
             <tr className="border-b border-[#e5e7eb]">
@@ -347,6 +373,7 @@ export function TransversalMappingSection({
                 mapping={m}
                 layupOptions={layupOptions}
                 profileOptions={profileOptions}
+                sideIssues={getMappingSideIssues(m, getCoveredProfiles(m))}
                 onUpdate={(next) => updateMapping(m.id, next)}
                 onEditStartBoundary={() =>
                   setBoundaryEditor({ mappingId: m.id, profileId: m.startProfileId! })
@@ -359,6 +386,7 @@ export function TransversalMappingSection({
             ))}
           </tbody>
         </table>
+        </TooltipProvider>
         <div className="flex items-center justify-between">
           <button
             type="button"
@@ -398,6 +426,7 @@ export function TransversalMappingSection({
               points={pointsByProfileId.get(editingProfileId)}
               boundary={getMappingBoundary(editingMapping, editingProfileId)}
               lockOptions={editingLockOptions}
+              edgePositions={editingEdgePositions}
               // Picking a lock target should also move the point onto that
               // landmark — the popover only knows the labels, so the caller
               // fills in the intersection's own position.

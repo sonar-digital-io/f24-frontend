@@ -131,9 +131,24 @@ export const LAYUP_COLORS = [
  *  color, so a layup reads as the same color in both. */
 export const LAYUP_MAPPING_COLORS = { upper: '#2563eb', lower: '#eab308' };
 
-/** Transversal-mapping colors — green/red, cycled by index. Shared by the
- *  Cross-section view's rings and the 3D preview's per-part mesh color. */
+/** Transversal-mapping colors — green/red. Shared by the Cross-section view
+ *  list, the profile modal, and the 3D preview's per-part mesh color. */
 export const TRANSVERSAL_MAPPING_COLORS = ['#22c55e', '#e11d48'];
+
+/** Deterministic color for a transversal mapping, keyed by its own name — the
+ *  one identifier available (and equal) everywhere a mapping's color needs to
+ *  match: the mapping table, the Cross-section view list's thumbnail rings,
+ *  the profile modal's rings, and the 3D preview's per-part mesh (named after
+ *  the mapping). Hashed rather than indexed by table row or 3MF part
+ *  discovery order — either of those can differ between call sites and would
+ *  desync the same mapping's color across them. */
+export function transversalMappingColorForName(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  return TRANSVERSAL_MAPPING_COLORS[Math.abs(hash) % TRANSVERSAL_MAPPING_COLORS.length];
+}
 
 export interface FitTransform {
   scale: number;

@@ -2,7 +2,6 @@ import type {
   CompositionIntersection,
   CompositionMappingTransversalResponse,
   CompositionMappingTransversalWritePayload,
-  CompositionProfileIntersections,
 } from '@/api/types/composition';
 import type { GeometryProfile } from '@/api/types/geometry';
 import type {
@@ -62,40 +61,6 @@ export function describeIntersection(entry: CompositionIntersection | undefined)
   return entry.side ? `${name} (${entry.side})` : name;
 }
 
-/** The profile's own intersection whose perimeter fraction is closest to
- *  `position` — used both as the "Unlocked" fallback and to fill in every
- *  profile between the row's explicit start/end profile (the backend
- *  rejects "discontinuous" mappings that skip profiles in that range). */
-function findNearestIntersectionId(
-  profileId: number,
-  position: number,
-  intersectionsData: CompositionProfileIntersections[] | undefined,
-): number | null {
-  const list = intersectionsData?.find((p) => p.profile_id === profileId)?.intersections ?? [];
-  if (list.length === 0) return null;
-  let best = list[0];
-  let bestDist = Math.abs(best.position - position);
-  for (const i of list) {
-    const d = Math.abs(i.position - position);
-    if (d < bestDist) {
-      best = i;
-      bestDist = d;
-    }
-  }
-  return best.id;
-}
-
-function resolveLockedTo(
-  profileId: number,
-  lockedTo: number | null,
-  position: number | null,
-  intersectionsData: CompositionProfileIntersections[] | undefined,
-): number | null {
-  if (lockedTo != null) return lockedTo;
-  if (position == null) return null;
-  return findNearestIntersectionId(profileId, position, intersectionsData);
-}
-
 /**
  * The effective value for one profile's boundary field: its own explicitly-
  * set value if it has one, otherwise linearly interpolated (by real span
@@ -142,18 +107,52 @@ export function effectiveBoundaryValue(
 }
 
 /**
+ * Whether a mapping's start (or end) boundary lands on both sides of the
+ * profile's midpoint (0.5 — the same trailing/leading-edge split
+ * `isTrailingEdge` uses) across its own covered profiles. The backend
+ * rejects a group whose start positions (or end positions) aren't all on the
+ * same side, so this is checked client-side first — with the group's real
+ * effective position per profile, the same value `buildTransversalMappingPayload`
+ * would actually send — instead of only finding out from its error response.
+ */
+export function getMappingSideIssues(
+  mapping: TransversalMapping,
+  coveredProfilesSortedByPosition: GeometryProfile[],
+): { startMismatch: boolean; endMismatch: boolean } {
+  function mismatch(field: 'startPosition' | 'endPosition'): boolean {
+    let side: boolean | null = null;
+    for (const p of coveredProfilesSortedByPosition) {
+      const v = effectiveBoundaryValue(
+        coveredProfilesSortedByPosition,
+        mapping.profileBoundaries,
+        p.id,
+        field,
+      );
+      if (v == null) continue;
+      const thisSide = isTrailingEdge(v);
+      if (side == null) side = thisSide;
+      else if (thisSide !== side) return true;
+    }
+    return false;
+  }
+  return { startMismatch: mismatch('startPosition'), endMismatch: mismatch('endPosition') };
+}
+
+/**
  * Builds the PUT payload from the editable rows. Each row explicitly
  * specifies its start profile's and end profile's own boundary (position +
  * optional locked-to); the backend also rejects "discontinuous" mappings, so
  * every profile *between* start and end (by position) gets an entry too,
- * with its position linearly interpolated and snapped to its own nearest
- * intersection. Rows missing a profile/layup/position are dropped and
+ * with its position linearly interpolated. `start_locked_to`/`end_locked_to`
+ * are only ever a profile's own explicitly-locked value (or null) — never
+ * invented from the nearest intersection — since the backend needs the raw
+ * `start_position`/`end_position` fraction for a genuinely unlocked boundary,
+ * not a guessed lock. Rows missing a profile/layup/position are dropped and
  * counted in `incomplete`.
  */
 export function buildTransversalMappingPayload(
   mappings: TransversalMapping[],
   profiles: GeometryProfile[],
-  intersectionsData: CompositionProfileIntersections[] | undefined,
 ): { payload: CompositionMappingTransversalWritePayload; incomplete: number } {
   const sortedProfiles = [...profiles].sort((a, b) => a.position - b.position);
   const byProfile = new Map<
@@ -192,6 +191,14 @@ export function buildTransversalMappingPayload(
     const [loIdx, hiIdx] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
     const covered = sortedProfiles.slice(loIdx, hiIdx + 1);
 
+    // The backend rejects the whole group if its start (or end) positions
+    // straddle both sides of the profile midpoint — don't send it at all.
+    const { startMismatch, endMismatch } = getMappingSideIssues(m, covered);
+    if (startMismatch || endMismatch) {
+      incomplete += 1;
+      return;
+    }
+
     let resolvedAny = false;
     covered.forEach((profile) => {
       // Prefer this profile's own explicitly-set boundary (drag, lock
@@ -216,28 +223,18 @@ export function buildTransversalMappingPayload(
         ),
         endLockedTo: own.endLockedTo,
       };
-      const startLockedTo = resolveLockedTo(
-        profile.id,
-        boundary.startLockedTo,
-        boundary.startPosition,
-        intersectionsData,
-      );
-      const endLockedTo = resolveLockedTo(
-        profile.id,
-        boundary.endLockedTo,
-        boundary.endPosition,
-        intersectionsData,
-      );
       const arr = byProfile.get(profile.id);
-      if (startLockedTo == null || endLockedTo == null || !arr) return;
+      if (boundary.startPosition == null || boundary.endPosition == null || !arr) return;
       resolvedAny = true;
       arr.push({
         name: m.name,
         group_id: m.groupId,
         layup: Number(m.layupId),
         row_index: rowIndex,
-        start_locked_to: startLockedTo,
-        end_locked_to: endLockedTo,
+        start_locked_to: boundary.startLockedTo,
+        end_locked_to: boundary.endLockedTo,
+        start_position: boundary.startPosition,
+        end_position: boundary.endPosition,
       });
     });
     if (!resolvedAny) incomplete += 1;
@@ -257,10 +254,19 @@ export function buildTransversalMappingPayload(
 /** Inverse of `buildTransversalMappingPayload` — regroups the GET response's
  *  per-profile entries back into editable rows by `group_id`, taking the
  *  lowest/highest-position covered profile as start/end and reading that
- *  profile's own entry directly for its boundary fields. */
+ *  profile's own entry directly for its boundary fields. `layupMappingNames`
+ *  (the composition's own longitudinal/layup mapping names) excludes any
+ *  group that isn't really a transversal mapping — the backend also returns
+ *  each layup mapping's own boundary reflected into this same per-profile
+ *  shape (so the cross-section view has something to draw before any real
+ *  transversal mapping exists); a transversal mapping can never share a
+ *  layup mapping's name, so a group with one is always that reflection, not
+ *  a saved transversal mapping row, and must not be hydrated as an editable
+ *  one. */
 export function hydrateTransversalMappings(
   transversalMappingData: CompositionMappingTransversalResponse,
   profiles: GeometryProfile[],
+  layupMappingNames: Set<string>,
 ): TransversalMapping[] {
   const profileById = new Map(profiles.map((p) => [p.id, p]));
   const groups = new Map<
@@ -269,6 +275,7 @@ export function hydrateTransversalMappings(
   >();
   transversalMappingData.transversal_mapping.forEach((p) => {
     p.mappings.forEach((entry) => {
+      if (layupMappingNames.has(entry.name.trim())) return;
       const boundary: ProfileBoundary = {
         startPosition: entry.start_position,
         startLockedTo: entry.start_locked_to,

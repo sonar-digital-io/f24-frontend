@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +12,7 @@ import {
   applyFitTransform,
   invertFitTransform,
 } from '@/lib/crossSectionGeometry';
-import { arcFractionNearestTo, pointAtArcFraction } from '@/lib/profileGeometry';
+import { arcFractionNearestTo, pointAtArcFraction, sideOfPosition } from '@/lib/profileGeometry';
 import type { ProfileBoundary } from '@/components/composition/TransversalMappingRow';
 
 const UNLOCKED = 'unlocked';
@@ -48,6 +48,12 @@ interface TransversalProfileBoundaryPopoverProps {
   points: [number, number][] | undefined;
   boundary: ProfileBoundary;
   lockOptions: { value: string; label: string }[];
+  /** This profile's own trailing/leading edge positions (0 or 2 entries) —
+   *  the real border between its upper and lower surface, used to reject a
+   *  start/end that would put the two on different sides. Empty when the
+   *  profile's edge intersections haven't loaded yet, in which case that
+   *  check is skipped rather than blocking on incomplete data. */
+  edgePositions: number[];
   /** Same color this mapping is drawn in everywhere else (the Cross-section
    *  dialog's rings, the 3D preview) — the highlight arc and drag handles use
    *  it too, so editing a mapping never shows it in a different color than
@@ -69,6 +75,7 @@ export function TransversalProfileBoundaryPopover({
   points,
   boundary,
   lockOptions,
+  edgePositions,
   color,
   onChange,
   onClose,
@@ -77,6 +84,20 @@ export function TransversalProfileBoundaryPopover({
   useBodyScrollLock(true);
   const svgRef = useRef<SVGSVGElement>(null);
   const { dragging, startDrag, endDrag } = usePointerDrag<'start' | 'end'>();
+  // Buffers the position inputs' raw text while typing — validated (range,
+  // start<end, same side) only on blur, so an in-progress value (a lone "0."
+  // while typing "0.5", or a value that's momentarily on the wrong side
+  // mid-edit) isn't rejected keystroke by keystroke.
+  const [editingValues, setEditingValues] = useState<Partial<Record<'start' | 'end', string>>>({});
+
+  /** Whether `a` and `b` are on the same side (upper/lower) of this profile's
+   *  real trailing/leading edge — always true if those edges haven't loaded,
+   *  so the check never blocks on missing data. */
+  function sameSide(a: number, b: number): boolean {
+    if (edgePositions.length !== 2) return true;
+    const [e1, e2] = edgePositions;
+    return sideOfPosition(a, e1, e2) === sideOfPosition(b, e1, e2);
+  }
 
   const pts = points ?? [];
   const transform = computeFitTransform(pts, INNER_W, INNER_H, PAD_X, PAD_Y);
@@ -114,6 +135,9 @@ export function TransversalProfileBoundaryPopover({
 
   function handlePointerMove(e: React.PointerEvent) {
     if (!dragging || !pts.length) return;
+    // Locked to a landmark (an edge or another mapping's boundary) — its
+    // position is that landmark's own, not independently draggable.
+    if (dragging === 'start' ? boundary.startLockedTo != null : boundary.endLockedTo != null) return;
     const svg = svgRef.current;
     if (!svg) return;
     const pt = svg.createSVGPoint();
@@ -124,8 +148,49 @@ export function TransversalProfileBoundaryPopover({
     const local = pt.matrixTransform(ctm.inverse());
     const [x, y] = invertFitTransform(local.x, local.y, transform);
     const t = arcFractionNearestTo(pts, { x, y });
-    if (dragging === 'start') onChange({ startPosition: t });
-    else onChange({ endPosition: t });
+    // Start must always stay smaller than end, and on the same side (upper/
+    // lower) as it — a drag past either limit just stops moving there
+    // instead of crossing over it.
+    if (dragging === 'start') {
+      if (boundary.endPosition != null && t >= boundary.endPosition) return;
+      if (boundary.endPosition != null && !sameSide(t, boundary.endPosition)) return;
+      onChange({ startPosition: t });
+    } else {
+      if (boundary.startPosition != null && t <= boundary.startPosition) return;
+      if (boundary.startPosition != null && !sameSide(t, boundary.startPosition)) return;
+      onChange({ endPosition: t });
+    }
+  }
+
+  function getInputValue(field: 'start' | 'end'): string {
+    if (editingValues[field] !== undefined) return editingValues[field]!;
+    const v = field === 'start' ? boundary.startPosition : boundary.endPosition;
+    return v != null ? String(v) : '';
+  }
+
+  function handleInputChange(field: 'start' | 'end', raw: string) {
+    setEditingValues((v) => ({ ...v, [field]: raw }));
+  }
+
+  function handleInputBlur(field: 'start' | 'end') {
+    const raw = editingValues[field];
+    setEditingValues((v) => {
+      if (v[field] === undefined) return v;
+      const next = { ...v };
+      delete next[field];
+      return next;
+    });
+    if (raw === undefined) return;
+    const parsed = parsePosition(raw);
+    const other = field === 'start' ? boundary.endPosition : boundary.startPosition;
+    if (parsed != null && other != null) {
+      // Start must always stay smaller than end, and on the same side
+      // (upper/lower) as it — an invalid typed value is simply dropped,
+      // reverting the field to its last valid one.
+      const inOrder = field === 'start' ? parsed < other : parsed > other;
+      if (!inOrder || !sameSide(parsed, other)) return;
+    }
+    onChange(field === 'start' ? { startPosition: parsed } : { endPosition: parsed });
   }
 
   return (
@@ -182,8 +247,8 @@ export function TransversalProfileBoundaryPopover({
                 r={7}
                 fill={color}
                 stroke="#1f2937"
-                className="cursor-grab"
-                onPointerDown={(e) => startDrag('start', e)}
+                className={boundary.startLockedTo != null ? 'cursor-not-allowed' : 'cursor-grab'}
+                onPointerDown={(e) => boundary.startLockedTo == null && startDrag('start', e)}
               />
             )}
             {endHandle && (
@@ -193,8 +258,8 @@ export function TransversalProfileBoundaryPopover({
                 r={7}
                 fill={color}
                 stroke="#1f2937"
-                className="cursor-grab"
-                onPointerDown={(e) => startDrag('end', e)}
+                className={boundary.endLockedTo != null ? 'cursor-not-allowed' : 'cursor-grab'}
+                onPointerDown={(e) => boundary.endLockedTo == null && startDrag('end', e)}
               />
             )}
           </svg>
@@ -213,10 +278,12 @@ export function TransversalProfileBoundaryPopover({
             step="0.01"
             min={0}
             max={1}
-            value={boundary.startPosition ?? ''}
-            onChange={(e) => onChange({ startPosition: parsePosition(e.target.value) })}
+            value={getInputValue('start')}
+            onChange={(e) => handleInputChange('start', e.target.value)}
+            onBlur={() => handleInputBlur('start')}
+            disabled={boundary.startLockedTo != null}
             placeholder="0.00"
-            className="h-9 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+            className="h-9 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -234,10 +301,12 @@ export function TransversalProfileBoundaryPopover({
             step="0.01"
             min={0}
             max={1}
-            value={boundary.endPosition ?? ''}
-            onChange={(e) => onChange({ endPosition: parsePosition(e.target.value) })}
+            value={getInputValue('end')}
+            onChange={(e) => handleInputChange('end', e.target.value)}
+            onBlur={() => handleInputBlur('end')}
+            disabled={boundary.endLockedTo != null}
             placeholder="0.00"
-            className="h-9 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]"
+            className="h-9 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:opacity-60"
           />
         </div>
         <div className="flex flex-col gap-1">
