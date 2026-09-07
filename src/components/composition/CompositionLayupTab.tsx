@@ -15,6 +15,11 @@ export interface CompositionLayup {
 export interface CompositionLayupTabProps {
   compositionId: number;
   layups: CompositionLayup[];
+  /** Flips true once the parent has hydrated `layups` from the backend (stays
+   *  false for a brand-new composition, which has nothing to hydrate) —
+   *  re-baselines the autosave snapshot at that point so the hydrated data
+   *  itself isn't mistaken for an unsaved local edit and immediately re-PUT. */
+  hydrated: boolean;
   onAddLayup: (name: string) => string;
   onRenameLayup: (layupId: string, name: string) => void;
   onDeleteLayup: (layupId: string) => void;
@@ -26,6 +31,7 @@ export interface CompositionLayupTabProps {
 export function CompositionLayupTab({
   compositionId,
   layups,
+  hydrated,
   onAddLayup,
   onRenameLayup,
   onDeleteLayup,
@@ -49,10 +55,20 @@ export function CompositionLayupTab({
 
   // Autosave — debounced so it fires after the user pauses editing (adding a
   // layup, tweaking a ply) rather than on every keystroke. The saved snapshot
-  // starts at the hydrated value so mounting on an already-saved composition
-  // doesn't immediately re-save.
+  // starts at the (still pre-hydration) mount-time value, then re-baselines
+  // once `hydrated` flips true — this component mounts immediately (always
+  // mounted, hidden via CSS while another tab is active) with `layups` still
+  // empty, before the parent's own backend hydration lands, so without this
+  // re-baseline that later hydration reads as an unsaved local edit and
+  // immediately re-PUTs the composition's own just-loaded data.
   const layupsKey = JSON.stringify(layups);
   const [savedSnapshot, setSavedSnapshot] = useState(layupsKey);
+  useEffect(() => {
+    if (hydrated) setSavedSnapshot(layupsKey);
+    // Only the transition to hydrated should re-baseline — afterwards, further
+    // layups changes are real user edits again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
   // A layup needs at least one ply to be worth persisting, and a ply still
   // on the "Select" material placeholder has no valid material id yet —
   // saving either would just be rejected by the backend, so hold off until

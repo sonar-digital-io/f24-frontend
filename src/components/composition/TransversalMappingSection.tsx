@@ -43,6 +43,11 @@ interface TransversalMappingSectionProps {
    *  would miss the not-yet-persisted case and leave the profile list
    *  permanently empty during composition creation. */
   geometryId: number;
+  /** Whether the Transversal mapping tab has actually been opened at least
+   *  once — this section is always mounted (hidden via CSS otherwise), so
+   *  without this its own mapping/intersections fetches would fire as soon
+   *  as the composition opens instead of only once the tab is visited. */
+  enabled: boolean;
   /** Reports this section's own autosave pending/error state up to the page
    *  header's shared save-status indicator — this table has no save
    *  indicator of its own. */
@@ -69,6 +74,7 @@ interface OpenBoundaryEditor {
 export function TransversalMappingSection({
   compositionId,
   geometryId,
+  enabled,
   onSaveStatusChange,
 }: TransversalMappingSectionProps) {
   const [mappings, setMappings] = useState<TransversalMapping[]>([]);
@@ -79,8 +85,8 @@ export function TransversalMappingSection({
   }));
   const { data: geometryProfilesData } = useGeometryProfiles(geometryId);
   const crossSectionProfiles = geometryProfilesData?.profiles ?? [];
-  const { data: transversalMappingData } = useCompositionMappingTransversal(compositionId);
-  const { data: intersectionsData } = useCompositionIntersections(compositionId);
+  const { data: transversalMappingData } = useCompositionMappingTransversal(compositionId, enabled);
+  const { data: intersectionsData } = useCompositionIntersections(compositionId, enabled);
   const updateTransversalMutation = useUpdateCompositionMappingTransversal(compositionId);
   const [boundaryEditor, setBoundaryEditor] = useState<OpenBoundaryEditor | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);

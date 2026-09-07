@@ -39,6 +39,15 @@ export function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+/** Rounds to 6 decimals — the precision the backend itself stores/returns
+ *  longitudinal_position/transversal_position at. Used to keep the layup
+ *  mapping polygon's points free of floating-point noise (e.g. a plain
+ *  real-unit / nominal_radius division producing 0.009999999999999995
+ *  instead of 0.01) both in what gets PUT and what the canvas/table show. */
+export function round6(v: number): number {
+  return Math.round(v * 1e6) / 1e6;
+}
+
 /** Evenly-spaced axis tick values in [min, max], starting at the first multiple of `step` >= min. */
 export function computeTicks(min: number, max: number, step: number): number[] {
   const ticks: number[] = [];

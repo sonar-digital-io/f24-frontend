@@ -27,7 +27,7 @@ import {
 } from '@/components/composition/LayupMappingTable';
 import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import { getApiErrorMessage } from '@/lib/apiError';
-import { computeMappingBounds, computeProfilesBoundingRect, niceStep } from '@/lib/bezierMath';
+import { computeMappingBounds, computeProfilesBoundingRect, niceStep, round6 } from '@/lib/bezierMath';
 import type { ControlPoint } from '@/types';
 import {
   useCreateComposition,
@@ -189,6 +189,7 @@ export function CompositionNew() {
   // Hydrate saved layups (and their layers) from the backend — separate from
   // the general hydration above since it also needs the materials list
   // loaded, to resolve each layer's material id back to a name.
+  const [layupsHydrated, setLayupsHydrated] = useState(false);
   useHydrateOnce(
     isEditing && !detailQuery.isFetching && !!detailQuery.data && !materialsQuery.isLoading,
     () => {
@@ -212,6 +213,10 @@ export function CompositionNew() {
           }),
         })),
       );
+      // Same batch as the setLayups above — CompositionLayupTab re-baselines
+      // its own autosave snapshot off this exact render's (now-hydrated) layups,
+      // instead of the pre-hydration empty array it mounted with.
+      setLayupsHydrated(true);
     },
   );
 
@@ -227,17 +232,25 @@ export function CompositionNew() {
   // Tracks which mapping snapshot the transversal-mapping tab's intersection
   // data was last computed for — recomputed only when the mapping changes.
   const [transversalReadySnapshot, setTransversalReadySnapshot] = useState<string | null>(null);
+  // Whether the Transversal mapping tab has been opened at least once — gates
+  // TransversalMappingSection's own fetches (mapping/transversal, intersections)
+  // so opening the composition doesn't fire them before that tab is ever visited.
+  const [transversalMappingVisited, setTransversalMappingVisited] = useState(false);
 
   // Hydrate saved layup mapping rows (upper/lower side) from the backend.
   // Waits on the top-view fetch too — the API stores longitudinal/transversal
   // position as a fraction of nominal_radius; the bezier editor works in that
   // same absolute scale (see the matching /nominalRadius conversion in
-  // saveLayupMappingData below).
+  // saveLayupMappingData below). Only waits while that fetch is actually in
+  // flight, not for it to succeed — a geometry with no top-view yet (so the
+  // request settles into an error) must not block the mapping rows (names,
+  // points, picked layup) from hydrating forever; they just fall back to the
+  // nominalRadius default (1) above.
   useHydrateOnce(
     isEditing &&
       !detailQuery.isFetching &&
       !!detailQuery.data &&
-      !(Number.isFinite(geometryId) && !topViewQuery.data),
+      !(Number.isFinite(geometryId) && topViewQuery.isLoading),
     () => {
       const c = detailQuery.data!;
       const toLayupMapping = (
@@ -543,8 +556,8 @@ export function CompositionNew() {
           name: m.name,
           layup: Number(m.layupId),
           mappings: (m.points ?? defaultMappingPoints).map((p) => ({
-            longitudinal_position: p.x / nominalRadius,
-            transversal_position: p.y / nominalRadius,
+            longitudinal_position: round6(p.x / nominalRadius),
+            transversal_position: round6(p.y / nominalRadius),
           })),
         }));
 
@@ -622,6 +635,7 @@ export function CompositionNew() {
     }
     if (tab === 'transversal-mapping') {
       if (hasDuplicateMappingNames) return;
+      setTransversalMappingVisited(true);
       await ensureTransversalMappingReady();
     }
     setActiveTab(tab);
@@ -697,6 +711,7 @@ export function CompositionNew() {
             <CompositionLayupTab
               compositionId={compositionId}
               layups={layups}
+              hydrated={layupsHydrated}
               onAddLayup={addLayup}
               onRenameLayup={renameLayup}
               onDeleteLayup={deleteLayup}
@@ -741,6 +756,7 @@ export function CompositionNew() {
             <TransversalMappingSection
               compositionId={compositionId}
               geometryId={geometryId}
+              enabled={transversalMappingVisited}
               onSaveStatusChange={handleTransversalSaveStatusChange}
             />
           </div>
@@ -778,7 +794,17 @@ export function CompositionNew() {
           open
           title={bezierTitle}
           points={bezierPoints}
-          onChange={(pts) => updateMapping(bezierFor.side, bezierFor.mappingId, { points: pts })}
+          onChange={(pts) =>
+            updateMapping(bezierFor.side, bezierFor.mappingId, {
+              // Round-tripped through the same fraction-of-nominal_radius precision
+              // the backend saves at, so the canvas/table never show (and never
+              // later re-send) a value finer than what actually gets persisted.
+              points: pts.map((p) => ({
+                x: round6(p.x / nominalRadius) * nominalRadius,
+                y: round6(p.y / nominalRadius) * nominalRadius,
+              })),
+            })
+          }
           leadingEdge={leadingEdge}
           trailingEdge={trailingEdge}
           xMin={mappingBounds.longitudinalMin}

@@ -23,14 +23,6 @@ function calcMinH(rowCount: number) {
   return Math.max(MIN_H_FLOOR, DIALOG_CHROME + Math.max(BEZIER_H, tableH));
 }
 
-/** Keep a point's x between its neighbours (endpoints stay put) so the table
- *  edits can't break the x-ordering the chart relies on. */
-function applyXConstraints(pts: ControlPoint[], idx: number, nextX: number): number {
-  if (idx === 0) return pts[0].x;
-  if (idx === pts.length - 1) return pts[pts.length - 1].x;
-  return Math.max(pts[idx - 1].x, Math.min(pts[idx + 1].x, nextX));
-}
-
 interface LayupMappingDialogProps {
   open: boolean;
   /** Side + mapping name combined into the title, e.g. "Upper side / layup1". */
@@ -142,19 +134,25 @@ export function LayupMappingDialog({
   function fieldKey(idx: number, field: 'x' | 'y') {
     return `${idx}-${field}`;
   }
+  // Shown to the same 6-decimal precision the backend itself stores
+  // longitudinal_position/transversal_position at (see round6 in bezierMath) —
+  // still the chart's own real-unit scale, just formatted more precisely.
   function getInputValue(idx: number, field: 'x' | 'y') {
     const key = fieldKey(idx, field);
     if (editingValues[key] !== undefined) return editingValues[key];
     const p = points[idx];
-    return field === 'x' ? p.x.toFixed(2) : p.y.toFixed(3);
+    return (field === 'x' ? p.x : p.y).toFixed(6);
   }
   function handleInputChange(idx: number, field: 'x' | 'y', raw: string) {
     setEditingValues((v) => ({ ...v, [fieldKey(idx, field)]: raw }));
     const parsed = parseFloat(raw);
     if (!Number.isFinite(parsed)) return;
+    // No neighbour-based x clamp here (unlike the open-curve editors) — this is a
+    // closed polygon, not a monotonic curve, so every vertex (endpoints included)
+    // is freely draggable in the chart, and the table must match that.
     const next = points.map((p, i) => {
       if (i !== idx) return p;
-      if (field === 'x') return { ...p, x: applyXConstraints(points, idx, parsed) };
+      if (field === 'x') return { ...p, x: clamp(parsed, xMin, xMax) };
       return { ...p, y: clamp(parsed, yMin, yMax) };
     });
     // A typed value that would fold the polygon in on itself is rejected — the
