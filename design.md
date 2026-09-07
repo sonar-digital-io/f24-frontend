@@ -30,7 +30,7 @@ Forrás: `mcp__Figma__get_variable_defs`. A kódban inline Tailwind utility-k fo
 | `destructive` | `#dc2626` | Required asterisk (`*`) form mezők mellett |
 
 **Brand gradient** (a gradient bar a nav teteján):
-- `from-[#fc0]` (sárga) → `via-[#72b84c]` 50%-on (zöld) → `to-[#007dbb]` (Econ kék)
+- `from-[#fad954]` (sárga) → `via-[#72b84c]` 50%-on (zöld) → `to-[#007dbb]` (Econ kék)
 
 ### Spacing
 

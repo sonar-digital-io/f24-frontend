@@ -27,7 +27,7 @@ export function MainNav() {
   return (
     <div className="sticky top-0 z-50">
       {/* Gradient bar */}
-      <div className="h-[13px] w-full shrink-0 bg-gradient-to-r from-[#fc0] via-[#72b84c] via-50% to-[#007dbb]" />
+      <div className="h-[13px] w-full shrink-0 bg-gradient-to-r from-[#fad954] via-[#72b84c] via-50% to-[#007dbb]" />
 
       {/* Top navigation */}
       <nav className="flex h-14 w-full shrink-0 items-center justify-between bg-white pr-4 shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
