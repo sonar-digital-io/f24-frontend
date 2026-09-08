@@ -9,6 +9,8 @@ import type {
   TransversalMapping,
 } from '@/components/composition/TransversalMappingRow';
 import { EMPTY_BOUNDARY, getMappingBoundary } from '@/components/composition/TransversalMappingRow';
+import { sideOfPosition } from '@/lib/profileGeometry';
+import { round6 } from '@/lib/bezierMath';
 
 /**
  * Keeps `profileBoundaries` in sync with the mapping's current
@@ -70,6 +72,11 @@ export function describeIntersection(entry: CompositionIntersection | undefined)
  * only one side does. Returns null if no covered profile has this field set
  * at all.
  *
+ * Rounded to 6 decimals — the precision the backend itself stores/returns
+ * start_position/end_position at — so a linear interpolation's floating-point
+ * noise never leaks into what's displayed (the Cross-section view's rings,
+ * the profile modal's table) or sent.
+ *
  * Used by both buildTransversalMappingPayload (so save reflects exactly
  * what a user actually set, not just the two endpoints) and
  * TransversalMappingSpanChart (so the chart's preview matches what save
@@ -82,7 +89,7 @@ export function effectiveBoundaryValue(
   field: 'startPosition' | 'endPosition',
 ): number | null {
   const own = profileBoundaries[profileId]?.[field];
-  if (own != null) return own;
+  if (own != null) return round6(own);
   const target = coveredProfilesSortedByPosition.find((p) => p.id === profileId);
   if (!target) return null;
 
@@ -99,25 +106,30 @@ export function effectiveBoundaryValue(
     }
   }
   if (before && after) {
-    if (after.position === before.position) return before.value;
+    if (after.position === before.position) return round6(before.value);
     const t = (target.position - before.position) / (after.position - before.position);
-    return before.value + (after.value - before.value) * t;
+    return round6(before.value + (after.value - before.value) * t);
   }
-  return before?.value ?? after?.value ?? null;
+  return before?.value != null ? round6(before.value) : after?.value != null ? round6(after.value) : null;
 }
 
 /**
- * Whether a mapping's start (or end) boundary lands on both sides of the
- * profile's midpoint (0.5 — the same trailing/leading-edge split
- * `isTrailingEdge` uses) across its own covered profiles. The backend
- * rejects a group whose start positions (or end positions) aren't all on the
- * same side, so this is checked client-side first — with the group's real
- * effective position per profile, the same value `buildTransversalMappingPayload`
- * would actually send — instead of only finding out from its error response.
+ * Whether a mapping's start (or end, checked independently) boundary lands on
+ * both sides — upper and lower surface, split at each profile's own real
+ * trailing/leading edge, not a fixed 0.5 (see lib/profileGeometry) — across
+ * its covered profiles. Start and end are NOT compared against each other
+ * here: a mapping's start and end are expected to sit on different sides of
+ * the SAME profile (that's the normal shape of a chordwise band); what the
+ * backend actually rejects is the START side drifting between profiles (or,
+ * separately, the END side doing so). Checked client-side first — with the
+ * group's real effective position per profile, the same value
+ * `buildTransversalMappingPayload` would actually send — instead of only
+ * finding out from its error response.
  */
 export function getMappingSideIssues(
   mapping: TransversalMapping,
   coveredProfilesSortedByPosition: GeometryProfile[],
+  edgePositionsByProfileId: Map<number, number[]>,
 ): { startMismatch: boolean; endMismatch: boolean } {
   function mismatch(field: 'startPosition' | 'endPosition'): boolean {
     let side: boolean | null = null;
@@ -129,7 +141,9 @@ export function getMappingSideIssues(
         field,
       );
       if (v == null) continue;
-      const thisSide = isTrailingEdge(v);
+      const edges = edgePositionsByProfileId.get(p.id) ?? [];
+      if (edges.length !== 2) continue; // this profile's own edges unknown — nothing to compare
+      const thisSide = sideOfPosition(v, edges[0], edges[1]);
       if (side == null) side = thisSide;
       else if (thisSide !== side) return true;
     }
@@ -153,6 +167,7 @@ export function getMappingSideIssues(
 export function buildTransversalMappingPayload(
   mappings: TransversalMapping[],
   profiles: GeometryProfile[],
+  edgePositionsByProfileId: Map<number, number[]>,
 ): { payload: CompositionMappingTransversalWritePayload; incomplete: number } {
   const sortedProfiles = [...profiles].sort((a, b) => a.position - b.position);
   const byProfile = new Map<
@@ -191,9 +206,10 @@ export function buildTransversalMappingPayload(
     const [loIdx, hiIdx] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
     const covered = sortedProfiles.slice(loIdx, hiIdx + 1);
 
-    // The backend rejects the whole group if its start (or end) positions
-    // straddle both sides of the profile midpoint — don't send it at all.
-    const { startMismatch, endMismatch } = getMappingSideIssues(m, covered);
+    // The backend rejects the whole group if its start positions (or,
+    // separately, its end positions) drift between the upper and lower side
+    // across covered profiles — don't send it at all.
+    const { startMismatch, endMismatch } = getMappingSideIssues(m, covered, edgePositionsByProfileId);
     if (startMismatch || endMismatch) {
       incomplete += 1;
       return;

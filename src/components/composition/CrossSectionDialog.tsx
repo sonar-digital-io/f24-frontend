@@ -231,11 +231,11 @@ export function CrossSectionDialog({
                       </span>
                     </td>
                     <td className="px-4 py-2.5 tabular-nums text-[#374151]">
-                      {entry.displayStart.toFixed(4)}
+                      {entry.displayStart.toFixed(6)}
                     </td>
                     <td className="px-4 py-2.5 text-[#374151]">{entry.startLockedTo}</td>
                     <td className="px-4 py-2.5 tabular-nums text-[#374151]">
-                      {entry.displayEnd.toFixed(4)}
+                      {entry.displayEnd.toFixed(6)}
                     </td>
                     <td className="px-4 py-2.5 text-[#374151]">{entry.endLockedTo}</td>
                     <td className="px-4 py-2.5 text-[#374151]">{entry.layupName}</td>

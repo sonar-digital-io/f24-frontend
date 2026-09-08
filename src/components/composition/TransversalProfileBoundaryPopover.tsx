@@ -49,11 +49,17 @@ interface TransversalProfileBoundaryPopoverProps {
   boundary: ProfileBoundary;
   lockOptions: { value: string; label: string }[];
   /** This profile's own trailing/leading edge positions (0 or 2 entries) —
-   *  the real border between its upper and lower surface, used to reject a
-   *  start/end that would put the two on different sides. Empty when the
-   *  profile's edge intersections haven't loaded yet, in which case that
-   *  check is skipped rather than blocking on incomplete data. */
+   *  the real border between its upper and lower surface. Empty when the
+   *  profile's edge intersections haven't loaded yet, in which case the side
+   *  check below is skipped rather than blocking on incomplete data. */
   edgePositions: number[];
+  /** Every OTHER profile this same mapping covers, with its own resolved
+   *  start/end position and its own edge positions — a start (or, separately,
+   *  end) edit here is rejected if it would put this profile on a different
+   *  side than any of these. Start and end are NOT compared against each
+   *  other — a mapping normally spans from the upper to the lower surface of
+   *  the SAME profile, that's expected. */
+  otherProfiles: { startPosition: number | null; endPosition: number | null; edgePositions: number[] }[];
   /** Same color this mapping is drawn in everywhere else (the Cross-section
    *  dialog's rings, the 3D preview) — the highlight arc and drag handles use
    *  it too, so editing a mapping never shows it in a different color than
@@ -76,6 +82,7 @@ export function TransversalProfileBoundaryPopover({
   boundary,
   lockOptions,
   edgePositions,
+  otherProfiles,
   color,
   onChange,
   onClose,
@@ -85,18 +92,22 @@ export function TransversalProfileBoundaryPopover({
   const svgRef = useRef<SVGSVGElement>(null);
   const { dragging, startDrag, endDrag } = usePointerDrag<'start' | 'end'>();
   // Buffers the position inputs' raw text while typing — validated (range,
-  // start<end, same side) only on blur, so an in-progress value (a lone "0."
-  // while typing "0.5", or a value that's momentarily on the wrong side
-  // mid-edit) isn't rejected keystroke by keystroke.
+  // start<end, cross-profile side) only on blur, so an in-progress value (a
+  // lone "0." while typing "0.5") isn't rejected keystroke by keystroke.
   const [editingValues, setEditingValues] = useState<Partial<Record<'start' | 'end', string>>>({});
 
-  /** Whether `a` and `b` are on the same side (upper/lower) of this profile's
-   *  real trailing/leading edge — always true if those edges haven't loaded,
-   *  so the check never blocks on missing data. */
-  function sameSide(a: number, b: number): boolean {
+  /** Whether a new start (or end) value `v` for THIS profile stays on the
+   *  same side as every other covered profile's own start (or end) — using
+   *  each profile's own real edges, not this profile's. True (never blocks)
+   *  if this profile's own edges, or a given other profile's, aren't known. */
+  function sameSideAsOtherProfiles(field: 'start' | 'end', v: number): boolean {
     if (edgePositions.length !== 2) return true;
-    const [e1, e2] = edgePositions;
-    return sideOfPosition(a, e1, e2) === sideOfPosition(b, e1, e2);
+    const mySide = sideOfPosition(v, edgePositions[0], edgePositions[1]);
+    return otherProfiles.every((p) => {
+      const other = field === 'start' ? p.startPosition : p.endPosition;
+      if (other == null || p.edgePositions.length !== 2) return true;
+      return sideOfPosition(other, p.edgePositions[0], p.edgePositions[1]) === mySide;
+    });
   }
 
   const pts = points ?? [];
@@ -148,16 +159,17 @@ export function TransversalProfileBoundaryPopover({
     const local = pt.matrixTransform(ctm.inverse());
     const [x, y] = invertFitTransform(local.x, local.y, transform);
     const t = arcFractionNearestTo(pts, { x, y });
-    // Start must always stay smaller than end, and on the same side (upper/
-    // lower) as it — a drag past either limit just stops moving there
+    // Start must always stay smaller than end on this profile, and on the
+    // same side (upper/lower) as every other covered profile's own start
+    // (end respectively) — a drag past either limit just stops moving there
     // instead of crossing over it.
     if (dragging === 'start') {
       if (boundary.endPosition != null && t >= boundary.endPosition) return;
-      if (boundary.endPosition != null && !sameSide(t, boundary.endPosition)) return;
+      if (!sameSideAsOtherProfiles('start', t)) return;
       onChange({ startPosition: t });
     } else {
       if (boundary.startPosition != null && t <= boundary.startPosition) return;
-      if (boundary.startPosition != null && !sameSide(t, boundary.startPosition)) return;
+      if (!sameSideAsOtherProfiles('end', t)) return;
       onChange({ endPosition: t });
     }
   }
@@ -182,13 +194,14 @@ export function TransversalProfileBoundaryPopover({
     });
     if (raw === undefined) return;
     const parsed = parsePosition(raw);
-    const other = field === 'start' ? boundary.endPosition : boundary.startPosition;
-    if (parsed != null && other != null) {
-      // Start must always stay smaller than end, and on the same side
-      // (upper/lower) as it — an invalid typed value is simply dropped,
+    if (parsed != null) {
+      // Start must always stay smaller than end on this profile, and on the
+      // same side (upper/lower) as every other covered profile's own start
+      // (end respectively) — an invalid typed value is simply dropped,
       // reverting the field to its last valid one.
-      const inOrder = field === 'start' ? parsed < other : parsed > other;
-      if (!inOrder || !sameSide(parsed, other)) return;
+      const other = field === 'start' ? boundary.endPosition : boundary.startPosition;
+      const inOrder = other == null || (field === 'start' ? parsed < other : parsed > other);
+      if (!inOrder || !sameSideAsOtherProfiles(field, parsed)) return;
     }
     onChange(field === 'start' ? { startPosition: parsed } : { endPosition: parsed });
   }

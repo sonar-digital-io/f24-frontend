@@ -131,21 +131,43 @@ export const LAYUP_COLORS = [
  *  color, so a layup reads as the same color in both. */
 export const LAYUP_MAPPING_COLORS = { upper: '#2563eb', lower: '#eab308' };
 
-/** Transversal-mapping colors — green/red. Shared by the Cross-section view
- *  list, the profile modal, and the 3D preview's per-part mesh color. */
-export const TRANSVERSAL_MAPPING_COLORS = ['#22c55e', '#e11d48'];
+/** Transversal-mapping colors — a wide, distinct set (not just green/red) so
+ *  different mappings are actually told apart, not just alternating between
+ *  two. Avoids the blues/yellows LAYUP_MAPPING_COLORS already owns. Shared by
+ *  the Cross-section view list, the profile modal, and the 3D preview's
+ *  per-part mesh color. */
+export const TRANSVERSAL_MAPPING_COLORS = [
+  '#22c55e', // green
+  '#e11d48', // rose
+  '#8b5cf6', // violet
+  '#f97316', // orange
+  '#0891b2', // cyan
+  '#ec4899', // pink
+  '#84cc16', // lime
+  '#6366f1', // indigo
+];
+
+/** A 3D preview part named after a transversal mapping that spans both the
+ *  upper and lower side ships as two separate 3MF objects, suffixed by the
+ *  backend with " (0)"/" (1)" — strip that so both resolve to the same base
+ *  name (and so the same color). */
+function stripPartIndexSuffix(name: string): string {
+  return name.replace(/\s*\(\d+\)\s*$/, '');
+}
 
 /** Deterministic color for a transversal mapping, keyed by its own name — the
  *  one identifier available (and equal) everywhere a mapping's color needs to
  *  match: the mapping table, the Cross-section view list's thumbnail rings,
  *  the profile modal's rings, and the 3D preview's per-part mesh (named after
- *  the mapping). Hashed rather than indexed by table row or 3MF part
- *  discovery order — either of those can differ between call sites and would
- *  desync the same mapping's color across them. */
+ *  the mapping, modulo the " (N)" split-part suffix above). Hashed rather
+ *  than indexed by table row or 3MF part discovery order — either of those
+ *  can differ between call sites and would desync the same mapping's color
+ *  across them. */
 export function transversalMappingColorForName(name: string): string {
+  const base = stripPartIndexSuffix(name);
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  for (let i = 0; i < base.length; i++) {
+    hash = (hash * 31 + base.charCodeAt(i)) | 0;
   }
   return TRANSVERSAL_MAPPING_COLORS[Math.abs(hash) % TRANSVERSAL_MAPPING_COLORS.length];
 }
