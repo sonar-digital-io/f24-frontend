@@ -86,18 +86,6 @@ export function TransversalMappingSection({
     value: String(l.id),
     label: l.name,
   }));
-  // A transversal mapping can never share a layup (longitudinal) mapping's
-  // name — the backend reflects each layup mapping's own boundary into the
-  // transversal-mapping GET response too (so the cross-section view has
-  // something to draw before any real transversal mapping exists), and any
-  // group with one of these names is always that reflection, not a saved
-  // transversal mapping row.
-  const layupMappingNames = new Set(
-    [
-      ...(compositionDetail?.longitudinal_mapping?.upper_side ?? []),
-      ...(compositionDetail?.longitudinal_mapping?.lower_side ?? []),
-    ].map((e) => e.name.trim()),
-  );
   const { data: geometryProfilesData } = useGeometryProfiles(geometryId);
   const crossSectionProfiles = geometryProfilesData?.profiles ?? [];
   const { data: transversalMappingData } = useCompositionMappingTransversal(compositionId, enabled);
@@ -150,11 +138,7 @@ export function TransversalMappingSection({
   useHydrateOnce(
     mappings.length === 0 && !!transversalMappingData && crossSectionProfiles.length > 0,
     () => {
-      const hydrated = hydrateTransversalMappings(
-        transversalMappingData!,
-        crossSectionProfiles,
-        layupMappingNames,
-      );
+      const hydrated = hydrateTransversalMappings(transversalMappingData!, crossSectionProfiles);
       setMappings(hydrated);
       setSavedMappingsSnapshot(JSON.stringify(hydrated));
     },

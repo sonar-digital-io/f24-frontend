@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PlyStackViz } from '@/components/layup/PlyStackViz';
 import { UnifiedPlyStackViz } from '@/components/layup/UnifiedPlyStackViz';
 import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
-import { nextLocalId } from '@/lib/utils';
+import { nextLocalId, hashString } from '@/lib/utils';
 import { MaterialPickerDialog } from '@/components/layup/MaterialPickerDialog';
 import { useMaterialList } from '@/hooks/api/useMaterials';
 import { useDragReorder } from '@/hooks/useDragReorder';
@@ -30,12 +30,6 @@ const PLY_COLOR_PALETTE = [
   '#8DE0D5',
 ];
 const FALLBACK_COLOR = '#6b7280';
-
-function hashString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
-}
 
 export function getMaterialColor(materialName: string): string {
   if (!materialName || materialName === 'Select') return FALLBACK_COLOR;

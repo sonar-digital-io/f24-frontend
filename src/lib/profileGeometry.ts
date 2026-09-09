@@ -76,7 +76,7 @@ export function arcFractionNearestTo(points: [number, number][], target: Control
 export function sideOfPosition(position: number, edgeA: number, edgeB: number): boolean {
   const lo = Math.min(edgeA, edgeB);
   const hi = Math.max(edgeA, edgeB);
-  return position >= lo && position < hi;
+  return position >= lo && position <= hi;
 }
 
 export interface ProfileDomain {

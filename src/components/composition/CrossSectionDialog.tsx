@@ -3,12 +3,10 @@ import { Pencil, X } from 'lucide-react';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useDraggablePosition } from '@/hooks/useDraggablePosition';
 import {
-  offsetSvgPts,
   computeArcFractions,
   perimeterLabel,
-  buildArcPoints,
-  segD,
   fitPointsToSvg,
+  buildCrossSectionRender,
   PROFILE_VIEWBOX,
   LAYUP_COLORS,
 } from '@/lib/crossSectionGeometry';
@@ -29,8 +27,6 @@ interface CsRing {
   startFrac: number;
   endFrac: number;
   color: string;
-  /** Inward perpendicular offset in SVG-viewport units */
-  svgOffset: number;
   onEdit?: () => void;
 }
 
@@ -71,8 +67,6 @@ const { width: VB_W, height: VB_H, padX: PAD_X, padY: PAD_Y } = PROFILE_VIEWBOX;
 const INNER_W = VB_W - 2 * PAD_X;
 const INNER_H = VB_H - 2 * PAD_Y;
 
-const RING_OFFSET = 2; // SVG-viewport units between consecutive rings
-
 // Cycled by index — supports any number of mapping segments.
 const RING_COLORS = LAYUP_COLORS;
 
@@ -110,23 +104,17 @@ export function CrossSectionDialog({
     startFrac: entry.startFrac,
     endFrac: entry.endFrac,
     color: entry.color ?? RING_COLORS[i % RING_COLORS.length],
-    svgOffset: (i + 1) * RING_OFFSET,
     onEdit: entry.onEdit,
   }));
 
-  // Render order: outermost ring first (underneath), innermost last (on top)
-  const renderRings = [...rings].sort((a, b) => a.svgOffset - b.svgOffset);
-
-  // Pre-compute offset SVG points per unique svgOffset
-  const svgOffsetCache = new Map<number, [number, number][]>();
-  for (const entry of rings) {
-    if (!svgOffsetCache.has(entry.svgOffset)) {
-      svgOffsetCache.set(entry.svgOffset, offsetSvgPts(svgBasePts, entry.svgOffset));
-    }
-  }
-
-  const fullD =
-    'M ' + svgBasePts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' L ') + ' Z';
+  // Same rendering the sidebar thumbnails use (see CrossSectionProfileList) —
+  // a profile looks identical at either size. Render order (rings already
+  // outermost-first, innermost-last-on-top) falls out of ringSpecs' own
+  // order, since offset grows monotonically with index.
+  const { outlineD: fullD, rings: renderRings } = buildCrossSectionRender(
+    points,
+    rings.map((r) => ({ id: r.id, startFrac: r.startFrac, endFrac: r.endFrac, color: r.color })),
+  );
 
   return (
     <div className="fixed z-50 pointer-events-none" style={{ left: pos.x, top: pos.y }}>
@@ -158,15 +146,13 @@ export function CrossSectionDialog({
             preserveAspectRatio="xMidYMid meet"
           >
             {renderRings.map((entry) => {
-              const svgPts = svgOffsetCache.get(entry.svgOffset)!;
-              const pts = buildArcPoints(svgPts, arcFracs, entry.startFrac, entry.endFrac);
-              if (pts.length < 2) return null;
+              if (!entry.d) return null;
               const isHovered = hoveredId === entry.id;
               const dimmed = hoveredId !== null && !isHovered;
               return (
                 <path
                   key={entry.id}
-                  d={segD(pts)}
+                  d={entry.d}
                   fill="none"
                   stroke={entry.color}
                   strokeWidth={isHovered ? 4 : 2}

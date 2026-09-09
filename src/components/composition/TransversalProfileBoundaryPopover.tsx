@@ -13,10 +13,13 @@ import {
   invertFitTransform,
 } from '@/lib/crossSectionGeometry';
 import { arcFractionNearestTo, pointAtArcFraction, sideOfPosition } from '@/lib/profileGeometry';
+import { round6 } from '@/lib/bezierMath';
 import type { ProfileBoundary } from '@/components/composition/TransversalMappingRow';
 
 const UNLOCKED = 'unlocked';
 const ARC_STEPS = 48;
+/** Must match the Start/End position `<Input step="...">` below. */
+const INPUT_STEP = 0.01;
 
 const { width: VB_W, height: VB_H, padX: PAD_X, padY: PAD_Y } = PROFILE_VIEWBOX;
 const INNER_W = VB_W - 2 * PAD_X;
@@ -40,7 +43,7 @@ function arcSegment(
 function parsePosition(raw: string): number | null {
   if (raw === '') return null;
   const v = parseFloat(raw);
-  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : null;
+  return Number.isFinite(v) ? round6(Math.max(0, Math.min(1, v))) : null;
 }
 
 interface TransversalProfileBoundaryPopoverProps {
@@ -95,6 +98,10 @@ export function TransversalProfileBoundaryPopover({
   // start<end, cross-profile side) only on blur, so an in-progress value (a
   // lone "0." while typing "0.5") isn't rejected keystroke by keystroke.
   const [editingValues, setEditingValues] = useState<Partial<Record<'start' | 'end', string>>>({});
+  // Why the last blur reverted a field's typed value — cleared as soon as
+  // the user focuses that field again. Surfaced as a red border + message so
+  // a rejected/clamped value isn't a silent no-op from the user's side.
+  const [invalidFields, setInvalidFields] = useState<Partial<Record<'start' | 'end', string>>>({});
 
   /** Whether a new start (or end) value `v` for THIS profile stays on the
    *  same side as every other covered profile's own start (or end) — using
@@ -159,29 +166,74 @@ export function TransversalProfileBoundaryPopover({
     const local = pt.matrixTransform(ctm.inverse());
     const [x, y] = invertFitTransform(local.x, local.y, transform);
     const t = arcFractionNearestTo(pts, { x, y });
-    // Start must always stay smaller than end on this profile, and on the
-    // same side (upper/lower) as every other covered profile's own start
-    // (end respectively) — a drag past either limit just stops moving there
-    // instead of crossing over it.
+    // Must stay on the same side (upper/lower) as every other covered
+    // profile's own start (end respectively) — a drag past that limit just
+    // stops moving there instead of crossing over it. Start/end are not
+    // required to stay in a fixed order — the arc between them can wrap
+    // through the 0/1 seam (see arcSegment/buildArcPoints).
     if (dragging === 'start') {
-      if (boundary.endPosition != null && t >= boundary.endPosition) return;
       if (!sameSideAsOtherProfiles('start', t)) return;
-      onChange({ startPosition: t });
+      onChange({ startPosition: round6(t) });
     } else {
-      if (boundary.startPosition != null && t <= boundary.startPosition) return;
       if (!sameSideAsOtherProfiles('end', t)) return;
-      onChange({ endPosition: t });
+      onChange({ endPosition: round6(t) });
     }
   }
 
   function getInputValue(field: 'start' | 'end'): string {
     if (editingValues[field] !== undefined) return editingValues[field]!;
     const v = field === 'start' ? boundary.startPosition : boundary.endPosition;
-    return v != null ? String(v) : '';
+    return v != null ? v.toFixed(6) : '';
+  }
+
+  /** Validates and, if valid, commits a typed/stepped raw value for `field` —
+   *  shared by the step-button/arrow-key live commit below and the on-blur
+   *  commit, so both apply the exact same rules. Leaves `editingValues`
+   *  alone; callers decide when the buffer itself is cleared. */
+  function tryCommit(field: 'start' | 'end', raw: string) {
+    const parsed = parsePosition(raw);
+    if (parsed == null) {
+      setInvalidFields((v) => ({ ...v, [field]: 'Enter a number between 0 and 1.' }));
+      return;
+    }
+    // Must stay on the same side (upper/lower) as every other covered
+    // profile's own start (end respectively) — an invalid value is dropped,
+    // reverting the field to its last valid one, with a message explaining
+    // why. Start/end are not required to stay in a fixed order — the arc
+    // between them can wrap through the 0/1 seam.
+    if (!sameSideAsOtherProfiles(field, parsed)) {
+      setInvalidFields((v) => ({
+        ...v,
+        [field]: 'Would put this profile on a different side than the mapping’s other profiles.',
+      }));
+      return;
+    }
+    setInvalidFields((v) => (v[field] === undefined ? v : { ...v, [field]: undefined }));
+    onChange(field === 'start' ? { startPosition: parsed } : { endPosition: parsed });
   }
 
   function handleInputChange(field: 'start' | 'end', raw: string) {
+    // The number input's spin buttons (and the Up/Down arrow keys while it's
+    // focused) step the value by exactly INPUT_STEP without any keystroke —
+    // move the point live for those instead of waiting for blur, same as
+    // dragging the handle does. Free typing (any other delta) still only
+    // buffers here and commits on blur, so a value mid-edit isn't rejected
+    // keystroke by keystroke.
+    const prev = getInputValue(field);
     setEditingValues((v) => ({ ...v, [field]: raw }));
+    const prevNum = parseFloat(prev);
+    const nextNum = parseFloat(raw);
+    if (
+      Number.isFinite(prevNum) &&
+      Number.isFinite(nextNum) &&
+      Math.abs(Math.abs(nextNum - prevNum) - INPUT_STEP) < 1e-6
+    ) {
+      tryCommit(field, raw);
+    }
+  }
+
+  function handleInputFocus(field: 'start' | 'end') {
+    setInvalidFields((v) => (v[field] === undefined ? v : { ...v, [field]: undefined }));
   }
 
   function handleInputBlur(field: 'start' | 'end') {
@@ -193,17 +245,7 @@ export function TransversalProfileBoundaryPopover({
       return next;
     });
     if (raw === undefined) return;
-    const parsed = parsePosition(raw);
-    if (parsed != null) {
-      // Start must always stay smaller than end on this profile, and on the
-      // same side (upper/lower) as every other covered profile's own start
-      // (end respectively) — an invalid typed value is simply dropped,
-      // reverting the field to its last valid one.
-      const other = field === 'start' ? boundary.endPosition : boundary.startPosition;
-      const inOrder = other == null || (field === 'start' ? parsed < other : parsed > other);
-      if (!inOrder || !sameSideAsOtherProfiles(field, parsed)) return;
-    }
-    onChange(field === 'start' ? { startPosition: parsed } : { endPosition: parsed });
+    tryCommit(field, raw);
   }
 
   return (
@@ -293,11 +335,19 @@ export function TransversalProfileBoundaryPopover({
             max={1}
             value={getInputValue('start')}
             onChange={(e) => handleInputChange('start', e.target.value)}
+            onFocus={() => handleInputFocus('start')}
             onBlur={() => handleInputBlur('start')}
             disabled={boundary.startLockedTo != null}
             placeholder="0.00"
-            className="h-9 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:opacity-60"
+            aria-invalid={invalidFields.start != null}
+            title={invalidFields.start}
+            className={`h-9 rounded-md px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:opacity-60 ${
+              invalidFields.start ? 'border-[#dc2626] focus-visible:ring-[#dc2626]' : 'border-[#e2e8f0]'
+            }`}
           />
+          {invalidFields.start && (
+            <p className="text-[12px] leading-4 text-[#dc2626]">{invalidFields.start}</p>
+          )}
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-[12px] font-medium text-[#0a0a0a]">Start locked to</Label>
@@ -316,11 +366,17 @@ export function TransversalProfileBoundaryPopover({
             max={1}
             value={getInputValue('end')}
             onChange={(e) => handleInputChange('end', e.target.value)}
+            onFocus={() => handleInputFocus('end')}
             onBlur={() => handleInputBlur('end')}
             disabled={boundary.endLockedTo != null}
             placeholder="0.00"
-            className="h-9 rounded-md border-[#e2e8f0] px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:opacity-60"
+            aria-invalid={invalidFields.end != null}
+            title={invalidFields.end}
+            className={`h-9 rounded-md px-2 text-[13px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:opacity-60 ${
+              invalidFields.end ? 'border-[#dc2626] focus-visible:ring-[#dc2626]' : 'border-[#e2e8f0]'
+            }`}
           />
+          {invalidFields.end && <p className="text-[12px] leading-4 text-[#dc2626]">{invalidFields.end}</p>}
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-[12px] font-medium text-[#0a0a0a]">End locked to</Label>

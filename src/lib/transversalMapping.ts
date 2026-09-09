@@ -54,13 +54,15 @@ function isTrailingEdge(position: number): boolean {
 
 /** "Start/end locked to" describes what an intersection point actually is —
  *  either a profile edge (leading/trailing) or a specific longitudinal
- *  mapping's boundary. */
+ *  mapping's own boundary, itself on the trailing- or leading-edge side
+ *  (same position-based split as the profile's own edges), e.g. "upper
+ *  layup TE" / "upper layup LE". */
 export function describeIntersection(entry: CompositionIntersection | undefined): string {
   if (!entry) return '—';
-  if (entry.type === 'edge')
-    return isTrailingEdge(entry.position) ? 'Trailing edge' : 'Leading edge';
+  if (entry.type === 'edge') return isTrailingEdge(entry.position) ? 'Trailing' : 'Leading';
+  const edgeLabel = isTrailingEdge(entry.position) ? 'TE' : 'LE';
   const name = entry.longitudinal_mapping_name ?? 'Mapping';
-  return entry.side ? `${name} (${entry.side})` : name;
+  return entry.side ? `${entry.side} ${name} ${edgeLabel}` : `${name} ${edgeLabel}`;
 }
 
 /**
@@ -88,8 +90,18 @@ export function effectiveBoundaryValue(
   profileId: number,
   field: 'startPosition' | 'endPosition',
 ): number | null {
+  const raw = computeEffectiveBoundaryValue(coveredProfilesSortedByPosition, profileBoundaries, profileId, field);
+  return raw != null ? round6(raw) : null;
+}
+
+function computeEffectiveBoundaryValue(
+  coveredProfilesSortedByPosition: GeometryProfile[],
+  profileBoundaries: Record<number, ProfileBoundary>,
+  profileId: number,
+  field: 'startPosition' | 'endPosition',
+): number | null {
   const own = profileBoundaries[profileId]?.[field];
-  if (own != null) return round6(own);
+  if (own != null) return own;
   const target = coveredProfilesSortedByPosition.find((p) => p.id === profileId);
   if (!target) return null;
 
@@ -106,11 +118,11 @@ export function effectiveBoundaryValue(
     }
   }
   if (before && after) {
-    if (after.position === before.position) return round6(before.value);
+    if (after.position === before.position) return before.value;
     const t = (target.position - before.position) / (after.position - before.position);
-    return round6(before.value + (after.value - before.value) * t);
+    return before.value + (after.value - before.value) * t;
   }
-  return before?.value != null ? round6(before.value) : after?.value != null ? round6(after.value) : null;
+  return before?.value ?? after?.value ?? null;
 }
 
 /**
@@ -270,19 +282,15 @@ export function buildTransversalMappingPayload(
 /** Inverse of `buildTransversalMappingPayload` — regroups the GET response's
  *  per-profile entries back into editable rows by `group_id`, taking the
  *  lowest/highest-position covered profile as start/end and reading that
- *  profile's own entry directly for its boundary fields. `layupMappingNames`
- *  (the composition's own longitudinal/layup mapping names) excludes any
- *  group that isn't really a transversal mapping — the backend also returns
- *  each layup mapping's own boundary reflected into this same per-profile
- *  shape (so the cross-section view has something to draw before any real
- *  transversal mapping exists); a transversal mapping can never share a
- *  layup mapping's name, so a group with one is always that reflection, not
- *  a saved transversal mapping row, and must not be hydrated as an editable
- *  one. */
+ *  profile's own entry directly for its boundary fields. Entries with
+ *  `read_only: true` are excluded — the backend also returns each layup
+ *  mapping's own boundary reflected into this same per-profile shape (so the
+ *  cross-section view has something to draw before any real transversal
+ *  mapping exists), flagged `read_only` so it's never hydrated as an
+ *  editable row. */
 export function hydrateTransversalMappings(
   transversalMappingData: CompositionMappingTransversalResponse,
   profiles: GeometryProfile[],
-  layupMappingNames: Set<string>,
 ): TransversalMapping[] {
   const profileById = new Map(profiles.map((p) => [p.id, p]));
   const groups = new Map<
@@ -291,7 +299,7 @@ export function hydrateTransversalMappings(
   >();
   transversalMappingData.transversal_mapping.forEach((p) => {
     p.mappings.forEach((entry) => {
-      if (layupMappingNames.has(entry.name.trim())) return;
+      if (entry.read_only) return;
       const boundary: ProfileBoundary = {
         startPosition: entry.start_position,
         startLockedTo: entry.start_locked_to,
