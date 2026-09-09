@@ -1,9 +1,8 @@
-import { buildArcPoints, computeArcFractions, fitPointsToSvg, offsetSvgPts, segD } from '@/lib/crossSectionGeometry';
+import { buildCrossSectionRender, type CrossSectionViewBox } from '@/lib/crossSectionGeometry';
 
-const VB_W = 140;
-const VB_H = 80;
-const PAD = 6;
-const RING_OFFSET = 2;
+// Same aspect as before, sized up ~1.2x (was 140x80) — the sidebar's own
+// available width, not this viewBox, is what actually caps the rendered size.
+const THUMBNAIL_VIEWBOX: CrossSectionViewBox = { width: 168, height: 96, padX: 7, padY: 7 };
 const RING_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#e11d48', '#8b5cf6'];
 
 export interface CrossSectionThumbnailRing {
@@ -19,31 +18,41 @@ interface CrossSectionThumbnailProps {
   rings?: CrossSectionThumbnailRing[];
 }
 
-/** Small static outline preview — same fitting math as the full CrossSectionDialog,
- *  plus a thin colored line per saved transversal mapping ring. */
+/** Small static outline preview — same rendering (`buildCrossSectionRender`)
+ *  as the full `CrossSectionDialog`, just at a smaller viewBox, so a profile
+ *  looks identical (fitting, ring offset, smoothing) at either size. */
 function CrossSectionThumbnail({ points, rings }: CrossSectionThumbnailProps) {
-  const svgPts = fitPointsToSvg(points, VB_W - 2 * PAD, VB_H - 2 * PAD, PAD, PAD);
-  const arcFracs = computeArcFractions(svgPts);
-  const d = 'M ' + svgPts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' L ') + ' Z';
-  const ringPts = (rings ?? []).map((_, i) => offsetSvgPts(svgPts, RING_OFFSET * (i + 1)));
+  const { outlineD, rings: renderedRings } = buildCrossSectionRender(
+    points,
+    (rings ?? []).map((r, i) => ({
+      id: String(i),
+      startFrac: r.startFrac,
+      endFrac: r.endFrac,
+      color: r.color ?? RING_COLORS[i % RING_COLORS.length],
+    })),
+    THUMBNAIL_VIEWBOX,
+  );
 
   return (
-    <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="h-12 w-full" aria-hidden="true">
-      {(rings ?? []).map((r, i) => {
-        const pts = buildArcPoints(ringPts[i], arcFracs, r.startFrac, r.endFrac);
-        if (pts.length < 2) return null;
-        return (
-          <path
-            key={i}
-            d={segD(pts)}
-            fill="none"
-            stroke={r.color ?? RING_COLORS[i % RING_COLORS.length]}
-            strokeWidth={1.5}
-            vectorEffect="non-scaling-stroke"
-          />
-        );
-      })}
-      <path d={d} fill="none" stroke="#1a1a1a" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    <svg
+      viewBox={`0 0 ${THUMBNAIL_VIEWBOX.width} ${THUMBNAIL_VIEWBOX.height}`}
+      className="h-[86px] w-full"
+      aria-hidden="true"
+    >
+      {renderedRings.map(
+        (r) =>
+          r.d && (
+            <path
+              key={r.id}
+              d={r.d}
+              fill="none"
+              stroke={r.color}
+              strokeWidth={1.5}
+              vectorEffect="non-scaling-stroke"
+            />
+          ),
+      )}
+      <path d={outlineD} fill="none" stroke="#1a1a1a" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
@@ -79,14 +88,16 @@ export function CrossSectionProfileList({
               <button
                 type="button"
                 onClick={() => onSelect(String(prof.id))}
-                className={`flex w-full flex-col gap-1 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
+                className={`relative flex w-full flex-col overflow-hidden rounded-md text-left text-[13px] transition-colors ${
                   selected === String(prof.id)
                     ? 'bg-[#eef9ff] text-[#0a0a0a]'
                     : 'text-[#0a0a0a] hover:bg-[#f1f5f9]'
                 }`}
               >
                 {points && <CrossSectionThumbnail points={points} rings={ringsByProfileId?.get(prof.id)} />}
-                {prof.name}
+                <span className="absolute bottom-1 left-2 rounded bg-white/85 px-1 py-0.5 text-[12px] font-medium leading-none backdrop-blur-[1px]">
+                  {prof.name}
+                </span>
               </button>
             </li>
           );

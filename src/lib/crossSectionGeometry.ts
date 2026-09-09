@@ -1,17 +1,49 @@
 /** Pure, framework-independent SVG geometry helpers for `CrossSectionDialog`'s
  *  cross-section rendering. */
 
+import { hashString } from '@/lib/utils';
+
+/** Cumulative arc-length (not fraction) at each point along the contour. */
+function cumulativeLengths(pts: [number, number][]): number[] {
+  const dist = [0];
+  for (let i = 1; i < pts.length; i++) {
+    dist.push(dist[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  }
+  return dist;
+}
+
 /**
  * Shift every SVG-space point inward along the local perpendicular by `offset`
  * viewport units. The allPts curve is CW in screen coords, so the inward normal
  * at tangent (tx, ty) is (ty/|t|, −tx/|t|).
+ *
+ * The tangent at each point is taken between neighbors at least 2% of the
+ * total perimeter away (walked outward along the contour, wrapping), not the
+ * immediate array neighbors — airfoil point sampling clusters densely near
+ * the leading edge, where an immediate-neighbor tangent is dividing by a
+ * near-zero arc-length step and amplifies any point-level noise into a
+ * visibly jagged/self-crossing offset right at that bend.
  */
 export function offsetSvgPts(svgPts: [number, number][], offset: number): [number, number][] {
   const n = svgPts.length;
+  if (n < 3) return svgPts.slice();
+  const cum = cumulativeLengths(svgPts);
+  const minGap = (cum[n - 1] || 1) * 0.02;
+  function walk(from: number, step: -1 | 1): [number, number] {
+    let j = from;
+    let acc = 0;
+    while (acc < minGap) {
+      const nj = (j + step + n) % n;
+      acc += Math.hypot(svgPts[j][0] - svgPts[nj][0], svgPts[j][1] - svgPts[nj][1]);
+      j = nj;
+      if (j === from) break; // whole loop covered — nothing further to walk to
+    }
+    return svgPts[j];
+  }
   return svgPts.map((_, i) => {
     const [xi, yi] = svgPts[i];
-    const prev = svgPts[(i - 1 + n) % n];
-    const next = svgPts[(i + 1) % n];
+    const prev = walk(i, -1);
+    const next = walk(i, 1);
     const tx = next[0] - prev[0];
     const ty = next[1] - prev[1];
     const len = Math.sqrt(tx * tx + ty * ty);
@@ -107,10 +139,85 @@ export function segD(pts: [number, number][]): string {
   return 'M ' + pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' L ');
 }
 
+/** Same path as `segD`, but rounded through quadratic Béziers instead of
+ *  straight segments — each interior sample becomes a curve control point,
+ *  its endpoint the midpoint to the next sample, so the line passes near
+ *  every sample without a hard corner at any of them. Used for the
+ *  mapping-boundary rings (illustrative overlays), not the profile outline
+ *  itself, which must stay an exact trace of the real geometry. */
+export function smoothSegD(pts: [number, number][]): string {
+  if (pts.length < 3) return segD(pts);
+  const [x0, y0] = pts[0];
+  let d = `M ${x0.toFixed(2)},${y0.toFixed(2)}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [cx, cy] = pts[i];
+    const [nx, ny] = pts[i + 1];
+    const mx = (cx + nx) / 2;
+    const my = (cy + ny) / 2;
+    d += ` Q ${cx.toFixed(2)},${cy.toFixed(2)} ${mx.toFixed(2)},${my.toFixed(2)}`;
+  }
+  const [lx, ly] = pts[pts.length - 1];
+  d += ` L ${lx.toFixed(2)},${ly.toFixed(2)}`;
+  return d;
+}
+
 /** Shared viewBox for every profile cross-section rendering (the Cross-section
  *  view dialog and the transversal-mapping boundary editor) — kept identical
  *  across both so the same profile renders at the same scale in either one. */
 export const PROFILE_VIEWBOX = { width: 800, height: 200, padX: 24, padY: 16 };
+
+export interface CrossSectionRingSpec {
+  id: string;
+  startFrac: number;
+  endFrac: number;
+  color: string;
+}
+
+export interface CrossSectionViewBox {
+  width: number;
+  height: number;
+  padX: number;
+  padY: number;
+}
+
+/** Ring-to-ring inward step, as a fraction of the viewBox's own inner height
+ *  rather than a fixed number of units — so differently-sized viewBoxes
+ *  (the full dialog's vs. a sidebar thumbnail's) still offset rings by the
+ *  same *proportion* of the rendered shape, instead of the same absolute
+ *  distance meaning wildly different things at different scales. */
+const RING_OFFSET_FRACTION = 0.0065;
+
+/**
+ * Builds the outline path and every ring's rendered path for one profile's
+ * cross-section — the single place this is computed, so the full
+ * Cross-section dialog and its sidebar thumbnails render a profile exactly
+ * the same way (fitting, proportional ring offset, smoothing), whatever
+ * `viewBox` (and so whatever final on-screen size) each renders it at.
+ */
+export function buildCrossSectionRender(
+  points: [number, number][],
+  ringSpecs: CrossSectionRingSpec[],
+  viewBox: CrossSectionViewBox = PROFILE_VIEWBOX,
+): { outlineD: string; rings: (CrossSectionRingSpec & { d: string })[] } {
+  const { width, height, padX, padY } = viewBox;
+  const innerH = height - 2 * padY;
+  const svgPts = fitPointsToSvg(points, width - 2 * padX, innerH, padX, padY);
+  const arcFracs = computeArcFractions(svgPts);
+  const outlineD = 'M ' + svgPts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' L ') + ' Z';
+  const ringOffsetUnit = innerH * RING_OFFSET_FRACTION;
+  const offsetCache = new Map<number, [number, number][]>();
+  const rings = ringSpecs.map((spec, i) => {
+    const offset = (i + 1) * ringOffsetUnit;
+    let offsetPts = offsetCache.get(offset);
+    if (!offsetPts) {
+      offsetPts = offsetSvgPts(svgPts, offset);
+      offsetCache.set(offset, offsetPts);
+    }
+    const arcPts = buildArcPoints(offsetPts, arcFracs, spec.startFrac, spec.endFrac);
+    return { ...spec, d: arcPts.length >= 2 ? smoothSegD(arcPts) : '' };
+  });
+  return { outlineD, rings };
+}
 
 /** Fallback color palette, cycled by index — used only when a Cross-section
  *  ring has no more specific color assigned. */
@@ -131,9 +238,42 @@ export const LAYUP_COLORS = [
  *  color, so a layup reads as the same color in both. */
 export const LAYUP_MAPPING_COLORS = { upper: '#2563eb', lower: '#eab308' };
 
-/** Transversal-mapping colors — green/red, cycled by index. Shared by the
- *  Cross-section view's rings and the 3D preview's per-part mesh color. */
-export const TRANSVERSAL_MAPPING_COLORS = ['#22c55e', '#e11d48'];
+/** Transversal-mapping colors — a wide, distinct set (not just green/red) so
+ *  different mappings are actually told apart, not just alternating between
+ *  two. Avoids the blues/yellows LAYUP_MAPPING_COLORS already owns. Shared by
+ *  the Cross-section view list, the profile modal, and the 3D preview's
+ *  per-part mesh color. */
+export const TRANSVERSAL_MAPPING_COLORS = [
+  '#22c55e', // green
+  '#e11d48', // rose
+  '#8b5cf6', // violet
+  '#f97316', // orange
+  '#0891b2', // cyan
+  '#ec4899', // pink
+  '#84cc16', // lime
+  '#6366f1', // indigo
+];
+
+/** A 3D preview part named after a transversal mapping that spans both the
+ *  upper and lower side ships as two separate 3MF objects, suffixed by the
+ *  backend with " (0)"/" (1)" — strip that so both resolve to the same base
+ *  name (and so the same color). */
+function stripPartIndexSuffix(name: string): string {
+  return name.replace(/\s*\(\d+\)\s*$/, '');
+}
+
+/** Deterministic color for a transversal mapping, keyed by its own name — the
+ *  one identifier available (and equal) everywhere a mapping's color needs to
+ *  match: the mapping table, the Cross-section view list's thumbnail rings,
+ *  the profile modal's rings, and the 3D preview's per-part mesh (named after
+ *  the mapping, modulo the " (N)" split-part suffix above). Hashed rather
+ *  than indexed by table row or 3MF part discovery order — either of those
+ *  can differ between call sites and would desync the same mapping's color
+ *  across them. */
+export function transversalMappingColorForName(name: string): string {
+  const base = stripPartIndexSuffix(name);
+  return TRANSVERSAL_MAPPING_COLORS[hashString(base) % TRANSVERSAL_MAPPING_COLORS.length];
+}
 
 export interface FitTransform {
   scale: number;

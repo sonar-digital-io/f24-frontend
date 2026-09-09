@@ -108,18 +108,16 @@ export function useUpdateCompositionLayup(compositionId: number) {
 }
 
 export function useUpdateCompositionMappingLongitudinal(compositionId: number) {
-  const queryClient = useQueryClient();
+  // No invalidation here — this fires on every autosave of the Layup mapping
+  // tab, which must only PUT this one endpoint. Intersections/transversal-
+  // mapping/preview are refreshed on their own, explicit schedule instead:
+  // ensureTransversalMappingReady (in CompositionNew) re-fetches them exactly
+  // once, only when the user actually switches into the Transversal mapping
+  // tab, and the Preview tab's own query always refetches fresh on mount
+  // (staleTime: 0) regardless.
   return useMutation({
     mutationFn: (payload: CompositionMappingLongitudinalPayload) =>
       compositionApi.updateCompositionMappingLongitudinal(compositionId, payload),
-    // No detail invalidation here — the save flow already chains its own
-    // GET intersections / GET transversal-mapping calls; refetching detail
-    // (GET /composition/:id/) too would be a redundant extra request.
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: compositionKeys.intersections(compositionId) });
-      queryClient.invalidateQueries({ queryKey: compositionKeys.preview(compositionId) });
-      queryClient.invalidateQueries({ queryKey: compositionKeys.mappingTransversal(compositionId) });
-    },
   });
 }
 
@@ -144,20 +142,23 @@ export function useFetchCompositionMappingTransversal() {
 }
 
 /** Per-profile transversal mapping table — what actually drives the
- *  Cross-section view dialog's ring segments and table. */
-export function useCompositionMappingTransversal(compositionId: number) {
+ *  Cross-section view dialog's ring segments and table. `enabled` additionally
+ *  gates this — TransversalMappingSection stays mounted (hidden) across tab
+ *  switches, so without it this would fetch as soon as the composition opens
+ *  instead of only once the Transversal mapping tab is actually visited. */
+export function useCompositionMappingTransversal(compositionId: number, enabled = true) {
   return useQuery({
     queryKey: compositionKeys.mappingTransversal(compositionId),
     queryFn: () => compositionApi.getCompositionMappingTransversal(compositionId),
-    enabled: Number.isFinite(compositionId),
+    enabled: Number.isFinite(compositionId) && enabled,
   });
 }
 
-export function useCompositionIntersections(compositionId: number) {
+export function useCompositionIntersections(compositionId: number, enabled = true) {
   return useQuery({
     queryKey: compositionKeys.intersections(compositionId),
     queryFn: () => compositionApi.getCompositionIntersections(compositionId),
-    enabled: Number.isFinite(compositionId),
+    enabled: Number.isFinite(compositionId) && enabled,
   });
 }
 

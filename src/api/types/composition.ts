@@ -104,9 +104,10 @@ export interface TransversalMappingEntry {
   name: string;
   /** Perimeter fraction along the profile's cross-section outline, 0..1. */
   start_position: number;
-  start_locked_to: number;
+  /** Null when the boundary is a free position, not locked to a specific intersection. */
+  start_locked_to: number | null;
   end_position: number;
-  end_locked_to: number;
+  end_locked_to: number | null;
   layup: number;
   group_id: string;
   read_only: boolean;
@@ -138,16 +139,17 @@ export interface CompositionProfileIntersections {
   intersections: CompositionIntersection[];
 }
 
-/** PUT /composition/:id/mapping/transversal/ — write payload. Unlike the GET
- *  shape (grouped with `start_position`/`end_position`), the backend only
- *  wants the resolved locked-to intersection ids per profile. */
+/** PUT /composition/:id/mapping/transversal/ — write payload, same
+ *  position/locked-to shape as the GET response (see TransversalMappingEntry). */
 export interface TransversalMappingWriteEntry {
   name: string;
   group_id: string;
   layup: number;
   row_index: number;
-  start_locked_to: number;
-  end_locked_to: number;
+  start_locked_to: number | null;
+  end_locked_to: number | null;
+  start_position: number;
+  end_position: number;
 }
 
 export interface TransversalMappingWriteProfile {

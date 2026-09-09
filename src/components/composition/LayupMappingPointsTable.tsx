@@ -51,7 +51,7 @@ export function LayupMappingPointsTable({
                 <td className="px-2 py-2">
                   <Input
                     type="number"
-                    step="0.01"
+                    step="0.000001"
                     min={xMin}
                     max={xMax}
                     value={getInputValue(idx, 'x')}
@@ -63,7 +63,7 @@ export function LayupMappingPointsTable({
                 <td className="px-2 py-2">
                   <Input
                     type="number"
-                    step="0.001"
+                    step="0.000001"
                     min={yMin}
                     max={yMax}
                     value={getInputValue(idx, 'y')}

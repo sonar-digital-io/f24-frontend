@@ -1,6 +1,7 @@
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, TriangleAlert } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { SelectField } from '@/components/composition/SelectField';
+import { Tooltip } from '@/components/ui/tooltip';
 
 /** One profile's own boundary spec — a mapping row carries one of these for
  *  its start profile and one for its end profile (matching the backend's
@@ -48,11 +49,19 @@ interface TransversalMappingRowProps {
   mapping: TransversalMapping;
   layupOptions: { value: string; label: string }[];
   profileOptions: { value: string; label: string }[];
+  /** Whether this row's start/end boundaries land on both sides of the
+   *  profiles' midpoint across its covered profiles — the backend rejects
+   *  the whole group when this happens, so the row is silently excluded from
+   *  the save until it's fixed; this just tells the user why. */
+  sideIssues: { startMismatch: boolean; endMismatch: boolean };
   onUpdate: (next: Partial<TransversalMapping>) => void;
   onEditStartBoundary: () => void;
   onEditEndBoundary: () => void;
   onDelete: () => void;
 }
+
+const SIDE_MISMATCH_MESSAGE =
+  "This boundary isn't on the same side (leading/trailing) across every covered profile — fix it on each profile's boundary editor so this mapping can be saved.";
 
 /** One row of the transversal-mapping table — name/layup/start profile/end
  *  profile pick inline; each profile's own boundary (position + locked-to,
@@ -61,6 +70,7 @@ export function TransversalMappingRow({
   mapping: m,
   layupOptions,
   profileOptions,
+  sideIssues,
   onUpdate,
   onEditStartBoundary,
   onEditEndBoundary,
@@ -104,6 +114,15 @@ export function TransversalMappingRow({
           >
             <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
+          {sideIssues.startMismatch && (
+            <Tooltip content={SIDE_MISMATCH_MESSAGE}>
+              <TriangleAlert
+                className="h-4 w-4 shrink-0 text-[#dc2626]"
+                strokeWidth={2}
+                aria-label="Start position isn't on the same side across every profile"
+              />
+            </Tooltip>
+          )}
         </div>
       </td>
       <td className="px-2 py-2">
@@ -126,6 +145,15 @@ export function TransversalMappingRow({
           >
             <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
+          {sideIssues.endMismatch && (
+            <Tooltip content={SIDE_MISMATCH_MESSAGE}>
+              <TriangleAlert
+                className="h-4 w-4 shrink-0 text-[#dc2626]"
+                strokeWidth={2}
+                aria-label="End position isn't on the same side across every profile"
+              />
+            </Tooltip>
+          )}
         </div>
       </td>
       <td className="px-2 py-2">

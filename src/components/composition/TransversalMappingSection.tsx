@@ -9,6 +9,7 @@ import {
 import { CrossSectionProfileList } from '@/components/composition/CrossSectionProfileList';
 import { TransversalProfileBoundaryPopover } from '@/components/composition/TransversalProfileBoundaryPopover';
 import { ConfirmDialog } from '@/components/common/dialog/ConfirmDialog';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   TransversalMappingRow,
   getMappingBoundary,
@@ -19,6 +20,8 @@ import { getApiErrorMessage } from '@/lib/apiError';
 import {
   describeIntersection,
   buildTransversalMappingPayload,
+  effectiveBoundaryValue,
+  getMappingSideIssues,
   hydrateTransversalMappings,
   resizeMappingRange,
 } from '@/lib/transversalMapping';
@@ -31,7 +34,7 @@ import {
 } from '@/hooks/api/useComposition';
 import { geometryKeys, useGeometryProfiles, useGeometryProfile } from '@/hooks/api/useGeometry';
 import { getGeometryProfile } from '@/api/geometry';
-import { LAYUP_MAPPING_COLORS, TRANSVERSAL_MAPPING_COLORS } from '@/lib/crossSectionGeometry';
+import { LAYUP_MAPPING_COLORS, transversalMappingColorForName } from '@/lib/crossSectionGeometry';
 
 interface TransversalMappingSectionProps {
   compositionId: number;
@@ -43,6 +46,11 @@ interface TransversalMappingSectionProps {
    *  would miss the not-yet-persisted case and leave the profile list
    *  permanently empty during composition creation. */
   geometryId: number;
+  /** Whether the Transversal mapping tab has actually been opened at least
+   *  once — this section is always mounted (hidden via CSS otherwise), so
+   *  without this its own mapping/intersections fetches would fire as soon
+   *  as the composition opens instead of only once the tab is visited. */
+  enabled: boolean;
   /** Reports this section's own autosave pending/error state up to the page
    *  header's shared save-status indicator — this table has no save
    *  indicator of its own. */
@@ -69,6 +77,7 @@ interface OpenBoundaryEditor {
 export function TransversalMappingSection({
   compositionId,
   geometryId,
+  enabled,
   onSaveStatusChange,
 }: TransversalMappingSectionProps) {
   const [mappings, setMappings] = useState<TransversalMapping[]>([]);
@@ -79,8 +88,8 @@ export function TransversalMappingSection({
   }));
   const { data: geometryProfilesData } = useGeometryProfiles(geometryId);
   const crossSectionProfiles = geometryProfilesData?.profiles ?? [];
-  const { data: transversalMappingData } = useCompositionMappingTransversal(compositionId);
-  const { data: intersectionsData } = useCompositionIntersections(compositionId);
+  const { data: transversalMappingData } = useCompositionMappingTransversal(compositionId, enabled);
+  const { data: intersectionsData } = useCompositionIntersections(compositionId, enabled);
   const updateTransversalMutation = useUpdateCompositionMappingTransversal(compositionId);
   const [boundaryEditor, setBoundaryEditor] = useState<OpenBoundaryEditor | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -112,6 +121,18 @@ export function TransversalMappingSection({
     label: `${p.name} (${p.position})`,
   }));
 
+  // Every profile's own real trailing/leading edge positions — the actual
+  // border between its upper and lower surface (not a fixed 0.5 split, see
+  // lib/profileGeometry), needed per-profile since side comparisons must use
+  // each profile's own edges, not one shared assumption.
+  const edgePositionsByProfileId = new Map<number, number[]>();
+  crossSectionProfiles.forEach((p) => {
+    const edges = (intersectionsData?.find((x) => x.profile_id === p.id)?.intersections ?? [])
+      .filter((i) => i.type === 'edge')
+      .map((i) => i.position);
+    edgePositionsByProfileId.set(p.id, edges);
+  });
+
   // Hydrate the editable table from whatever's already saved — group the
   // per-profile entries (GET's shape) back into rows by group_id.
   useHydrateOnce(
@@ -137,14 +158,15 @@ export function TransversalMappingSection({
     return sorted.slice(lo, hi + 1);
   }
 
-  /** A mapping's color, keyed to its position in the table (not the per-profile
-   *  filtered list) so it's the same green/red everywhere this mapping shows up —
-   *  the cross-section dialog's rings, the table, and the boundary editor's
-   *  highlight/handles — instead of drifting depending on which other mappings
-   *  happen to also cover the profile being viewed. */
+  /** A mapping's color, keyed to its own name (hashed — see
+   *  transversalMappingColorForName) rather than its position in the table or
+   *  any per-profile list, so it's the same green/red everywhere this mapping
+   *  shows up: the Cross-section view list's thumbnails, the profile modal's
+   *  rings, the boundary editor's highlight/handles, and (by the same name,
+   *  independently, in OccViewer) the 3D preview's per-part mesh color. */
   function transversalMappingColorFor(mappingId: string): string {
-    const idx = mappings.findIndex((m) => m.id === mappingId);
-    return TRANSVERSAL_MAPPING_COLORS[(idx === -1 ? 0 : idx) % TRANSVERSAL_MAPPING_COLORS.length];
+    const mapping = mappings.find((m) => m.id === mappingId);
+    return transversalMappingColorForName(mapping?.name ?? '');
   }
 
   /**
@@ -212,11 +234,16 @@ export function TransversalMappingSection({
     if (layupRings.length > 0) ringsByProfileId.set(profile.id, layupRings);
   });
   mappings.forEach((m) => {
-    getCoveredProfiles(m).forEach((profile) => {
-      const b = getMappingBoundary(m, profile.id);
-      if (b.startPosition == null || b.endPosition == null) return;
+    const covered = getCoveredProfiles(m);
+    covered.forEach((profile) => {
+      // Effective (own explicit, or interpolated) value — not the raw
+      // per-profile boundary, which is null for a "middle" profile the user
+      // never touched directly and would otherwise just be skipped here.
+      const startFrac = effectiveBoundaryValue(covered, m.profileBoundaries, profile.id, 'startPosition');
+      const endFrac = effectiveBoundaryValue(covered, m.profileBoundaries, profile.id, 'endPosition');
+      if (startFrac == null || endFrac == null) return;
       const rings = ringsByProfileId.get(profile.id) ?? [];
-      rings.push({ startFrac: b.startPosition, endFrac: b.endPosition });
+      rings.push({ startFrac, endFrac, color: transversalMappingColorForName(m.name) });
       ringsByProfileId.set(profile.id, rings);
     });
   });
@@ -274,7 +301,7 @@ export function TransversalMappingSection({
     const { payload, incomplete } = buildTransversalMappingPayload(
       mappings,
       crossSectionProfiles,
-      intersectionsData,
+      edgePositionsByProfileId,
     );
     if (incomplete > 0) return;
 
@@ -316,10 +343,44 @@ export function TransversalMappingSection({
     { value: 'unlocked', label: 'Unlocked' },
     ...editingIntersections.map((i) => ({ value: String(i.id), label: describeIntersection(i) })),
   ];
+  // This profile's own trailing/leading edge positions — the real border
+  // between its upper and lower surface (see lib/profileGeometry's own doc
+  // comment: that fraction isn't a fixed 0.5, it varies per profile).
+  const editingEdgePositions = editingIntersections
+    .filter((i) => i.type === 'edge')
+    .map((i) => i.position);
+  // Every OTHER profile this mapping covers, with its own resolved start/end
+  // position and its own real edge positions — lets the popover keep this
+  // profile's start (and, separately, end) on the same side as every other
+  // profile's, instead of comparing start against end within one profile
+  // (which is normal — a mapping typically spans from the upper to the lower
+  // surface of the SAME profile).
+  const editingOtherProfiles = (() => {
+    if (!editingMapping) return [];
+    const covered = getCoveredProfiles(editingMapping);
+    return covered
+      .filter((p) => p.id !== editingProfileId)
+      .map((p) => ({
+        startPosition: effectiveBoundaryValue(
+          covered,
+          editingMapping.profileBoundaries,
+          p.id,
+          'startPosition',
+        ),
+        endPosition: effectiveBoundaryValue(
+          covered,
+          editingMapping.profileBoundaries,
+          p.id,
+          'endPosition',
+        ),
+        edgePositions: edgePositionsByProfileId.get(p.id) ?? [],
+      }));
+  })();
   return (
     <div className="flex flex-col gap-6">
       {/* Top: transversal mapping table */}
       <div className="relative flex w-full max-w-[900px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
+        <TooltipProvider>
         <table className="w-full border-collapse text-[13px]">
           <thead>
             <tr className="border-b border-[#e5e7eb]">
@@ -341,6 +402,7 @@ export function TransversalMappingSection({
                 mapping={m}
                 layupOptions={layupOptions}
                 profileOptions={profileOptions}
+                sideIssues={getMappingSideIssues(m, getCoveredProfiles(m), edgePositionsByProfileId)}
                 onUpdate={(next) => updateMapping(m.id, next)}
                 onEditStartBoundary={() =>
                   setBoundaryEditor({ mappingId: m.id, profileId: m.startProfileId! })
@@ -353,6 +415,7 @@ export function TransversalMappingSection({
             ))}
           </tbody>
         </table>
+        </TooltipProvider>
         <div className="flex items-center justify-between">
           <button
             type="button"
@@ -392,6 +455,8 @@ export function TransversalMappingSection({
               points={pointsByProfileId.get(editingProfileId)}
               boundary={getMappingBoundary(editingMapping, editingProfileId)}
               lockOptions={editingLockOptions}
+              edgePositions={editingEdgePositions}
+              otherProfiles={editingOtherProfiles}
               // Picking a lock target should also move the point onto that
               // landmark — the popover only knows the labels, so the caller
               // fills in the intersection's own position.
@@ -436,21 +501,27 @@ export function TransversalMappingSection({
           const profileIntersections =
             intersectionsData?.find((p) => p.profile_id === profileId)?.intersections ?? [];
           const entries = mappings
-            .filter((m) => getCoveredProfiles(m).some((p) => p.id === profileId))
-            .map((m) => {
-              const b = getMappingBoundary(m, profileId);
+            .map((m) => ({ m, covered: getCoveredProfiles(m) }))
+            .filter(({ covered }) => covered.some((p) => p.id === profileId))
+            .map(({ m, covered }) => {
+              // Effective (own explicit, or interpolated) value — not the raw
+              // per-profile boundary, which is null for a "middle" profile
+              // and would otherwise show as a bogus 0..0 ring/row here.
+              const startFrac = effectiveBoundaryValue(covered, m.profileBoundaries, profileId, 'startPosition') ?? 0;
+              const endFrac = effectiveBoundaryValue(covered, m.profileBoundaries, profileId, 'endPosition') ?? 0;
+              const own = getMappingBoundary(m, profileId);
               return {
                 id: `${m.groupId}-${profileId}`,
                 name: m.name,
                 layupName:
                   layupOptions.find((l) => l.value === m.layupId)?.label ?? 'Unknown layup',
-                startFrac: b.startPosition ?? 0,
-                endFrac: b.endPosition ?? 0,
+                startFrac,
+                endFrac,
                 startLockedToLabel: describeIntersection(
-                  profileIntersections.find((i) => i.id === b.startLockedTo),
+                  profileIntersections.find((i) => i.id === own.startLockedTo),
                 ),
                 endLockedToLabel: describeIntersection(
-                  profileIntersections.find((i) => i.id === b.endLockedTo),
+                  profileIntersections.find((i) => i.id === own.endLockedTo),
                 ),
                 color: transversalMappingColorFor(m.id),
                 onEdit: () => setBoundaryEditor({ mappingId: m.id, profileId }),
