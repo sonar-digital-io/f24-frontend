@@ -71,10 +71,13 @@ export interface CalculationRowProps {
 
 export function CalculationRow({ item, onDelete, onStart, onStop, onExport, onShowLog }: CalculationRowProps) {
   const navigate = useNavigate();
+  const isRunning = item.status === 'Running';
   return (
     <tr
-      onClick={() => navigate(`/calculation/${item.id}`)}
-      className="group cursor-pointer border-b border-[#e5e7eb] bg-white transition-colors hover:bg-[#f9fafb]"
+      onClick={() => !isRunning && navigate(`/calculation/${item.id}`)}
+      className={`group border-b border-[#e5e7eb] bg-white transition-colors ${
+        isRunning ? '' : 'cursor-pointer hover:bg-[#f9fafb]'
+      }`}
     >
       <td className="w-[260px] px-3 py-4 align-top text-[14px] font-medium leading-5 text-[#0a0a0a]">
         {item.name}

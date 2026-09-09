@@ -1,7 +1,13 @@
+import { useEffect, useRef } from 'react';
 import { DialogHeader } from '@/components/common/dialog/DialogHeader';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useProjectLog } from '@/hooks/api/useProjects';
+
+/** How close to the bottom (px) still counts as "at the bottom" for
+ *  auto-scroll purposes — a exact-equality check would stop re-sticking
+ *  after a 1px rounding wobble from the browser's own scroll math. */
+const AUTO_SCROLL_THRESHOLD = 24;
 
 interface CalculationLogDialogProps {
   projectId: string;
@@ -31,6 +37,24 @@ export function CalculationLogDialog({ projectId, projectName, isRunning, onClos
   });
   const entries = data?.log ?? [];
 
+  // Sticks to the bottom as new entries arrive (the actual "tailing" — see
+  // the doc comment below) unless the user has scrolled up to read older
+  // lines, in which case a poll landing mid-read won't yank the view away.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < AUTO_SCROLL_THRESHOLD;
+  }
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [entries.length]);
+
   return (
     <div
       role="dialog"
@@ -44,7 +68,11 @@ export function CalculationLogDialog({ projectId, projectName, isRunning, onClos
         className="flex h-[70vh] w-full max-w-[720px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
       >
         <DialogHeader title={`Logs — ${projectName}`} titleId="calculation-log-title" onClose={onClose} />
-        <div className="flex-1 overflow-y-auto rounded-md bg-[#0a0a0a] p-3 font-mono text-[12px] leading-5">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto rounded-md bg-[#0a0a0a] p-3 font-mono text-[12px] leading-5"
+        >
           {isLoading ? (
             <p className="text-[#9ca3af]">Loading logs…</p>
           ) : isError ? (
