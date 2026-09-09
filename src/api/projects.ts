@@ -72,9 +72,25 @@ export async function updateProjectState(projectId: string, payload: ProjectStat
   return data;
 }
 
-export async function exportProject(projectId: string): Promise<Blob> {
-  const { data } = await apiClient.get(`/project/${projectId}/export/`, { responseType: 'blob' });
-  return data;
+export interface ProjectExport {
+  blob: Blob;
+  filename: string;
+}
+
+export async function exportProject(projectId: string): Promise<ProjectExport> {
+  // 'arraybuffer', not 'blob' — a failed request still decodes its JSON/text
+  // error body to raw bytes either way, but only the arraybuffer form is
+  // decoded back to text by getApiErrorMessage, so the backend's own error
+  // message reaches the user instead of a generic fallback.
+  const response = await apiClient.get(`/project/${projectId}/export/`, { responseType: 'arraybuffer' });
+  // Match a bare `filename=` segment only — not RFC 5987's `filename*=`, which has a
+  // different (encoded) value format and would otherwise get captured as garbage.
+  const match = response.headers['content-disposition']
+    ?.split(';')
+    .map((part: string) => part.trim())
+    .find((part: string) => /^filename=/.test(part));
+  const filename = match?.slice('filename='.length).replace(/^"|"$/g, '');
+  return { blob: new Blob([response.data]), filename: filename || `calculation-${projectId}.txt` };
 }
 
 export async function getProjectLog(projectId: string, query?: ProjectLogQuery): Promise<ProjectLogResponse> {

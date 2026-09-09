@@ -18,10 +18,11 @@ export const projectKeys = {
   log: (projectId: string, query?: ProjectLogQuery) => ['projects', 'log', projectId, query] as const,
 };
 
-export function useProjectList() {
+export function useProjectList(options?: { refetchInterval?: number }) {
   return useQuery({
     queryKey: projectKeys.list(),
     queryFn: () => projectsApi.getProjectList(),
+    refetchInterval: options?.refetchInterval,
   });
 }
 
@@ -135,10 +136,14 @@ export function useExportProject() {
   });
 }
 
-export function useProjectLog(projectId: string, query?: ProjectLogQuery) {
+export function useProjectLog(
+  projectId: string,
+  options?: { query?: ProjectLogQuery; enabled?: boolean; refetchInterval?: number },
+) {
   return useQuery({
-    queryKey: projectKeys.log(projectId, query),
-    queryFn: () => projectsApi.getProjectLog(projectId, query),
-    enabled: Boolean(projectId),
+    queryKey: projectKeys.log(projectId, options?.query),
+    queryFn: () => projectsApi.getProjectLog(projectId, options?.query),
+    enabled: Boolean(projectId) && (options?.enabled ?? true),
+    refetchInterval: options?.refetchInterval,
   });
 }

@@ -10,7 +10,7 @@ export interface ProjectCreateResponse {
   uuid: string;
 }
 
-export type ProjectState = 'RUNNING' | 'STOPPED' | (string & {});
+export type ProjectState = 'RUN' | 'STOP' | (string & {});
 
 export interface Project {
   uuid: string;

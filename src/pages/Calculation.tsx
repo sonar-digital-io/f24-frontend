@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MainNav } from '@/components/common/layout/MainNav';
 import { Footer } from '@/components/common/layout/Footer';
 import { CalculationRow } from '@/components/calculation/CalculationRow';
+import { CalculationLogDialog } from '@/components/calculation/CalculationLogDialog';
 import { ListPageCard } from '@/components/common/list/ListPageCard';
 import { ListTable } from '@/components/common/list/ListTable';
 import { ListTableHead, type ListTableHeadColumn } from '@/components/common/list/ListTableHead';
@@ -21,10 +22,16 @@ import { matchesDateRange, matchesQuery, paginate, sortItems } from '@/lib/listT
 import type { CalculationSortKey } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 import { type Calculation } from '@/data/calculations';
-import { useDeleteProject, useProjectList } from '@/hooks/api/useProjects';
+import {
+  useDeleteProject,
+  useProjectList,
+  useUpdateProjectState,
+  useExportProject,
+} from '@/hooks/api/useProjects';
 import type { Project } from '@/api/types/projects';
 
 const PAGE_SIZE = 10;
+const LIST_REFETCH_INTERVAL = 5000;
 
 function toUiCalculation(p: Project): Calculation {
   return {
@@ -34,7 +41,7 @@ function toUiCalculation(p: Project): Calculation {
     timestamp: formatDateTime(p.created_at),
     // Keep the raw ISO value so sorting/filtering stays chronological — formatted at render.
     lastUpdated: p.last_modified ?? '',
-    status: p.state === 'RUNNING' ? 'Running' : p.state === 'STOPPED' ? 'Stopped' : 'Draft',
+    status: p.state === 'RUN' ? 'Running' : p.state === 'STOP' ? 'Stopped' : 'Draft',
   };
 }
 
@@ -51,7 +58,9 @@ export function Calculation() {
   const dateFilter = useDateFilterPopover(() => setPage(1));
   const { dateRange } = dateFilter;
 
-  const { data: backendProjects, isLoading, isError } = useProjectList();
+  const { data: backendProjects, isLoading, isError } = useProjectList({
+    refetchInterval: LIST_REFETCH_INTERVAL,
+  });
   const CALCULATIONS = useMemo(
     () => (backendProjects ?? []).map(toUiCalculation),
     [backendProjects],
@@ -64,6 +73,28 @@ export function Calculation() {
     deleteMutation,
     (id) => id,
   );
+
+  const updateStateMutation = useUpdateProjectState();
+  const exportMutation = useExportProject();
+  const [logDialogProject, setLogDialogProject] = useState<{
+    id: string;
+    name: string;
+    isRunning: boolean;
+  } | null>(null);
+
+  async function handleExport(item: Calculation) {
+    try {
+      const { blob, filename } = await exportMutation.mutateAsync(item.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // exportMutation's onError (via the global mutation cache) already surfaces a toast.
+    }
+  }
 
   const allStatuses = useMemo(
     () => [...new Set(CALCULATIONS.map((c) => c.status))].sort(),
@@ -170,6 +201,16 @@ export function Calculation() {
                     key={item.id}
                     item={item}
                     onDelete={() => setPendingDelete({ id: item.id, name: item.name })}
+                    onStart={() => updateStateMutation.mutate({ projectId: item.id, state: 'RUN' })}
+                    onStop={() => updateStateMutation.mutate({ projectId: item.id, state: 'STOP' })}
+                    onExport={() => handleExport(item)}
+                    onShowLog={() =>
+                      setLogDialogProject({
+                        id: item.id,
+                        name: item.name,
+                        isRunning: item.status === 'Running',
+                      })
+                    }
                   />
                 )}
                 emptyLabel={
@@ -206,6 +247,15 @@ export function Calculation() {
         onToggleAll={statusFilter.toggleSelectAll}
         widthClassName="w-[200px]"
       />
+
+      {logDialogProject && (
+        <CalculationLogDialog
+          projectId={logDialogProject.id}
+          projectName={logDialogProject.name}
+          isRunning={logDialogProject.isRunning}
+          onClose={() => setLogDialogProject(null)}
+        />
+      )}
     </div>
   );
 }
