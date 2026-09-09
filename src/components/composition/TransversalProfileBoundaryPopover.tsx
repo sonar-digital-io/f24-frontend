@@ -191,6 +191,14 @@ export function TransversalProfileBoundaryPopover({
    *  commit, so both apply the exact same rules. Leaves `editingValues`
    *  alone; callers decide when the buffer itself is cleared. */
   function tryCommit(field: 'start' | 'end', raw: string) {
+    if (raw.trim() === '') {
+      // Emptying the field is a deliberate way to clear this profile's own
+      // explicit override, so it goes back to being interpolated between its
+      // covered neighbors — not an invalid value.
+      setInvalidFields((v) => (v[field] === undefined ? v : { ...v, [field]: undefined }));
+      onChange(field === 'start' ? { startPosition: null } : { endPosition: null });
+      return;
+    }
     const parsed = parsePosition(raw);
     if (parsed == null) {
       setInvalidFields((v) => ({ ...v, [field]: 'Enter a number between 0 and 1.' }));
