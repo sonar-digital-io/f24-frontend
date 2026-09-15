@@ -19,10 +19,22 @@ import { round6 } from '@/lib/bezierMath';
  * whenever startProfileId/endProfileId changes — before this call, a
  * profile's boundary can be stale (left over from a previous range) or
  * missing (freshly entered the range).
+ *
+ * When the start (or, separately, end) profile itself is being changed to a
+ * profile not already in range, that profile's *whole* boundary (both its
+ * start position and its end position — a profile's boundary is the pair of
+ * points where the mapping's start-side and end-side curves cross it) is
+ * seeded from the *previous* start (resp. end) profile's boundary instead of
+ * left blank — the user is moving the boundary to a different profile, not
+ * clearing it. The lock references aren't carried over (they name
+ * intersections specific to the old profile), so the new profile starts out
+ * unlocked at the inherited positions.
  */
 export function resizeMappingRange(
   mapping: TransversalMapping,
   profiles: GeometryProfile[],
+  prevStartProfileId: number | null = mapping.startProfileId,
+  prevEndProfileId: number | null = mapping.endProfileId,
 ): TransversalMapping {
   const { startProfileId, endProfileId } = mapping;
   if (startProfileId == null || endProfileId == null) {
@@ -41,6 +53,33 @@ export function resizeMappingRange(
   covered.forEach((p) => {
     next[p.id] = mapping.profileBoundaries[p.id] ?? EMPTY_BOUNDARY;
   });
+
+  if (
+    startProfileId !== prevStartProfileId &&
+    mapping.profileBoundaries[startProfileId] == null &&
+    prevStartProfileId != null &&
+    mapping.profileBoundaries[prevStartProfileId]
+  ) {
+    const prevBoundary = mapping.profileBoundaries[prevStartProfileId];
+    next[startProfileId] = {
+      ...prevBoundary,
+      startLockedTo: null,
+      endLockedTo: null,
+    };
+  }
+  if (
+    endProfileId !== prevEndProfileId &&
+    mapping.profileBoundaries[endProfileId] == null &&
+    prevEndProfileId != null &&
+    mapping.profileBoundaries[prevEndProfileId]
+  ) {
+    const prevBoundary = mapping.profileBoundaries[prevEndProfileId];
+    next[endProfileId] = {
+      ...prevBoundary,
+      startLockedTo: null,
+      endLockedTo: null,
+    };
+  }
 
   return { ...mapping, profileBoundaries: next };
 }
