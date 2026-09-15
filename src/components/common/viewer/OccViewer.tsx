@@ -181,7 +181,7 @@ export function OccViewer({
 
     // ── OrbitControls ──────────────────────────────────────────────────────
     const controls = createDampedOrbitControls(camera, renderer);
-    controls.minDistance = 0.1;
+    controls.minDistance = 0.02;
     controls.maxDistance = 5000;
     controls.target.set(0, 0, 0);
 
@@ -277,10 +277,12 @@ export function OccViewer({
       mesh.receiveShadow = true;
       scene.add(mesh);
 
+      // Child of `mesh`, not a scene-level sibling — inherits its scale/position
+      // (including the post-load recentering below) automatically instead of
+      // needing to be kept in sync with it separately.
       const webLines = createWireframeOverlay(geo);
-      webLines.scale.setScalar(stlScale);
       webLines.visible = showWebViewRef.current;
-      scene.add(webLines);
+      mesh.add(webLines);
 
       return { newMeshes: [mesh], newWebLines: [webLines], roots: [mesh] };
     }
@@ -308,9 +310,10 @@ export function OccViewer({
           scene.add(mesh);
           newMeshes.push(mesh);
 
+          // Child of `mesh` — see loadStl's own webLines for why.
           const webLines = createWireframeOverlay(mesh.geometry);
           webLines.visible = showWebViewRef.current;
-          scene.add(webLines);
+          mesh.add(webLines);
           newWebLines.push(webLines);
         } catch (err) {
           console.warn('[OccViewer] tessellation failed for one shape:', err);
@@ -501,15 +504,18 @@ export function OccViewer({
 
   return (
     <div ref={containerRef} className={className}>
+      {/* Bottom-right — bottom-left is taken by the reset button/grid label/gizmo
+          stack below (only rendered together with those via showResetButton, but
+          status can be 'loading' on every page that renders OccViewer). */}
       {status === 'loading' && (
-        <div className="pointer-events-none absolute inset-0 flex items-end justify-start p-4">
+        <div className="pointer-events-none absolute inset-0 flex items-end justify-end p-4">
           <span className="rounded-md bg-white/80 px-2.5 py-1 text-[12px] font-medium text-[#6b7280] backdrop-blur-sm">
             Loading geometry…
           </span>
         </div>
       )}
       {status === 'error' && (
-        <div className="pointer-events-none absolute inset-0 flex items-end justify-start p-4">
+        <div className="pointer-events-none absolute inset-0 flex items-end justify-end p-4">
           <span className="rounded-md bg-white/80 px-2.5 py-1 text-[12px] font-medium text-[#dc2626] backdrop-blur-sm">
             Geometry load failed — check console
           </span>

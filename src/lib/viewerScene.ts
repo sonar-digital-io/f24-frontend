@@ -70,12 +70,11 @@ export function createViewerScene(width: number, height: number) {
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Fixed-size scale reference: with auto-fit disabled, the camera no longer
-  // zooms to match each loaded object's bounding box, so two objects with
-  // different real-world scale (e.g. different nominal_radius) actually look
-  // different-sized — this grid gives the eye something stationary to judge
-  // that size against. 100 world units across, 5-unit cells, sitting on the
-  // same plane as the shadow ground.
+  // Fixed-size scale reference, deliberately anchored at the world origin with
+  // no offset (unlike the shadow-receiving `ground` below, whose Y is moved by
+  // fitViewerSceneToBounds to track each loaded object) — this grid gives the
+  // eye something stationary to judge scale against. 100 world units across,
+  // 5-unit cells.
   const grid = new THREE.GridHelper(100, 20, 0x94a3b8, 0xd1d5db);
   scene.add(grid);
 
@@ -145,7 +144,7 @@ export function fitViewerSceneToBounds(
   camera.updateProjectionMatrix();
 
   controls.target.copy(center);
-  controls.minDistance = maxDim * 0.05;
+  controls.minDistance = maxDim * 0.01;
   controls.maxDistance = maxDim * 20;
   controls.update();
 

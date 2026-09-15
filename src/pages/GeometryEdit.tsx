@@ -38,6 +38,7 @@ import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActio
 import { toKeyValueList, keyValueSignature } from '@/lib/keyValueMapping';
 import type { Profile } from '@/data/profiles';
 import type { GeometryEdgeInput, ProfileGeneratorParameters } from '@/api/types/geometry';
+import type { KeyValuePair } from '@/api/types/common';
 
 const PANEL_WIDTH_NARROW = 'w-[516px] max-w-[calc(100vw-2rem)]';
 const PANEL_WIDTH_WIDE = 'w-[924px] max-w-[calc(100vw-2rem)]';
@@ -45,6 +46,16 @@ const PANEL_WIDTH_WIDE = 'w-[924px] max-w-[calc(100vw-2rem)]';
 // Pulled out of the normal grouped listing into its own standalone section below —
 // see globalPropertySections.
 const GLOBAL_PROPERTIES_PULLED_OUT = new Set(['nominal_radius']);
+
+/** Read straight off a fresh GET response's `settings`, not the `props` form
+ *  state — that state only gets hydrated from the same response on a *later*
+ *  render (see the useHydrateOnce below), so a caller reacting to the GET
+ *  response directly would, on the render where it first fires, still read
+ *  pre-hydration `props` and silently fall back to the wrong radius. */
+function getNominalRadius(settings: KeyValuePair[] | undefined): number {
+  const setting = settings?.find((kv) => kv.reference === 'nominal_radius');
+  return Number(setting?.value) || 1;
+}
 
 /** The floating properties panel's width depends on the active tab (and, for
  *  the foldable tabs, whether their side panel is folded). */
@@ -456,12 +467,7 @@ export function GeometryEdit() {
     if (!g?.profiles?.length || g.edges?.length) return;
     if (defaultEdgesSentRef.current || updateEdgesMutation.isPending) return;
     defaultEdgesSentRef.current = true;
-    // Read straight off the fresh GET response, not the `props` form state — that state
-    // only gets hydrated from this same `detailQuery.data` on a *later* render (see the
-    // useHydrateOnce above), so on the render where this effect first fires it's still
-    // pre-hydration and would silently divide by the wrong (fallback) radius.
-    const nominalRadiusSetting = g.settings?.find((kv) => kv.reference === 'nominal_radius');
-    const nominalRadius = Number(nominalRadiusSetting?.value) || 1;
+    const nominalRadius = getNominalRadius(g.settings);
     updateEdgesMutation
       .mutateAsync({ edges: buildDefaultEdges(nominalRadius) })
       .then(() => detailQuery.refetch())
@@ -494,11 +500,7 @@ export function GeometryEdit() {
       g.edges,
     ]);
     if (signature === lastResultSignature) return;
-    // Read straight off the fresh GET response, not the `props` form state — see the
-    // edges effect above for why (props hydrates from this same data on a later render).
-    const nominalRadiusSetting = g.settings?.find((kv) => kv.reference === 'nominal_radius');
-    const nominalRadius = Number(nominalRadiusSetting?.value) || 1;
-    handleGenerateResult(signature, nominalRadius);
+    handleGenerateResult(signature, getNominalRadius(g.settings));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, detailQuery.data]);
 
