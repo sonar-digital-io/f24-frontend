@@ -182,10 +182,21 @@ export function TransversalMappingSection({
    */
   function longitudinalMappingEntriesForProfile(profileId: number): TransversalMappingEntryForCs[] {
     const list = intersectionsData?.find((p) => p.profile_id === profileId)?.intersections ?? [];
-    const bySideAndMapping = new Map<string, typeof list>();
+    // Dedupe to one intersection per (mapping, side, index) first — a profile's
+    // intersections can include duplicate rows for the very same boundary point
+    // (the backend has been observed inserting a fresh row per fetch rather than
+    // replacing prior ones), and without this, two same-index duplicates for a
+    // mapping's "start" edge could both land in its group, get destructured as
+    // the pair, and produce a degenerate zero-length (start === end) ring.
+    const dedupedByIndex = new Map<string, (typeof list)[number]>();
     list.forEach((i) => {
-      if (i.type !== 'mapping' || i.longitudinal_mapping_id == null || i.side == null) return;
-      const key = `${i.longitudinal_mapping_id}:${i.side}`;
+      if (i.type !== 'mapping' || i.longitudinal_mapping_id == null || i.side == null || i.index == null)
+        return;
+      dedupedByIndex.set(`${i.longitudinal_mapping_id}:${i.side}:${i.index}`, i);
+    });
+    const bySideAndMapping = new Map<string, typeof list>();
+    dedupedByIndex.forEach((i, dedupedKey) => {
+      const key = dedupedKey.slice(0, dedupedKey.lastIndexOf(':'));
       const arr = bySideAndMapping.get(key) ?? [];
       arr.push(i);
       bySideAndMapping.set(key, arr);
@@ -347,8 +358,12 @@ export function TransversalMappingSection({
   const editingIntersections =
     intersectionsData?.find((p) => p.profile_id === editingProfileId)?.intersections ?? [];
   const editingLockOptions = [
-    { value: 'unlocked', label: 'Unlocked' },
-    ...editingIntersections.map((i) => ({ value: String(i.id), label: describeIntersection(i) })),
+    { value: 'unlocked', label: 'Unlocked', position: null },
+    ...editingIntersections.map((i) => ({
+      value: String(i.id),
+      label: describeIntersection(i),
+      position: i.position,
+    })),
   ];
   // This profile's own trailing/leading edge positions — the real border
   // between its upper and lower surface (see lib/profileGeometry's own doc
@@ -537,10 +552,8 @@ export function TransversalMappingSection({
           // Layup-mapping reference regions (blue = upper, orange = lower)
           // shown alongside — these exist independently of any transversal
           // mapping, so they still show up even with an empty table above.
-          const allEntries: TransversalMappingEntryForCs[] = [
-            ...longitudinalMappingEntriesForProfile(profileId),
-            ...entries,
-          ];
+          const layupEntries = longitudinalMappingEntriesForProfile(profileId);
+          const allEntries: TransversalMappingEntryForCs[] = [...layupEntries, ...entries];
 
           return (
             <CrossSectionDialog

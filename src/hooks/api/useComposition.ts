@@ -135,9 +135,20 @@ export function useUpdateCompositionMappingTransversal(compositionId: number) {
   });
 }
 
+/** Same GET as `useCompositionMappingTransversal`, but as a mutation the caller can
+ *  `await` (e.g. right before switching into the tab that query lazily `enable`s).
+ *  Routed through `queryClient.fetchQuery` on the *same* query key rather than
+ *  calling the API directly — React Query dedupes a fetch already in flight for
+ *  that key, so this doesn't fire a second, redundant request alongside the
+ *  `useQuery` that mounts (and fires its own fetch) in the same tab-switch. */
 export function useFetchCompositionMappingTransversal() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (compositionId: number) => compositionApi.getCompositionMappingTransversal(compositionId),
+    mutationFn: (compositionId: number) =>
+      queryClient.fetchQuery({
+        queryKey: compositionKeys.mappingTransversal(compositionId),
+        queryFn: () => compositionApi.getCompositionMappingTransversal(compositionId),
+      }),
   });
 }
 
@@ -162,9 +173,21 @@ export function useCompositionIntersections(compositionId: number, enabled = tru
   });
 }
 
+/** Same GET as `useCompositionIntersections` — see
+ *  `useFetchCompositionMappingTransversal`'s doc comment for why this goes
+ *  through `queryClient.fetchQuery` on the same query key instead of calling
+ *  the API directly. Without the dedup, this endpoint being called twice on
+ *  one tab switch (once here, once by the `useQuery`) duplicated every
+ *  intersection row server-side — the backend inserts fresh rows on each
+ *  call rather than replacing them. */
 export function useFetchCompositionIntersections() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (compositionId: number) => compositionApi.getCompositionIntersections(compositionId),
+    mutationFn: (compositionId: number) =>
+      queryClient.fetchQuery({
+        queryKey: compositionKeys.intersections(compositionId),
+        queryFn: () => compositionApi.getCompositionIntersections(compositionId),
+      }),
   });
 }
 

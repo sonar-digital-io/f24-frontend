@@ -50,7 +50,10 @@ interface TransversalProfileBoundaryPopoverProps {
   profileName: string;
   points: [number, number][] | undefined;
   boundary: ProfileBoundary;
-  lockOptions: { value: string; label: string }[];
+  /** `position` is this profile's own arc-fraction for that landmark — null
+   *  for "Unlocked". Used to validate a lock choice the same way a dragged/
+   *  typed position is (see `handleLockChange`) before applying it. */
+  lockOptions: { value: string; label: string; position: number | null }[];
   /** This profile's own trailing/leading edge positions (0 or 2 entries) —
    *  the real border between its upper and lower surface. Empty when the
    *  profile's edge intersections haven't loaded yet, in which case the side
@@ -168,14 +171,24 @@ export function TransversalProfileBoundaryPopover({
     const t = arcFractionNearestTo(pts, { x, y });
     // Must stay on the same side (upper/lower) as every other covered
     // profile's own start (end respectively) — a drag past that limit just
-    // stops moving there instead of crossing over it. Start/end are not
-    // required to stay in a fixed order — the arc between them can wrap
-    // through the 0/1 seam (see arcSegment/buildArcPoints).
-    if (dragging === 'start') {
-      if (!sameSideAsOtherProfiles('start', t)) return;
+    // stops moving there instead of crossing over it. Surfaced the same way a
+    // rejected typed value is (red border + message) — silently refusing to
+    // move with no feedback read as the editor being broken/unresponsive
+    // rather than as a real boundary. Start/end are not required to stay in a
+    // fixed order — the arc between them can wrap through the 0/1 seam (see
+    // arcSegment/buildArcPoints).
+    const field = dragging;
+    if (!sameSideAsOtherProfiles(field, t)) {
+      setInvalidFields((v) => ({
+        ...v,
+        [field]: 'Would put this profile on a different side than the mapping’s other profiles.',
+      }));
+      return;
+    }
+    setInvalidFields((v) => (v[field] === undefined ? v : { ...v, [field]: undefined }));
+    if (field === 'start') {
       onChange({ startPosition: round6(t) });
     } else {
-      if (!sameSideAsOtherProfiles('end', t)) return;
       onChange({ endPosition: round6(t) });
     }
   }
@@ -254,6 +267,28 @@ export function TransversalProfileBoundaryPopover({
     });
     if (raw === undefined) return;
     tryCommit(field, raw);
+  }
+
+  /** Locking to a landmark bypassed `sameSideAsOtherProfiles` entirely — unlike
+   *  a dragged/typed position, so an incompatible lock choice was silently
+   *  accepted here and only surfaced later as a save-time "not on the same
+   *  side" error. Validates it the same way before applying it. */
+  function handleLockChange(field: 'start' | 'end', raw: string) {
+    if (raw === UNLOCKED) {
+      setInvalidFields((v) => (v[field] === undefined ? v : { ...v, [field]: undefined }));
+      onChange(field === 'start' ? { startLockedTo: null } : { endLockedTo: null });
+      return;
+    }
+    const position = lockOptions.find((o) => o.value === raw)?.position;
+    if (position != null && !sameSideAsOtherProfiles(field, position)) {
+      setInvalidFields((v) => ({
+        ...v,
+        [field]: 'Would put this profile on a different side than the mapping’s other profiles.',
+      }));
+      return;
+    }
+    setInvalidFields((v) => (v[field] === undefined ? v : { ...v, [field]: undefined }));
+    onChange(field === 'start' ? { startLockedTo: Number(raw) } : { endLockedTo: Number(raw) });
   }
 
   return (
@@ -361,7 +396,7 @@ export function TransversalProfileBoundaryPopover({
           <Label className="text-[12px] font-medium text-[#0a0a0a]">Start locked to</Label>
           <SelectField
             value={boundary.startLockedTo != null ? String(boundary.startLockedTo) : UNLOCKED}
-            onChange={(v) => onChange({ startLockedTo: v === UNLOCKED ? null : Number(v) })}
+            onChange={(v) => handleLockChange('start', v)}
             options={lockOptions}
           />
         </div>
@@ -390,7 +425,7 @@ export function TransversalProfileBoundaryPopover({
           <Label className="text-[12px] font-medium text-[#0a0a0a]">End locked to</Label>
           <SelectField
             value={boundary.endLockedTo != null ? String(boundary.endLockedTo) : UNLOCKED}
-            onChange={(v) => onChange({ endLockedTo: v === UNLOCKED ? null : Number(v) })}
+            onChange={(v) => handleLockChange('end', v)}
             options={lockOptions}
           />
         </div>
