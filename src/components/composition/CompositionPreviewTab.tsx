@@ -60,6 +60,7 @@ export function CompositionPreviewTab({ compositionId, geometryId }: Composition
         onLayupNames={handleLayupNames}
         layupColorOverride={layupColorOverride}
         showWebView={showWireframe}
+        showResetButton
         className="absolute inset-0 h-full w-full"
       />
 

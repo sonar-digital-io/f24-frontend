@@ -52,6 +52,7 @@ export function createViewerScene(width: number, height: number) {
   keyLight.shadow.camera.top    = 50;
   keyLight.shadow.camera.bottom = -50;
   scene.add(keyLight);
+  scene.add(keyLight.target);
 
   const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.55);
   fillLight.position.set(-10, 6, -6);
@@ -69,31 +70,38 @@ export function createViewerScene(width: number, height: number) {
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Fixed-size scale reference: with auto-fit disabled, the camera no longer
-  // zooms to match each loaded object's bounding box, so two objects with
-  // different real-world scale (e.g. different nominal_radius) actually look
-  // different-sized — this grid gives the eye something stationary to judge
-  // that size against. 100 world units across, 5-unit cells, sitting on the
-  // same plane as the shadow ground.
+  // Fixed-size scale reference, deliberately anchored at the world origin with
+  // no offset (unlike the shadow-receiving `ground` below, whose Y is moved by
+  // fitViewerSceneToBounds to track each loaded object) — this grid gives the
+  // eye something stationary to judge scale against. 100 world units across,
+  // 5-unit cells.
   const grid = new THREE.GridHelper(100, 20, 0x94a3b8, 0xd1d5db);
-  grid.position.y = -2;
   scene.add(grid);
+
+  // Same reference grid, standing upright through the origin (rotated into the
+  // X/Y plane, normal along Z) — gives a depth/height reference to judge scale
+  // against in addition to the floor.
+  const gridZ = new THREE.GridHelper(100, 20, 0x94a3b8, 0xd1d5db);
+  gridZ.rotation.x = Math.PI / 2;
+  scene.add(gridZ);
 
   const ringGeo = new THREE.TorusGeometry(2, 0.15, 16, 60);
   const ringMat = new THREE.MeshBasicMaterial({ color: 0xcbd5e1, wireframe: true });
   const ring = new THREE.Mesh(ringGeo, ringMat);
   scene.add(ring);
 
-  return { scene, camera, renderer, ground, groundGeo, groundMat, ring, ringGeo, ringMat };
+  return { scene, camera, renderer, ground, groundGeo, groundMat, ring, ringGeo, ringMat, keyLight };
 }
 
-/** Fits `camera`/`controls`/`ground` to the bounding box of `roots`.
+/** Fits `camera`/`controls`/`ground` (and, if given, `keyLight`'s shadow
+ *  frustum/bias) to the bounding box of `roots`.
  *  Returns the geometry's `maxDim`, needed by `updateGroundFade` below. */
 export function fitViewerSceneToBounds(
   roots: THREE.Object3D[],
   camera: THREE.PerspectiveCamera,
   controls: { target: THREE.Vector3; minDistance: number; maxDistance: number; update: () => void },
   ground: THREE.Mesh,
+  keyLight?: THREE.DirectionalLight,
 ): number | null {
   if (roots.length === 0) return null;
   const box = new THREE.Box3();
@@ -103,7 +111,28 @@ export function fitViewerSceneToBounds(
   const center  = box.getCenter(new THREE.Vector3());
   const size    = box.getSize(new THREE.Vector3());
   const maxDim  = Math.max(size.x, size.y, size.z);
-  const fitDist = maxDim * 2.0;
+
+  // The shadow camera frustum/bias default to the fixed 100-unit reference grid,
+  // which is far too coarse for a small object — each shadow-map texel then covers
+  // a large enough patch of the curved surface to cause self-shadowing "acne"
+  // (banding on the object itself, a jagged/blocky outline in its cast shadow).
+  // Tightening the frustum to the actual object size, and scaling the bias with
+  // it, fixes both.
+  if (keyLight) {
+    const half = Math.max(maxDim * 0.75, 0.01);
+    keyLight.shadow.camera.left = -half;
+    keyLight.shadow.camera.right = half;
+    keyLight.shadow.camera.top = half;
+    keyLight.shadow.camera.bottom = -half;
+    keyLight.shadow.camera.updateProjectionMatrix();
+    keyLight.shadow.bias = -maxDim * 0.0005;
+    keyLight.shadow.normalBias = maxDim * 0.02;
+    keyLight.target.position.copy(center);
+  }
+  // 1.25 (not e.g. 2.0) so the object actually fills most of the frame — at this
+  // camera's 45° FOV and offset direction, 2.0 left it at roughly half the frame
+  // height, which read as "tiny" next to the still mostly-visible reference grid.
+  const fitDist = maxDim * 1.25;
 
   camera.position.set(
     center.x + fitDist * 0.55,
@@ -115,7 +144,7 @@ export function fitViewerSceneToBounds(
   camera.updateProjectionMatrix();
 
   controls.target.copy(center);
-  controls.minDistance = maxDim * 0.05;
+  controls.minDistance = maxDim * 0.01;
   controls.maxDistance = maxDim * 20;
   controls.update();
 
