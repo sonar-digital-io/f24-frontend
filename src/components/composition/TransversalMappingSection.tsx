@@ -301,11 +301,15 @@ export function TransversalMappingSection({
     // Incomplete rows (e.g. a start/end profile just picked but not yet given a
     // boundary) are already dropped from `payload` by buildTransversalMappingPayload
     // itself — don't also block the *whole* save on their account, or every other,
-    // already-complete row silently stops saving too.
+    // already-complete row silently stops saving too. Passing transversalMappingData
+    // lets it fall back to that row's last-saved entries instead of a bare drop, so
+    // this full-replace PUT never wipes an already-persisted group just because it's
+    // momentarily incomplete mid-edit.
     const { payload } = buildTransversalMappingPayload(
       mappings,
       crossSectionProfiles,
       edgePositionsByProfileId,
+      transversalMappingData,
     );
 
     const timer = setTimeout(() => {

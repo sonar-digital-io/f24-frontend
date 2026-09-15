@@ -213,12 +213,19 @@ export function getMappingSideIssues(
  * invented from the nearest intersection — since the backend needs the raw
  * `start_position`/`end_position` fraction for a genuinely unlocked boundary,
  * not a guessed lock. Rows missing a profile/layup/position are dropped and
- * counted in `incomplete`.
+ * counted in `incomplete` — but if `previouslySaved` has this row's group_id
+ * (i.e. it's not a new, never-saved row, just mid-edit), its last-saved
+ * entries are put back in its place instead of leaving it out. Autosave
+ * fires on every edit, including the moment right after a profile change
+ * before the user has fixed it back up (see resizeMappingRange) — without
+ * this, that debounce would PUT (a full-replace endpoint) a payload missing
+ * this group entirely and silently wipe its already-persisted data.
  */
 export function buildTransversalMappingPayload(
   mappings: TransversalMapping[],
   profiles: GeometryProfile[],
   edgePositionsByProfileId: Map<number, number[]>,
+  previouslySaved?: CompositionMappingTransversalResponse,
 ): { payload: CompositionMappingTransversalWritePayload; incomplete: number } {
   const sortedProfiles = [...profiles].sort((a, b) => a.position - b.position);
   const byProfile = new Map<
@@ -226,6 +233,24 @@ export function buildTransversalMappingPayload(
     CompositionMappingTransversalWritePayload['transversal_mapping'][number]['mappings']
   >();
   profiles.forEach((p) => byProfile.set(p.id, []));
+
+  const savedByGroup = new Map<
+    string,
+    { profileId: number; entry: CompositionMappingTransversalResponse['transversal_mapping'][number]['mappings'][number] }[]
+  >();
+  previouslySaved?.transversal_mapping.forEach((p) => {
+    p.mappings.forEach((entry) => {
+      if (entry.read_only) return;
+      const arr = savedByGroup.get(entry.group_id) ?? [];
+      arr.push({ profileId: p.profile_id, entry });
+      savedByGroup.set(entry.group_id, arr);
+    });
+  });
+  function restorePreviouslySaved(groupId: string, rowIndex: number) {
+    savedByGroup.get(groupId)?.forEach(({ profileId, entry }) => {
+      byProfile.get(profileId)?.push({ ...entry, row_index: rowIndex });
+    });
+  }
 
   let incomplete = 0;
   mappings.forEach((m, rowIndex) => {
@@ -245,13 +270,17 @@ export function buildTransversalMappingPayload(
       eb.startPosition == null ||
       eb.endPosition == null
     ) {
-      if (!isUntouched) incomplete += 1;
+      if (!isUntouched) {
+        incomplete += 1;
+        restorePreviouslySaved(m.groupId, rowIndex);
+      }
       return;
     }
     const startIdx = sortedProfiles.findIndex((p) => p.id === startProfileId);
     const endIdx = sortedProfiles.findIndex((p) => p.id === endProfileId);
     if (startIdx === -1 || endIdx === -1) {
       incomplete += 1;
+      restorePreviouslySaved(m.groupId, rowIndex);
       return;
     }
     const [loIdx, hiIdx] = startIdx <= endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
@@ -263,6 +292,7 @@ export function buildTransversalMappingPayload(
     const { startMismatch, endMismatch } = getMappingSideIssues(m, covered, edgePositionsByProfileId);
     if (startMismatch || endMismatch) {
       incomplete += 1;
+      restorePreviouslySaved(m.groupId, rowIndex);
       return;
     }
 
@@ -304,7 +334,10 @@ export function buildTransversalMappingPayload(
         end_position: boundary.endPosition,
       });
     });
-    if (!resolvedAny) incomplete += 1;
+    if (!resolvedAny) {
+      incomplete += 1;
+      restorePreviouslySaved(m.groupId, rowIndex);
+    }
   });
 
   return {
