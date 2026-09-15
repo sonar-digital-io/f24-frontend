@@ -15,7 +15,6 @@ import { GeometryGlobalPropertiesPanel } from '@/components/geometry/GeometryGlo
 import { ProfileDistributionPanel } from '@/components/geometry/ProfileDistributionPanel';
 import { ProfilesPanel } from '@/components/geometry/ProfilesPanel';
 import { StackingPanel, buildDefaultEdges } from '@/components/geometry/StackingPanel';
-import { CoordinateGizmo } from '@/components/common/viewer/CoordinateGizmo';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   useCreateGeometry,
@@ -406,7 +405,7 @@ export function GeometryEdit() {
   // Only the response for the most recently *requested* signature is ever applied —
   // firing two generations in a row (e.g. two quick autosaves) must not let the first,
   // now-stale one overwrite the viewer if it resolves after the second.
-  async function handleGenerateResult(signature: string) {
+  async function handleGenerateResult(signature: string, nominalRadius: number) {
     latestResultRequestRef.current = signature;
     setResultRegenerating(true);
     try {
@@ -416,7 +415,7 @@ export function GeometryEdit() {
         timeout: 120_000,
       });
       if (latestResultRequestRef.current !== signature) return;
-      setResultScale(Number(props.nominal_radius) || 1);
+      setResultScale(nominalRadius);
       setResultStl(data);
       // Only recorded on success — a failed generation leaves this stale, so the next
       // detailQuery refetch (tab switch, another autosave, …) retries automatically
@@ -495,7 +494,11 @@ export function GeometryEdit() {
       g.edges,
     ]);
     if (signature === lastResultSignature) return;
-    handleGenerateResult(signature);
+    // Read straight off the fresh GET response, not the `props` form state — see the
+    // edges effect above for why (props hydrates from this same data on a later render).
+    const nominalRadiusSetting = g.settings?.find((kv) => kv.reference === 'nominal_radius');
+    const nominalRadius = Number(nominalRadiusSetting?.value) || 1;
+    handleGenerateResult(signature, nominalRadius);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, detailQuery.data]);
 
@@ -651,11 +654,6 @@ export function GeometryEdit() {
             <Checkbox checked={resultShowWireframe} onCheckedChange={setResultShowWireframe} />
             Wireframe
           </label>
-        </div>
-
-        {/* Coordinate gizmo (bottom-left) */}
-        <div className="pointer-events-none absolute bottom-4 left-4 z-20">
-          <CoordinateGizmo />
         </div>
       </main>
 

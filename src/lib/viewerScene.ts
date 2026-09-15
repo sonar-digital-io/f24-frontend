@@ -76,8 +76,14 @@ export function createViewerScene(width: number, height: number) {
   // that size against. 100 world units across, 5-unit cells, sitting on the
   // same plane as the shadow ground.
   const grid = new THREE.GridHelper(100, 20, 0x94a3b8, 0xd1d5db);
-  grid.position.y = -2;
   scene.add(grid);
+
+  // Same reference grid, standing upright through the origin (rotated into the
+  // X/Y plane, normal along Z) — gives a depth/height reference to judge scale
+  // against in addition to the floor.
+  const gridZ = new THREE.GridHelper(100, 20, 0x94a3b8, 0xd1d5db);
+  gridZ.rotation.x = Math.PI / 2;
+  scene.add(gridZ);
 
   const ringGeo = new THREE.TorusGeometry(2, 0.15, 16, 60);
   const ringMat = new THREE.MeshBasicMaterial({ color: 0xcbd5e1, wireframe: true });
@@ -103,7 +109,10 @@ export function fitViewerSceneToBounds(
   const center  = box.getCenter(new THREE.Vector3());
   const size    = box.getSize(new THREE.Vector3());
   const maxDim  = Math.max(size.x, size.y, size.z);
-  const fitDist = maxDim * 2.0;
+  // 1.25 (not e.g. 2.0) so the object actually fills most of the frame — at this
+  // camera's 45° FOV and offset direction, 2.0 left it at roughly half the frame
+  // height, which read as "tiny" next to the still mostly-visible reference grid.
+  const fitDist = maxDim * 1.25;
 
   camera.position.set(
     center.x + fitDist * 0.55,

@@ -21,19 +21,19 @@
  * (fractions of the geometry's nominal_radius), so `stlScale` must be set to
  * rescale them. `stlData` takes priority over `igesUrl` whenever it's set.
  *
- * Scene: fixed camera framing (see createViewerScene) + OrbitControls, with a
- * reference grid/ground plane so objects of different real-world scale (e.g.
- * different nominal_radius) render at visibly different sizes instead of
- * being normalized away by an auto-fit camera.
+ * Scene: camera framing (see createViewerScene for the pre-load default) +
+ * OrbitControls, with a reference grid/ground plane objects render against.
  * OrbitControls: left-drag = rotate, right-drag / middle = pan, scroll = zoom.
  *
- * Camera does NOT auto-fit to the loaded geometry on load — `showResetButton`
- * still offers fit-to-bounds as an explicit, opt-in action.
+ * Camera auto-fits to the loaded geometry's bounding box as soon as it loads
+ * (see fitViewerSceneToBounds) — `showResetButton` re-runs that same fit as
+ * an explicit action, so it doubles as "reset to initial size".
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import * as THREE from 'three';
+import { CoordinateGizmo, type CoordinateGizmoHandle } from './CoordinateGizmo';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { getOcc } from '@/lib/occ-init';
 import { loadIgesShapes, tessellate } from '@/lib/occGeometry';
@@ -94,7 +94,8 @@ export interface OccViewerProps {
    *  Defaults to false. Ignored for STL/IGES, which have no per-part names to begin with. */
   treatAsBlade?: boolean;
   /** Shows a floating "Reset view" button that re-fits the camera to the loaded
-   *  geometry's bounding box — the same fit that runs automatically on load. */
+   *  geometry's bounding box — the same fit that runs automatically on load —
+   *  plus a grid-scale label ("Grid: 5m × 5m"). */
   showResetButton?: boolean;
 }
 
@@ -115,6 +116,7 @@ export function OccViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const meshesRef = useRef<THREE.Mesh[]>([]);
   const resetViewRef = useRef<(() => void) | null>(null);
+  const gizmoRef = useRef<CoordinateGizmoHandle>(null);
   const webLineRef = useRef<THREE.LineSegments[]>([]);
   const showWebViewRef = useRef(showWebView);
   const layupColorOverrideRef = useRef(layupColorOverride);
@@ -196,6 +198,7 @@ export function OccViewer({
     const animate = () => {
       animId = requestAnimationFrame(animate);
       controls.update();
+      gizmoRef.current?.updateOrientation(camera.quaternion);
       ring.rotation.y += 0.008;
       if (fitMaxDim !== null) {
         updateGroundFade(camera, controls.target, ground, groundMat, fitMaxDim, baseGroundOpacity);
@@ -438,13 +441,23 @@ export function OccViewer({
         .then(({ newMeshes, newWebLines, roots }) => {
           if (disposed) return;
 
-          // Auto-fit disabled: the camera keeps createViewerScene's fixed default
-          // framing instead of zooming to match each object's bounding box, so
-          // objects with different real-world scale (e.g. different nominal_radius)
-          // actually render at different sizes against the reference grid/ground.
-          // `loadedRoots` is still kept for the manual "Reset view" button, which
-          // remains an explicit opt-in to the old fit-to-bounds behavior.
+          // Recenter the loaded object(s) on the world origin — raw STL/IGES vertex
+          // data isn't guaranteed centered around its own local (0,0,0), so without
+          // this the object can sit visibly off the grid's center even though it
+          // looks centered in view (the camera fit below orbits its bounding-box
+          // center, wherever that is).
+          const centerBox = new THREE.Box3();
+          roots.forEach((r) => centerBox.expandByObject(r));
+          if (!centerBox.isEmpty()) {
+            const center = centerBox.getCenter(new THREE.Vector3());
+            roots.forEach((r) => r.position.sub(center));
+          }
+
           loadedRoots = roots;
+          // Fit the camera to the freshly loaded geometry so small objects (e.g. a
+          // 0.5m blade against the 100-unit reference grid) aren't lost in frame —
+          // the same fit the "Reset view" button re-runs on demand.
+          fitMaxDim = fitViewerSceneToBounds(loadedRoots, camera, controls, ground);
 
           meshesRef.current = newMeshes;
           webLineRef.current = newWebLines;
@@ -503,7 +516,7 @@ export function OccViewer({
         </div>
       )}
       {showResetButton && (
-        <div className="absolute bottom-4 right-4 z-10">
+        <div className="absolute bottom-4 left-4 z-20 flex flex-col items-start gap-2">
           <button
             type="button"
             onClick={() => resetViewRef.current?.()}
@@ -513,6 +526,10 @@ export function OccViewer({
           >
             <RotateCcw className="h-4 w-4" strokeWidth={2} />
           </button>
+          <span className="pointer-events-none rounded-md bg-white/80 px-2.5 py-1 text-[12px] font-medium text-[#6b7280] backdrop-blur-sm">
+            Grid: 5m × 5m
+          </span>
+          <CoordinateGizmo ref={gizmoRef} />
         </div>
       )}
     </div>
