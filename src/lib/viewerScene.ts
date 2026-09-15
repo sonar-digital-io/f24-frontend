@@ -52,6 +52,7 @@ export function createViewerScene(width: number, height: number) {
   keyLight.shadow.camera.top    = 50;
   keyLight.shadow.camera.bottom = -50;
   scene.add(keyLight);
+  scene.add(keyLight.target);
 
   const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.55);
   fillLight.position.set(-10, 6, -6);
@@ -90,16 +91,18 @@ export function createViewerScene(width: number, height: number) {
   const ring = new THREE.Mesh(ringGeo, ringMat);
   scene.add(ring);
 
-  return { scene, camera, renderer, ground, groundGeo, groundMat, ring, ringGeo, ringMat };
+  return { scene, camera, renderer, ground, groundGeo, groundMat, ring, ringGeo, ringMat, keyLight };
 }
 
-/** Fits `camera`/`controls`/`ground` to the bounding box of `roots`.
+/** Fits `camera`/`controls`/`ground` (and, if given, `keyLight`'s shadow
+ *  frustum/bias) to the bounding box of `roots`.
  *  Returns the geometry's `maxDim`, needed by `updateGroundFade` below. */
 export function fitViewerSceneToBounds(
   roots: THREE.Object3D[],
   camera: THREE.PerspectiveCamera,
   controls: { target: THREE.Vector3; minDistance: number; maxDistance: number; update: () => void },
   ground: THREE.Mesh,
+  keyLight?: THREE.DirectionalLight,
 ): number | null {
   if (roots.length === 0) return null;
   const box = new THREE.Box3();
@@ -109,6 +112,24 @@ export function fitViewerSceneToBounds(
   const center  = box.getCenter(new THREE.Vector3());
   const size    = box.getSize(new THREE.Vector3());
   const maxDim  = Math.max(size.x, size.y, size.z);
+
+  // The shadow camera frustum/bias default to the fixed 100-unit reference grid,
+  // which is far too coarse for a small object — each shadow-map texel then covers
+  // a large enough patch of the curved surface to cause self-shadowing "acne"
+  // (banding on the object itself, a jagged/blocky outline in its cast shadow).
+  // Tightening the frustum to the actual object size, and scaling the bias with
+  // it, fixes both.
+  if (keyLight) {
+    const half = Math.max(maxDim * 0.75, 0.01);
+    keyLight.shadow.camera.left = -half;
+    keyLight.shadow.camera.right = half;
+    keyLight.shadow.camera.top = half;
+    keyLight.shadow.camera.bottom = -half;
+    keyLight.shadow.camera.updateProjectionMatrix();
+    keyLight.shadow.bias = -maxDim * 0.0005;
+    keyLight.shadow.normalBias = maxDim * 0.02;
+    keyLight.target.position.copy(center);
+  }
   // 1.25 (not e.g. 2.0) so the object actually fills most of the frame — at this
   // camera's 45° FOV and offset direction, 2.0 left it at roughly half the frame
   // height, which read as "tiny" next to the still mostly-visible reference grid.

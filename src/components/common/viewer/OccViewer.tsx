@@ -171,7 +171,7 @@ export function OccViewer({
     const h = container.clientHeight || 600;
 
     // ── Scene / camera / renderer / lights / ground / loading ring ──────────
-    const { scene, camera, renderer, ground, groundMat, ring, ringGeo, ringMat } =
+    const { scene, camera, renderer, ground, groundMat, ring, ringGeo, ringMat, keyLight } =
       createViewerScene(w, h);
     container.appendChild(renderer.domElement);
     const baseGroundOpacity = groundMat.opacity;
@@ -190,7 +190,7 @@ export function OccViewer({
     let loadedRoots: THREE.Object3D[] = [];
     resetViewRef.current = () => {
       if (loadedRoots.length === 0) return;
-      fitMaxDim = fitViewerSceneToBounds(loadedRoots, camera, controls, ground);
+      fitMaxDim = fitViewerSceneToBounds(loadedRoots, camera, controls, ground, keyLight);
     };
 
     // ── Animate ─────────────────────────────────────────────────────────────
@@ -457,7 +457,7 @@ export function OccViewer({
           // Fit the camera to the freshly loaded geometry so small objects (e.g. a
           // 0.5m blade against the 100-unit reference grid) aren't lost in frame —
           // the same fit the "Reset view" button re-runs on demand.
-          fitMaxDim = fitViewerSceneToBounds(loadedRoots, camera, controls, ground);
+          fitMaxDim = fitViewerSceneToBounds(loadedRoots, camera, controls, ground, keyLight);
 
           meshesRef.current = newMeshes;
           webLineRef.current = newWebLines;
