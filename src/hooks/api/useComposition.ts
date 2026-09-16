@@ -140,7 +140,12 @@ export function useUpdateCompositionMappingTransversal(compositionId: number) {
  *  Routed through `queryClient.fetchQuery` on the *same* query key rather than
  *  calling the API directly — React Query dedupes a fetch already in flight for
  *  that key, so this doesn't fire a second, redundant request alongside the
- *  `useQuery` that mounts (and fires its own fetch) in the same tab-switch. */
+ *  `useQuery` that mounts (and fires its own fetch) in the same tab-switch.
+ *  `staleTime: 0` overrides the global 60s default (queryClient.ts) for this
+ *  call specifically — callers of this mutation want a guaranteed-fresh fetch
+ *  (e.g. right after an autosave), not cached data from up to a minute ago;
+ *  dedup against a genuinely concurrent fetch still applies regardless, since
+ *  that's based on an in-flight request, not on staleness. */
 export function useFetchCompositionMappingTransversal() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -148,6 +153,7 @@ export function useFetchCompositionMappingTransversal() {
       queryClient.fetchQuery({
         queryKey: compositionKeys.mappingTransversal(compositionId),
         queryFn: () => compositionApi.getCompositionMappingTransversal(compositionId),
+        staleTime: 0,
       }),
   });
 }
@@ -187,6 +193,7 @@ export function useFetchCompositionIntersections() {
       queryClient.fetchQuery({
         queryKey: compositionKeys.intersections(compositionId),
         queryFn: () => compositionApi.getCompositionIntersections(compositionId),
+        staleTime: 0,
       }),
   });
 }

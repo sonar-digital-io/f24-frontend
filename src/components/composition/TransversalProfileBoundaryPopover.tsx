@@ -179,10 +179,8 @@ export function TransversalProfileBoundaryPopover({
     // arcSegment/buildArcPoints).
     const field = dragging;
     if (!sameSideAsOtherProfiles(field, t)) {
-      setInvalidFields((v) => ({
-        ...v,
-        [field]: 'Would put this profile on a different side than the mapping’s other profiles.',
-      }));
+      const message = 'Would put this profile on a different side than the mapping’s other profiles.';
+      setInvalidFields((v) => (v[field] === message ? v : { ...v, [field]: message }));
       return;
     }
     setInvalidFields((v) => (v[field] === undefined ? v : { ...v, [field]: undefined }));
