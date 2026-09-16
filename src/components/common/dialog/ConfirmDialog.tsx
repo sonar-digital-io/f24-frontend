@@ -13,6 +13,13 @@ interface ConfirmDialogProps {
   /** Red confirm button for destructive actions (e.g. delete). */
   danger?: boolean;
   confirmDisabled?: boolean;
+  /** Blocks dismissing the dialog (Cancel button, backdrop click, Escape) —
+   *  for a confirmed action still in flight, so the caller's mutation state
+   *  can't be abandoned and then reused/reset by a different row's dialog
+   *  before it actually settles. Unlike `confirmDisabled`, which can be true
+   *  for reasons unrelated to an in-flight request (e.g. form validation)
+   *  and must never block Cancel. */
+  cancelDisabled?: boolean;
   /** Shown below the message when the confirmed action failed — dialog stays open so the user can retry. */
   errorMessage?: string;
 }
@@ -30,10 +37,12 @@ export function ConfirmDialog({
   onCancel,
   danger = false,
   confirmDisabled = false,
+  cancelDisabled = false,
   errorMessage,
 }: ConfirmDialogProps) {
   useBodyScrollLock(open);
-  useEscapeKey(onCancel, open);
+  const handleCancel = cancelDisabled ? () => {} : onCancel;
+  useEscapeKey(handleCancel, open);
 
   if (!open) return null;
 
@@ -43,20 +52,21 @@ export function ConfirmDialog({
       aria-modal="true"
       aria-labelledby={TITLE_ID}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onCancel}
+      onClick={handleCancel}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         className="flex w-full max-w-[420px] flex-col gap-4 rounded-[14px] border border-[#e5e7eb] bg-white p-6 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]"
       >
-        <DialogHeader title={title} titleId={TITLE_ID} onClose={onCancel} />
+        <DialogHeader title={title} titleId={TITLE_ID} onClose={handleCancel} />
         <p className="text-[14px] leading-5 text-[#4b5563]">{message}</p>
         {errorMessage && <p className="text-[13px] text-[#dc2626]">{errorMessage}</p>}
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="inline-flex h-9 items-center rounded-md bg-[#f1f5f9] px-4 text-[14px] font-medium text-[#171717] hover:bg-[#e2e8f0]"
+            disabled={cancelDisabled}
+            className="inline-flex h-9 items-center rounded-md bg-[#f1f5f9] px-4 text-[14px] font-medium text-[#171717] hover:bg-[#e2e8f0] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {cancelLabel}
           </button>

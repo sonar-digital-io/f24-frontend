@@ -33,6 +33,11 @@ export function DeleteConfirmDialog({
       message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone.`}
       confirmLabel={isPending ? 'Deleting…' : 'Delete'}
       confirmDisabled={isPending}
+      // Blocks dismissing the dialog while the delete is in flight — otherwise
+      // canceling and opening another row's dialog resets the (shared) mutation
+      // mid-request, and that stale request's eventual result could surface
+      // misattributed to the row now showing. See useDeleteConfirm's reset-on-open.
+      cancelDisabled={isPending}
       errorMessage={isError ? getApiErrorMessage(error, 'Failed to delete. Please try again.') : undefined}
       danger
       onConfirm={onConfirm}
