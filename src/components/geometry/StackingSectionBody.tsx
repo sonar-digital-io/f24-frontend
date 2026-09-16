@@ -21,6 +21,7 @@ interface StackingSectionBodyProps extends PointsTableEditCallbacks {
   getBoundInputValue: (field: 'min' | 'max') => string;
   onBoundChange: (field: 'min' | 'max', raw: string) => void;
   onBoundBlur: (field: 'min' | 'max') => void;
+  onZoomYRange: (next: { min: number; max: number }) => void;
 }
 
 /** A single sweep/dihedral/twist/chord section's Y-bounds inputs + chart + table. */
@@ -40,6 +41,7 @@ export function StackingSectionBody({
   getBoundInputValue,
   onBoundChange,
   onBoundBlur,
+  onZoomYRange,
   getInputValue,
   onInputChange,
   onInputBlur,
@@ -82,7 +84,7 @@ export function StackingSectionBody({
           </div>
           <CurveTypeToggle value={curveType} onChange={onCurveTypeChange} />
         </div>
-        <CurveEditor curveType={curveType} points={points} onChange={onChange} onCommit={onCommit} yMin={yMin} yMax={yMax} yStep={yStep} rootX={rootX} />
+        <CurveEditor curveType={curveType} points={points} onChange={onChange} onCommit={onCommit} yMin={yMin} yMax={yMax} yStep={yStep} rootX={rootX} onZoomYRange={onZoomYRange} />
       </div>
       <CubicSplinePointsTable
         points={points}

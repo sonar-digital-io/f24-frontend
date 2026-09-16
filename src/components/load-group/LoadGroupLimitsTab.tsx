@@ -100,6 +100,10 @@ export function LoadGroupLimitsTab({
               yMin={bounds.y_min}
               yMax={bounds.y_max}
               yStep={niceStep(bounds.y_max - bounds.y_min)}
+              onZoomYRange={(next) => {
+                onUpdateBounds(limitsSubTab, 'y_min', next.min);
+                onUpdateBounds(limitsSubTab, 'y_max', next.max);
+              }}
               xUnit="RPM"
               yUnit={LIMITS_UNITS[limitsSubTab]}
               showRootIndicator={false}

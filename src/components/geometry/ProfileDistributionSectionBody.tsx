@@ -13,6 +13,7 @@ interface ProfileDistributionSectionBodyProps extends PointsTableEditCallbacks {
   onCurveTypeChange: (next: CurveType) => void;
   yMin: number;
   yMax: number;
+  onZoomYRange: (next: { min: number; max: number }) => void;
   rootX: number;
   valueLabel: string;
   idPrefix: string;
@@ -33,6 +34,7 @@ export function ProfileDistributionSectionBody({
   onCurveTypeChange,
   yMin,
   yMax,
+  onZoomYRange,
   rootX,
   valueLabel,
   idPrefix,
@@ -60,7 +62,7 @@ export function ProfileDistributionSectionBody({
             <CurveTypeToggle value={curveType} onChange={onCurveTypeChange} />
           </div>
           {showDistribution && (
-            <CurveEditor curveType={curveType} points={points} onChange={onChange} onCommit={onCommit} yMin={yMin} yMax={yMax} rootX={rootX} />
+            <CurveEditor curveType={curveType} points={points} onChange={onChange} onCommit={onCommit} yMin={yMin} yMax={yMax} rootX={rootX} onZoomYRange={onZoomYRange} />
           )}
         </div>
 

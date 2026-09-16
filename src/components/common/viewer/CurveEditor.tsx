@@ -32,9 +32,14 @@ import {
  * - Drag a point         → move it (bounded by its neighbors / xMin·xMax)
  * - Double-click a point → remove it, including endpoints — blocked once
  *   `minPoints` remain (default 2)
- * - +/- buttons          → zoom in / out
- * - Drag background      → pan (only when zoomed in)
- * - Double-click bg      → reset zoom & pan
+ * - +/- buttons          → zoom the Y axis range itself in/out around its
+ *   center, via `onZoomYRange` — not a pixel/viewBox zoom, so the loaded
+ *   curve stays visible and aligned to the axis at any zoom level, and the
+ *   caller's own Y min/max fields (same state) stay in sync automatically.
+ *   Unbounded — always enabled, no min/max zoom limit.
+ * - Drag background      → pan (only when zoomed in — legacy viewBox zoom,
+ *   currently unused since Y zoom no longer scales the viewBox)
+ * - Double-click bg      → reset zoom & pan (the legacy viewBox state)
  *
  * Ghost curve:
  * - While dragging a point, the green dashed curve shows where the curve
@@ -54,6 +59,12 @@ export interface CurveEditorProps {
   xMax?: number;
   xStep?: number;
   rootX?: number;
+  /** Fires when the +/- zoom buttons are pressed with the next Y-axis range,
+   *  shrunk/grown around its current center — the caller owns yMin/yMax
+   *  (typically the same state its own Y min/max fields edit), so applying
+   *  this back keeps the fields and the chart axis in sync. Unbounded: no
+   *  floor/ceiling on the range, the buttons are never disabled. */
+  onZoomYRange?: (next: { min: number; max: number }) => void;
   /** Show the root-position reference line, and cap point 0 at it — off for
    *  charts with no concept of a start position (e.g. load limits). */
   showRootIndicator?: boolean;
@@ -77,6 +88,7 @@ export function CurveEditor({
   xMax = 1,
   xStep = 0.1,
   rootX = 0.05,
+  onZoomYRange,
   showRootIndicator = true,
   minPoints = 2,
   xUnit = '',
@@ -126,6 +138,31 @@ export function CurveEditor({
     hasPannedRef,
   });
 
+  // When a caller wires onZoomYRange, +/- shrink/grow the actual Y-axis
+  // range around its center instead of the legacy pixel/viewBox zoom — kept
+  // unbounded (no min/max cap) other than a tiny epsilon floor purely to
+  // avoid a degenerate zero-height range (NaN coordinates), never a
+  // perceptible limit on how far the user can zoom.
+  function zoomYRange(factor: number) {
+    if (!onZoomYRange) return;
+    const center = (yMin + yMax) / 2;
+    const nextHalf = Math.max((yMax - yMin) / 2 / factor, 1e-9);
+    // Kept at full precision, not rounded — rounding a stored value here would
+    // compound a fresh error on every step, so zooming in then back out
+    // wouldn't reproduce the original range. Only display should ever cap
+    // digits shown; the underlying number stays exact.
+    onZoomYRange({ min: center - nextHalf, max: center + nextHalf });
+  }
+  const Y_ZOOM_STEP = 2;
+  const yZoomControlProps = onZoomYRange
+    ? {
+        onZoomIn: () => zoomYRange(Y_ZOOM_STEP),
+        onZoomOut: () => zoomYRange(1 / Y_ZOOM_STEP),
+        canZoomIn: true,
+        canZoomOut: true,
+      }
+    : zoomControlProps;
+
   // Degenerate bounds would put NaN into every coordinate (or loop forever
   // building ticks) — bail out with a placeholder instead.
   if (xMax <= xMin || yMax <= yMin || xStep <= 0 || yStep <= 0) {
@@ -155,7 +192,7 @@ export function CurveEditor({
       bgPointerHandlers={bgPointerHandlers}
       onBgClick={handleBgClick}
       onBgDoubleClick={resetView}
-      zoomControlProps={zoomControlProps}
+      zoomControlProps={yZoomControlProps}
       xTicks={xAxis.ticks}
       yTicks={yAxis.ticks}
       xMin={xMin}
