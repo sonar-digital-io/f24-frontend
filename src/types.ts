@@ -43,11 +43,6 @@ export type CompositionSortKey = 'name' | 'lastUpdated';
 /** Sortable columns on the /geometry list page. */
 export type GeometrySortKey = 'name' | 'lastUpdated';
 
-// ─── /layup ───────────────────────────────────────────────────────────────────
-
-/** Sortable columns on the /layup list page. */
-export type LayupSortKey = 'name' | 'lastUpdated';
-
 // ─── /load-group ──────────────────────────────────────────────────────────────
 
 /** Sortable columns on the /load-group list page. */
