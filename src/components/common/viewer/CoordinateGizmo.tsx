@@ -50,7 +50,7 @@ export const CoordinateGizmo = forwardRef<CoordinateGizmoHandle>(function Coordi
   }));
 
   return (
-    <svg viewBox="0 0 100 100" className="h-20 w-20" aria-hidden="true">
+    <svg viewBox="0 0 100 100" className="h-40 w-40" aria-hidden="true">
       {AXES.map((axis, i) => (
         <g key={axis.label}>
           <line
