@@ -21,15 +21,20 @@ interface ReferenceConflictComposition {
 }
 
 /** 409 delete-conflict body: a material/geometry still referenced by one or more
- *  compositions (as a core material, or via a layup's layer) can't be deleted. */
+ *  compositions (as a core material, or via a layup's layer) can't be deleted.
+ *  The backend nests the list under `referenced_by`; `compositions` at the top
+ *  level is also accepted in case some endpoint ever sends it unwrapped. */
 interface ReferenceConflictBody {
+  referenced_by?: { compositions?: ReferenceConflictComposition[] };
   compositions?: ReferenceConflictComposition[];
 }
 
-/** "In use by composition "X" (layup "Y": layer "Z"), composition "W"." — or
- *  undefined if `data` doesn't look like this conflict shape. */
+/** "In use by composition "X" (layup "Y": layer "Z"), composition "W". Delete
+ *  the composition, or remove it there, to continue." — or undefined if
+ *  `data` doesn't look like this conflict shape. */
 function formatReferenceConflict(data: Record<string, unknown>): string | undefined {
-  const compositions = (data as ReferenceConflictBody).compositions;
+  const body = data as ReferenceConflictBody;
+  const compositions = body.referenced_by?.compositions ?? body.compositions;
   if (!Array.isArray(compositions) || compositions.length === 0) return undefined;
   const parts = compositions.map((c) => {
     const layupNames = (c.layup ?? [])
@@ -41,7 +46,7 @@ function formatReferenceConflict(data: Record<string, unknown>): string | undefi
     const detail = layupNames || (c.core_material ? 'core material' : undefined);
     return detail ? `composition "${c.name}" (${detail})` : `composition "${c.name}"`;
   });
-  return `Still in use by ${parts.join(', ')} — remove it there first.`;
+  return `Still in use by ${parts.join(', ')} — delete the composition, or remove it there, to continue.`;
 }
 
 /**
