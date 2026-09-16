@@ -9,6 +9,9 @@ interface DeleteMutationLike<TId> {
   mutateAsync: (id: TId) => Promise<unknown>;
   isPending: boolean;
   isError: boolean;
+  /** Clears isError/error back to idle — called whenever a delete dialog opens
+   *  (for any row) so a previous row's failed attempt doesn't leak into it. */
+  reset: () => void;
 }
 
 /**
@@ -26,13 +29,22 @@ export function useDeleteConfirm<TId = number>(
   mutation: DeleteMutationLike<TId>,
   toId: (id: string) => TId = (id) => Number(id) as TId,
 ) {
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [pendingDelete, setPendingDeleteState] = useState<PendingDelete | null>(null);
+
+  // The underlying mutation object is the same one across every row (it isn't
+  // re-created per-row), so its isError/error from a previous row's failed
+  // delete would otherwise still be sitting there the next time any dialog
+  // opens — reset it on every open (and close; harmless either way).
+  function setPendingDelete(next: PendingDelete | null) {
+    mutation.reset();
+    setPendingDeleteState(next);
+  }
 
   async function handleConfirmDelete() {
     if (!pendingDelete) return;
     try {
       await mutation.mutateAsync(toId(pendingDelete.id));
-      setPendingDelete(null);
+      setPendingDeleteState(null);
     } catch {
       // mutation.isError surfaces the failure in the dialog — stay open so the user can retry.
     }

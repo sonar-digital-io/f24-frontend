@@ -163,6 +163,7 @@ export function LoadGroup() {
         pendingDelete={pendingDelete}
         isPending={deleteMutation.isPending}
         isError={deleteMutation.isError}
+        error={deleteMutation.error}
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}
       />
