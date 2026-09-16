@@ -305,24 +305,27 @@ export function TransversalMappingSection({
   const hasUnsavedMappings = mappings.length > 0 && mappingsKey !== savedMappingsSnapshot;
   const lastMappingsAttemptRef = useRef<string | null>(null);
 
+  // Kept current every render so the unmount-flush effect below always has the
+  // latest not-yet-saved payload to send, without retriggering on every edit
+  // (its own effect has an empty dep array — see that effect's comment).
+  const pendingSaveRef = useRef<{ key: string; payload: ReturnType<typeof buildTransversalMappingPayload>['payload'] } | null>(null);
+  pendingSaveRef.current = hasUnsavedMappings
+    ? {
+        key: mappingsKey,
+        payload: buildTransversalMappingPayload(
+          mappings,
+          crossSectionProfiles,
+          edgePositionsByProfileId,
+          transversalMappingData,
+        ).payload,
+      }
+    : null;
+
   useEffect(() => {
     if (!hasUnsavedMappings || updateTransversalMutation.isPending) return;
     if (updateTransversalMutation.isError && lastMappingsAttemptRef.current === mappingsKey) return;
 
-    // Incomplete rows (e.g. a start/end profile just picked but not yet given a
-    // boundary) are already dropped from `payload` by buildTransversalMappingPayload
-    // itself — don't also block the *whole* save on their account, or every other,
-    // already-complete row silently stops saving too. Passing transversalMappingData
-    // lets it fall back to that row's last-saved entries instead of a bare drop, so
-    // this full-replace PUT never wipes an already-persisted group just because it's
-    // momentarily incomplete mid-edit.
-    const { payload } = buildTransversalMappingPayload(
-      mappings,
-      crossSectionProfiles,
-      edgePositionsByProfileId,
-      transversalMappingData,
-    );
-
+    const { payload } = pendingSaveRef.current!;
     const timer = setTimeout(() => {
       lastMappingsAttemptRef.current = mappingsKey;
       updateTransversalMutation.mutate(payload, {
@@ -341,15 +344,35 @@ export function TransversalMappingSection({
     updateTransversalMutation.isError,
   ]);
 
+  // The debounce effect's own cleanup just clears the timer, discarding a save
+  // that hadn't fired yet — fine when it's cleaning up to reschedule (the user
+  // kept editing), but silent data loss when it's cleaning up because this
+  // section is unmounting (e.g. navigating away from the composition within the
+  // 800ms window). Flush whatever's still pending in that case instead — an
+  // empty dep array here means this cleanup only runs on actual unmount, never
+  // on a re-render, so it doesn't fight the debounce above.
   useEffect(() => {
+    return () => {
+      if (pendingSaveRef.current) {
+        updateTransversalMutation.mutate(pendingSaveRef.current.payload);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // hasUnsavedMappings covers the debounce window too, not just the network
+    // round-trip — otherwise the parent's "don't navigate away, a save is
+    // pending" guard (and any beforeunload warning built on it) has a blind
+    // spot for the ~800ms between an edit and the mutation actually starting.
     onSaveStatusChange?.({
-      pending: updateTransversalMutation.isPending,
+      pending: hasUnsavedMappings || updateTransversalMutation.isPending,
       error: updateTransversalMutation.isError,
     });
     // onSaveStatusChange is a fresh closure every render; only the tracked
-    // mutation flags below should re-report.
+    // flags below should re-report.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [updateTransversalMutation.isPending, updateTransversalMutation.isError]);
+  }, [hasUnsavedMappings, updateTransversalMutation.isPending, updateTransversalMutation.isError]);
 
   const editingMapping = boundaryEditor
     ? mappings.find((m) => m.id === boundaryEditor.mappingId)

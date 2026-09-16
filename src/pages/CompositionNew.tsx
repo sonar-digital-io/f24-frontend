@@ -388,6 +388,20 @@ export function CompositionNew() {
       ? 'saved'
       : undefined;
 
+  // A real page reload/close (not in-app navigation, which the unmount-flush
+  // effects in the child sections handle) tears down the JS runtime before an
+  // in-flight or about-to-fire debounced save can reliably complete — the
+  // standard browser-native way to protect against that is a confirm prompt,
+  // not trying to force a network request through at teardown time.
+  useEffect(() => {
+    if (!anyAutosavePending) return;
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [anyAutosavePending]);
+
   async function saveTargetWeightSetting(id: number) {
     setSettingsSaving(true);
     setSettingsError(false);

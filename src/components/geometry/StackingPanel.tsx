@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { FoldHorizontal, Loader2 } from 'lucide-react';
+import { FoldHorizontal } from 'lucide-react';
 import type { ControlPoint, CurveType } from '@/types';
 import { SectionTabs } from '@/components/geometry/SectionTabs';
 import { FoldablePanelShell } from '@/components/geometry/FoldablePanelShell';
 import { StackingSectionBody } from '@/components/geometry/StackingSectionBody';
 import { useEditableSectionPoints } from '@/hooks/useEditableSectionPoints';
 import { useCommitOnce } from '@/hooks/useDeferredCommit';
-import { clamp } from '@/lib/bezierMath';
+import { clamp, round6 } from '@/lib/bezierMath';
 import type { GeometryEdge, GeometryEdgeInput } from '@/api/types/geometry';
 
 type SectionKey = 'sweep' | 'dihedral' | 'twist' | 'chord';
@@ -84,7 +84,6 @@ interface StackingPanelProps {
    *  promise rejecting is how this panel knows a commit didn't actually go through, so
    *  the same value can be retried instead of being treated as sent. */
   onCommit?: (edges: GeometryEdgeInput[]) => Promise<void>;
-  committing?: boolean;
   saveError?: boolean;
   /** Global properties' nominal radius (m) — sweep/dihedral/chord's ymin/ymax
    *  are sent to the backend as a fraction of this; twist (degrees) is not. */
@@ -116,7 +115,7 @@ export function buildDefaultEdges(nominalRadius?: number): GeometryEdgeInput[] {
       curve_type: 'bezier',
       ymin: SECTION_Y_MIN[key] / divisor,
       ymax: SECTION_Y_MAX[key] / divisor,
-      curve: INITIAL_SECTION_POINTS[key],
+      curve: INITIAL_SECTION_POINTS[key].map((p) => ({ x: p.x, y: p.y / divisor })),
     };
   });
 }
@@ -127,7 +126,6 @@ export function StackingPanel({
   initialEdges,
   rootRadiusPercent,
   onCommit,
-  committing,
   saveError,
   nominalRadius,
 }: StackingPanelProps) {
@@ -196,6 +194,13 @@ export function StackingPanel({
     });
   }
 
+  // The chart's +/- zoom buttons — same state as the Y min/max inputs, so
+  // both stay in sync automatically; goes through the normal autosave path.
+  function handleZoomYBounds(key: SectionKey, next: { min: number; max: number }) {
+    setYBounds((current) => ({ ...current, [key]: next }));
+    requestCommit();
+  }
+
   const { sectionPoints, setPointsForSection, bindSection } = useEditableSectionPoints(
     (() => {
       const map = edgeMap(initialEdges);
@@ -205,7 +210,9 @@ export function StackingPanel({
       // additionalProperties.
       function curveFor(key: SectionKey): ControlPoint[] {
         const edge = map.get(key);
-        return edge ? edge.curve.map((p) => ({ x: p.x, y: p.y })) : INITIAL_SECTION_POINTS[key];
+        if (!edge) return INITIAL_SECTION_POINTS[key];
+        const divisor = radiusDivisor(key, nominalRadius);
+        return edge.curve.map((p) => ({ x: p.x, y: p.y * divisor }));
       }
       return {
         sweep: curveFor('sweep'),
@@ -241,8 +248,12 @@ export function StackingPanel({
 
   function getBoundInputValue(key: SectionKey, field: 'min' | 'max') {
     const inputKey = boundInputKey(key, field);
+    // While actively typing, show exactly what was typed (untouched). Once
+    // settled, display at most 6 digits — the stored value itself stays at
+    // full precision (round6 here would compound a fresh rounding error on
+    // every zoom step instead of just capping what's shown).
     if (boundInputs[inputKey] !== undefined) return boundInputs[inputKey];
-    return String(yBounds[key][field]);
+    return String(round6(yBounds[key][field]));
   }
 
   function handleBoundChange(key: SectionKey, field: 'min' | 'max', raw: string) {
@@ -285,7 +296,7 @@ export function StackingPanel({
         curve_type: curveType[key],
         ymin: yBounds[key].min / divisor,
         ymax: yBounds[key].max / divisor,
-        curve: sectionPoints[key],
+        curve: sectionPoints[key].map((p) => ({ x: p.x, y: p.y / divisor })),
       };
     });
   }
@@ -312,6 +323,7 @@ export function StackingPanel({
         getBoundInputValue={(field) => getBoundInputValue(key, field)}
         onBoundChange={(field, raw) => handleBoundChange(key, field, raw)}
         onBoundBlur={(field) => handleBoundBlur(key, field)}
+        onZoomYRange={(next) => handleZoomYBounds(key, next)}
         {...bindSection(key)}
         onRemovePoint={(idx) => {
           setPointsForSection(
@@ -338,12 +350,6 @@ export function StackingPanel({
           <div />
         )}
         <div className="flex items-center gap-2">
-          {committing && (
-            <div className="flex items-center gap-[6px]">
-              <Loader2 className="h-4 w-4 animate-spin text-[#737373]" strokeWidth={2} />
-              <span className="text-[14px] leading-5 text-[#737373]">Saving…</span>
-            </div>
-          )}
           <button
             type="button"
             onClick={onFoldToggle}

@@ -229,18 +229,17 @@ export function applyXConstraints(
   /** Point 0 additionally can't sit past this (e.g. the profile's start position). */
   rootX?: number,
 ): number {
-  const eps = (xMax - xMin) * 0.001 || 0.001;
   if (idx === 0) {
-    const neighborUpper = points[1] ? points[1].x - eps : xMax;
+    const neighborUpper = points[1] ? points[1].x : xMax;
     const upper = rootX !== undefined ? Math.min(neighborUpper, rootX) : neighborUpper;
     return Math.max(xMin, Math.min(upper, nextX));
   }
   if (idx === points.length - 1) {
-    const lower = points[idx - 1] ? points[idx - 1].x + eps : xMin;
+    const lower = points[idx - 1] ? points[idx - 1].x : xMin;
     return Math.max(lower, Math.min(xMax, nextX));
   }
-  const minX = points[idx - 1].x + eps;
-  const maxX = points[idx + 1].x - eps;
+  const minX = points[idx - 1].x;
+  const maxX = points[idx + 1].x;
   return Math.max(minX, Math.min(maxX, nextX));
 }
 

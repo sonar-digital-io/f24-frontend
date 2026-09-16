@@ -164,6 +164,13 @@ export function ProfileDistributionPanel({
     });
   }
 
+  // The chart's +/- zoom buttons — same state as the Y min/max inputs, so
+  // both stay in sync automatically; goes through the normal autosave path.
+  function handleZoomYBounds(key: SectionKey, next: { min: number; max: number }) {
+    setYBounds((current) => ({ ...current, [key]: next }));
+    requestCommit();
+  }
+
   // This panel unmounts/remounts on tab switch, so mounting == opening the tab —
   // save immediately rather than waiting for the first field blur/point edit.
   useEffect(() => {
@@ -283,6 +290,7 @@ export function ProfileDistributionPanel({
         onCurveTypeChange={(next) => handleCurveTypeChange(key, next)}
         yMin={yBounds[key].min}
         yMax={yBounds[key].max}
+        onZoomYRange={(next) => handleZoomYBounds(key, next)}
         rootX={rootX}
         valueLabel={valueLabel}
         idPrefix={key}

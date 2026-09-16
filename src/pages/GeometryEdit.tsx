@@ -628,7 +628,6 @@ export function GeometryEdit() {
               rootRadiusPercent={props.root_radius}
               nominalRadius={Number(props.nominal_radius) || 1}
               onCommit={handleSaveEdges}
-              committing={updateEdgesMutation.isPending}
               saveError={updateEdgesMutation.isError}
             />
           )}
