@@ -10,8 +10,6 @@ import { Material } from '@/pages/Material';
 import { MaterialNew } from '@/pages/MaterialNew';
 import { Geometry } from '@/pages/Geometry';
 import { GeometryEdit } from '@/pages/GeometryEdit';
-import { Layup } from '@/pages/Layup';
-import { LayupNew } from '@/pages/LayupNew';
 import { LoadGroup } from '@/pages/LoadGroup';
 import { LoadGroupNew } from '@/pages/LoadGroupNew';
 import { Calculation } from '@/pages/Calculation';
@@ -32,9 +30,6 @@ function App() {
           <Route path="/material/:id" element={<MaterialNew />} />
           <Route path="/geometry" element={<Geometry />} />
           <Route path="/geometry/:id" element={<GeometryEdit />} />
-          <Route path="/layup" element={<Layup />} />
-          <Route path="/layup/new" element={<LayupNew />} />
-          <Route path="/layup/:id" element={<LayupNew />} />
           <Route path="/composition" element={<Composition />} />
           <Route path="/composition/new" element={<CompositionNew />} />
           <Route path="/composition/:id" element={<CompositionNew />} />

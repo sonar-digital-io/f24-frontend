@@ -65,7 +65,7 @@ src/
 │   │   ├── GeometryEditControls.tsx (Select/Tip/FormField)
 │   │   ├── ProfileDistributionPanel.tsx (+Select/Switch), ProfilesPanel.tsx (+Select/ProfileDetailPopover/FormFields)
 │   │   └── StackingPanel.tsx
-│   ├── layup/                     # /layup/new — LayupBuilder tab (Layup lista maga a Layup.tsx page-ben marad)
+│   ├── layup/                     # CompositionNew "Layup" tab-jának builder komponensei (nincs önálló /layup route)
 │   │   ├── LayupBuilder.tsx, PlyStackViz.tsx
 │   │   └── MaterialPickerDialog.tsx # egyedüli fogyasztója a LayupBuilder
 │   ├── material/                   # /material, /material/new
@@ -81,8 +81,6 @@ src/
 │   ├── MaterialNew.tsx          # /material/new — 3 tab: General / Mechanical / Fatigue — Figma 584:15600 / 596:2160 / 584:15789
 │   ├── Geometry.tsx              # /geometry — List/Grid view toggle — Figma 600:22786 / 600:22858
 │   ├── GeometryEdit.tsx         # /geometry/:id — Full-bleed OccViewer (IGES) + floating panel — Figma 596:22661
-│   ├── Layup.tsx                # /layup — Layup data table list — Figma 600:23689
-│   ├── LayupNew.tsx             # /layup/new — General + Layup building tabs — Figma 600:27124 / 600:24328
 │   ├── Composition.tsx          # /composition — Composition list page (table) — Figma 600:27699
 │   ├── CompositionNew.tsx       # /composition/new — General + Geometry + Layup mapping + Transversal mapping — Figma 600:27773 + 600:29097 + 600:28625 + 600:27811
 │   ├── LoadGroup.tsx            # /load-group — Load group list page (table) — Figma 614:41830
@@ -97,7 +95,6 @@ src/
 │   ├── materialFormFields.ts    # MECHANICAL_SECTIONS + FATIGUE_SECTIONS — PropertyFormTab data
 │   ├── geometries.ts            # Geometry[] mock + típusok
 │   ├── profiles.ts              # Profile[] mock + PROFILE_TYPES — Profiles tab data
-│   ├── layups.ts                # Layup[] mock — Layup list page data
 │   ├── compositions.ts          # Composition[] mock — Composition list page data
 │   ├── loadGroups.ts            # LoadGroup[] mock — Load group list page data
 │   ├── loadGroupForm.ts         # LoadGroupNew megosztott form-típusok + mock adat (load case, fatigue profil)
@@ -131,8 +128,6 @@ src/
 | `/geometry` | `Geometry` | Geometry list + grid view toggle — Figma 600:22786 / 600:22858 |
 | `/geometry/:id` | `GeometryEdit` | Geometry edit full-bleed OccViewer canvas-szal. Sub-tabs: Create geometry (csak `/geometry/new`), Global properties (596:22661), Profile distribution (596:19816), Profiles (596:19631), Stacking (596:20399). A result (3D mesh) automatikusan generálódik a háttérben, amint a settings/profile_generator_parameters/profiles/edges mind megvan — nincs saját tab-ja, csak a Blade/Wireframe checkbox overlay a viewer felett |
 | `/geometry/new` | `GeometryEdit` | Új geometria inline létrehozás (a `/geometry?new=1` link ide redirectel) |
-| `/layup` | `Layup` | Layup list page (table) — Figma 600:23689 |
-| `/layup/new` | `LayupNew` | New layup (General + Layup building) — Figma 600:27124 / 600:24328 |
 | `/composition` | `Composition` | Composition list page (table) — Figma 600:27699 |
 | `/composition/new` | `CompositionNew` | New composition (General + Geometry + Layup mapping + Transversal mapping) — Figma 600:27773 + 600:29097 + 600:28625 + 600:27811 |
 | `/load-group` | `LoadGroup` | Load group list page (table) |
