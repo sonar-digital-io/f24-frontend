@@ -135,12 +135,12 @@ export function TransversalMappingSection({
 
   // Hydrate the editable table from whatever's already saved — group the
   // per-profile entries (GET's shape) back into rows by group_id.
-  useHydrateOnce(
+  const hydrated = useHydrateOnce(
     mappings.length === 0 && !!transversalMappingData && crossSectionProfiles.length > 0,
     () => {
-      const hydrated = hydrateTransversalMappings(transversalMappingData!, crossSectionProfiles);
-      setMappings(hydrated);
-      setSavedMappingsSnapshot(JSON.stringify(hydrated));
+      const hydratedMappings = hydrateTransversalMappings(transversalMappingData!, crossSectionProfiles);
+      setMappings(hydratedMappings);
+      setSavedMappingsSnapshot(JSON.stringify(hydratedMappings));
     },
   );
 
@@ -302,7 +302,14 @@ export function TransversalMappingSection({
   // save is attempted once per distinct mapping state — it does not retry in
   // a loop; it tries again only once the user changes something.
   const mappingsKey = JSON.stringify(mappings);
-  const hasUnsavedMappings = mappings.length > 0 && mappingsKey !== savedMappingsSnapshot;
+  // Gated on `hydrated` — before the initial hydration completes, `profiles`
+  // and/or `transversalMappingData` may still be empty/undefined, in which
+  // case buildTransversalMappingPayload has no per-profile entries to build
+  // (or restore previously-saved rows into) and would send an effectively
+  // empty payload. Since this is a full-replace PUT, that would silently wipe
+  // every profile's already-saved mappings — so nothing may be treated as
+  // "unsaved" (and therefore autosaved) until hydration has actually run.
+  const hasUnsavedMappings = hydrated && mappings.length > 0 && mappingsKey !== savedMappingsSnapshot;
   const lastMappingsAttemptRef = useRef<string | null>(null);
 
   // Kept current every render so the unmount-flush effect below always has the
@@ -464,8 +471,9 @@ export function TransversalMappingSection({
         <div className="flex items-center justify-between">
           <button
             type="button"
+            disabled={!hydrated}
             onClick={() => setMappings((arr) => [...arr, newDraft()])}
-            className="inline-flex h-8 items-center gap-2 self-start rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:bg-[#f1f5f9]"
+            className="inline-flex h-8 items-center gap-2 self-start rounded-md border border-[#e2e8f0] bg-white px-3 text-[12px] font-medium text-[#0a0a0a] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] hover:enabled:bg-[#f1f5f9] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-4 w-4" strokeWidth={2} />
             Add transversal mapping
