@@ -1,5 +1,23 @@
 import * as THREE from 'three';
 
+/** Grid cell sizes the reset-button overlay's grid-size control offers. */
+export const GRID_STEPS = [0.1, 1, 10] as const;
+export type GridStep = (typeof GRID_STEPS)[number];
+
+/** The floor grid plus its upright twin (see createViewerScene) — always
+ *  20x20 cells, `step` meters each, so the total extent scales with the
+ *  chosen cell size (2m/20m/200m for 0.1m/1m/10m) instead of the grid
+ *  getting more or less busy at a fixed extent. Split out so the grid-size
+ *  control can rebuild just these two objects without tearing down and
+ *  refitting the whole scene. */
+export function createReferenceGrids(step: number) {
+  const size = step * 20;
+  const grid = new THREE.GridHelper(size, 20, 0x94a3b8, 0xd1d5db);
+  const gridZ = new THREE.GridHelper(size, 20, 0x94a3b8, 0xd1d5db);
+  gridZ.rotation.x = Math.PI / 2;
+  return { grid, gridZ };
+}
+
 /**
  * Static base scene shared by every full-bleed Three.js viewer (OccViewer):
  * gradient background, camera, lights, a shadow-receiving ground plane, and the
@@ -7,7 +25,7 @@ import * as THREE from 'three';
  * no React lifecycle here, so callers own mounting the renderer's canvas and
  * disposing everything on unmount.
  */
-export function createViewerScene(width: number, height: number) {
+export function createViewerScene(width: number, height: number, gridStep = 1) {
   const scene = new THREE.Scene();
 
   const bgCanvas = document.createElement('canvas');
@@ -22,8 +40,9 @@ export function createViewerScene(width: number, height: number) {
   scene.background = new THREE.CanvasTexture(bgCanvas);
 
   const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 5000);
-  // Pulled back to keep the 100-unit reference grid mostly in frame by default
-  // (auto-fit is disabled, so this initial framing is what most loads see).
+  // Pulled back to keep the default 1m-step (20-unit) reference grid mostly in
+  // frame before anything has loaded — fitViewerSceneToBounds reframes around
+  // the actual geometry (and its own grid-size choice) once it loads.
   camera.position.set(30, 18, 40);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -70,27 +89,21 @@ export function createViewerScene(width: number, height: number) {
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Fixed-size scale reference, deliberately anchored at the world origin with
-  // no offset (unlike the shadow-receiving `ground` below, whose Y is moved by
+  // Scale reference, deliberately anchored at the world origin with no offset
+  // (unlike the shadow-receiving `ground` below, whose Y is moved by
   // fitViewerSceneToBounds to track each loaded object) — this grid gives the
-  // eye something stationary to judge scale against. 100 world units across,
-  // 5-unit cells.
-  const grid = new THREE.GridHelper(100, 20, 0x94a3b8, 0xd1d5db);
-  scene.add(grid);
-
-  // Same reference grid, standing upright through the origin (rotated into the
-  // X/Y plane, normal along Z) — gives a depth/height reference to judge scale
-  // against in addition to the floor.
-  const gridZ = new THREE.GridHelper(100, 20, 0x94a3b8, 0xd1d5db);
-  gridZ.rotation.x = Math.PI / 2;
-  scene.add(gridZ);
+  // eye something stationary to judge scale against. Always 20x20 cells, so
+  // picking a coarser/finer cell size (see createReferenceGrids) scales the
+  // total extent with it rather than changing how busy the grid looks.
+  const { grid, gridZ } = createReferenceGrids(gridStep);
+  scene.add(grid, gridZ);
 
   const ringGeo = new THREE.TorusGeometry(2, 0.15, 16, 60);
   const ringMat = new THREE.MeshBasicMaterial({ color: 0xcbd5e1, wireframe: true });
   const ring = new THREE.Mesh(ringGeo, ringMat);
   scene.add(ring);
 
-  return { scene, camera, renderer, ground, groundGeo, groundMat, ring, ringGeo, ringMat, keyLight };
+  return { scene, camera, renderer, ground, groundGeo, groundMat, ring, ringGeo, ringMat, keyLight, grid, gridZ };
 }
 
 /** Fits `camera`/`controls`/`ground` (and, if given, `keyLight`'s shadow

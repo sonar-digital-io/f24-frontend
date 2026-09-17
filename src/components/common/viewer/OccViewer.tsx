@@ -44,7 +44,14 @@ import {
   parseAsciiStl,
   parseBinaryStl,
 } from '@/lib/stlParsing';
-import { createViewerScene, fitViewerSceneToBounds, updateGroundFade } from '@/lib/viewerScene';
+import {
+  createViewerScene,
+  createReferenceGrids,
+  fitViewerSceneToBounds,
+  updateGroundFade,
+  GRID_STEPS,
+  type GridStep,
+} from '@/lib/viewerScene';
 import {
   createDampedOrbitControls,
   createWireframeOverlay,
@@ -95,7 +102,7 @@ export interface OccViewerProps {
   treatAsBlade?: boolean;
   /** Shows a floating "Reset view" button that re-fits the camera to the loaded
    *  geometry's bounding box — the same fit that runs automatically on load —
-   *  plus a grid-scale label ("Grid: 5m × 5m"). */
+   *  plus a grid-size selector (0.1m/1m/10m cells). */
   showResetButton?: boolean;
 }
 
@@ -116,6 +123,11 @@ export function OccViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const meshesRef = useRef<THREE.Mesh[]>([]);
   const resetViewRef = useRef<(() => void) | null>(null);
+  // Reference-grid cell size — a live scene edit, not part of the load
+  // pipeline, so it's applied imperatively (like resetViewRef) rather than
+  // by tearing down and recreating the whole scene on every change.
+  const [gridStep, setGridStep] = useState<GridStep>(1);
+  const changeGridStepRef = useRef<((step: GridStep) => void) | null>(null);
   const gizmoRef = useRef<CoordinateGizmoHandle>(null);
   const webLineRef = useRef<THREE.LineSegments[]>([]);
   const showWebViewRef = useRef(showWebView);
@@ -171,8 +183,21 @@ export function OccViewer({
     const h = container.clientHeight || 600;
 
     // ── Scene / camera / renderer / lights / ground / loading ring ──────────
-    const { scene, camera, renderer, ground, groundMat, ring, ringGeo, ringMat, keyLight } =
-      createViewerScene(w, h);
+    const {
+      scene,
+      camera,
+      renderer,
+      ground,
+      groundMat,
+      ring,
+      ringGeo,
+      ringMat,
+      keyLight,
+      grid: initialGrid,
+      gridZ: initialGridZ,
+    } = createViewerScene(w, h, gridStep);
+    let grid = initialGrid;
+    let gridZ = initialGridZ;
     container.appendChild(renderer.domElement);
     const baseGroundOpacity = groundMat.opacity;
     // Set by fitViewerSceneToBounds once the mesh loads — null until then, so the
@@ -191,6 +216,19 @@ export function OccViewer({
     resetViewRef.current = () => {
       if (loadedRoots.length === 0) return;
       fitMaxDim = fitViewerSceneToBounds(loadedRoots, camera, controls, ground, keyLight);
+    };
+
+    // Rebuilds just the two grid objects in place — cheap enough (20x20
+    // cells) to do on every step change without touching the camera, loaded
+    // mesh, or anything else already in the scene.
+    changeGridStepRef.current = (step) => {
+      scene.remove(grid, gridZ);
+      grid.geometry.dispose();
+      (grid.material as THREE.Material).dispose();
+      gridZ.geometry.dispose();
+      (gridZ.material as THREE.Material).dispose();
+      ({ grid, gridZ } = createReferenceGrids(step));
+      scene.add(grid, gridZ);
     };
 
     // ── Animate ─────────────────────────────────────────────────────────────
@@ -368,6 +406,11 @@ export function OccViewer({
         // whenever it happens to be the only part in that particular preview.
         const isBlade = treatAsBlade || /blade/i.test(obj.name);
         const overrideColor = !isBlade ? layupColorOverrideRef.current?.[obj.name] : undefined;
+        // Neither the blade shell nor a named layup (layupColorOverride only
+        // ever names those) — a transversal mapping ring, thin and often
+        // sitting right at the blade's surface, so a cast shadow reads as a
+        // dark smudge on the ground rather than anything meaningful.
+        const isTransversalMapping = !isBlade && !overrideColor;
         let partColor: string | number = 0x94a3b8;
         if (overrideColor) {
           partColor = overrideColor;
@@ -394,7 +437,7 @@ export function OccViewer({
           m.dispose();
         });
         obj.material = mat;
-        obj.castShadow = true;
+        obj.castShadow = !isTransversalMapping;
         obj.receiveShadow = true;
         newMeshes.push(obj);
 
@@ -483,6 +526,7 @@ export function OccViewer({
     return () => {
       disposed = true;
       resetViewRef.current = null;
+      changeGridStepRef.current = null;
       ro.disconnect();
       window.removeEventListener('resize', onResize);
       cancelAnimationFrame(animId);
@@ -532,9 +576,25 @@ export function OccViewer({
           >
             <RotateCcw className="h-4 w-4" strokeWidth={2} />
           </button>
-          <span className="pointer-events-none rounded-md bg-white/80 px-2.5 py-1 text-[12px] font-medium text-[#6b7280] backdrop-blur-sm">
-            Grid: 5m × 5m
-          </span>
+          <label className="flex items-center gap-1.5 rounded-md bg-white/80 px-2.5 py-1 text-[12px] font-medium text-[#6b7280] backdrop-blur-sm">
+            Grid:
+            <select
+              value={gridStep}
+              onChange={(e) => {
+                const step = Number(e.target.value) as GridStep;
+                setGridStep(step);
+                changeGridStepRef.current?.(step);
+              }}
+              aria-label="Grid size"
+              className="cursor-pointer bg-transparent text-[#0a0a0a] outline-none"
+            >
+              {GRID_STEPS.map((step) => (
+                <option key={step} value={step}>
+                  {step}m × {step}m
+                </option>
+              ))}
+            </select>
+          </label>
           <CoordinateGizmo ref={gizmoRef} />
         </div>
       )}
