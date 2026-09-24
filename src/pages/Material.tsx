@@ -103,7 +103,7 @@ export function Material() {
     [filtered, sort],
   );
 
-  const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
+  const { totalPages, pageRows, currentPage } = paginate(sorted, page, PAGE_SIZE);
 
   function toggleExpand(id: string) {
     setExpandedIds((prev) => toggleSetMember(prev, id));
@@ -174,7 +174,7 @@ export function Material() {
                 />
               </>
             }
-            pagination={{ page, totalPages, onChange: setPage }}
+            pagination={{ page: currentPage, totalPages, onChange: setPage }}
           >
             <ListTable fixedLayout minWidth={1100}>
               <ListTableHead

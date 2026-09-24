@@ -23,15 +23,18 @@ export function toggleSetMember<T>(prev: Set<T>, value: T): Set<T> {
   return next;
 }
 
-/** Slices `sorted` into the current page, and the page count it took to get there. */
+/** Slices `sorted` into the current page, and the page count it took to get there.
+ *  `currentPage` is `page` clamped to `totalPages` — e.g. after deleting the last row of
+ *  the last page it falls back to the previous page instead of rendering an empty one. */
 export function paginate<T>(
   sorted: T[],
   page: number,
   pageSize: number,
-): { totalPages: number; pageRows: T[] } {
+): { totalPages: number; pageRows: T[]; currentPage: number } {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const pageRows = sorted.slice((page - 1) * pageSize, page * pageSize);
-  return { totalPages, pageRows };
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  return { totalPages, pageRows, currentPage };
 }
 
 /** True when `query` is empty, or found (case-insensitively) in any of `fields` (nullable fields are skipped). */

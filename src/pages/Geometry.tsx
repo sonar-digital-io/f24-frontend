@@ -82,7 +82,7 @@ export function Geometry() {
 
   const sorted = useMemo(() => sortItems(filtered, sort, (g, key) => g[key]), [filtered, sort]);
 
-  const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
+  const { totalPages, pageRows, currentPage } = paginate(sorted, page, PAGE_SIZE);
 
   const COLUMNS: ListTableHeadColumn<GeometrySortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[240px]' },
@@ -129,7 +129,7 @@ export function Geometry() {
                 />
               ) : undefined
             }
-            pagination={{ page, totalPages, onChange: setPage }}
+            pagination={{ page: currentPage, totalPages, onChange: setPage }}
           >
             <ListTable>
               <ListTableHead columns={COLUMNS} sort={sort} onSort={handleSort} />

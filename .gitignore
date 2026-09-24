@@ -54,3 +54,6 @@ Thumbs.db
 
 # OpenCascade WASM binary (too large for git)
 public/wasm/*.wasm
+
+# Cowork app output folder
+Claude outputs/

@@ -53,7 +53,7 @@ export function useCalculationLoadGroupState(ensureProjectId: (fallbackName?: st
     () => sortItems(lgFiltered, lgSort, (g, key) => (key === 'last_modified' ? g.lastUpdated : g.name)),
     [lgFiltered, lgSort]
   );
-  const { totalPages: lgTotalPages, pageRows: lgPageRows } = paginate(lgSorted, lgPage, TAB_PAGE_SIZE);
+  const { totalPages: lgTotalPages, pageRows: lgPageRows, currentPage: lgCurrentPage } = paginate(lgSorted, lgPage, TAB_PAGE_SIZE);
 
   function handleLgSearchChange(value: string) {
     setLgSearch(value);
@@ -81,7 +81,7 @@ export function useCalculationLoadGroupState(ensureProjectId: (fallbackName?: st
     selectedGroupId,
     lgSearch,
     lgSort,
-    lgPage,
+    lgPage: lgCurrentPage,
     lgPageRows,
     lgTotalPages,
     handleLgSearchChange,

@@ -68,7 +68,7 @@ export function Report() {
     [filtered, sort],
   );
 
-  const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
+  const { totalPages, pageRows, currentPage } = paginate(sorted, page, PAGE_SIZE);
 
   const COLUMNS: ListTableHeadColumn<ReportSortKey>[] = [
     { label: 'ID', sortKey: 'id', className: 'w-[100px]' },
@@ -126,7 +126,7 @@ export function Report() {
                 />
               </>
             }
-            pagination={{ page, totalPages, onChange: setPage }}
+            pagination={{ page: currentPage, totalPages, onChange: setPage }}
           >
             <ListTable>
               <ListTableHead
