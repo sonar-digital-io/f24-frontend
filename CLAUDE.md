@@ -71,6 +71,8 @@ src/
 │   ├── material/                   # /material, /material/new
 │   │   ├── MaterialRow.tsx, MaterialDateFilterPopover.tsx
 │   │   └── PropertyFormTab.tsx
+│   ├── report/                     # /report
+│   │   └── ReportRow.tsx (result badge + Export/Delete row actions)
 │   ├── nurbs/                      # /nurbs
 │   │   ├── NurbsViewer.tsx, LoftViewer.tsx
 │   │   └── NurbsControls.tsx (ToggleBtn/StatBadge), ProfileEditor.tsx
@@ -87,7 +89,7 @@ src/
 │   ├── LoadGroupNew.tsx         # /load-group/new — General / Load cases / Limits / Fatigue profiles tabok
 │   ├── Calculation.tsx          # /calculation — Calculation list page (timestamp + status badge) — Figma 614:45470
 │   ├── CalculationNew.tsx       # /calculation/new — General / Composition / Configuration / Fatigue profile tabok
-│   ├── Report.tsx               # /report — stub
+│   ├── Report.tsx               # /report — Report list page (table: ID, project, result badge, created) — GET /report/list/
 │   ├── Settings.tsx             # /settings — stub (jobb felső ⚙ ikonról)
 │   └── Nurbs.tsx                # /nurbs — teljes képernyős NURBS/Loft szerkesztő (nav nélkül)
 ├── data/
@@ -134,7 +136,7 @@ src/
 | `/load-group/new`, `/load-group/:id` | `LoadGroupNew` | Load group edit — General / Load cases / Limits / Fatigue profiles |
 | `/calculation` | `Calculation` | Calculation list page (timestamp, status badge) |
 | `/calculation/new`, `/calculation/:id` | `CalculationNew` | Calculation edit — General / Composition / Configuration / Fatigue profile |
-| `/report` | `Report` | Stub |
+| `/report` | `Report` | Report list page (table, result badge + filter, export zip, delete) |
 | `/settings` | `Settings` | Stub (jobb felső ⚙ ikonról) |
 | `/nurbs` | `Nurbs` | Teljes képernyős NURBS szerkesztő, nav nélkül |
 
