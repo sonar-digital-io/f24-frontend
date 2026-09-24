@@ -26,7 +26,7 @@ import {
 } from '@/lib/listTable';
 import { toUiMaterial } from '@/lib/materialListMapping';
 import { getMechPropTypeParameter } from '@/lib/sysconfigMapping';
-import { toTitleCase } from '@/lib/utils';
+import { downloadBlob, toTitleCase } from '@/lib/utils';
 import type { MaterialSortKey } from '@/types';
 import { lastUpdatedSortKey, type Material } from '@/data/materials';
 import { useDeleteMaterial, useExportMaterial, useMaterialList } from '@/hooks/api/useMaterials';
@@ -73,12 +73,7 @@ export function Material() {
   async function handleExport(material: Material) {
     try {
       const { blob, filename } = await exportMutation.mutateAsync(Number(material.id));
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, filename);
     } catch {
       // exportMutation's onError (via the global mutation cache) already surfaces a toast.
     }

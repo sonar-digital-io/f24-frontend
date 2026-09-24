@@ -37,11 +37,13 @@ export function ReportRow({ item, onExport, onDelete }: ReportRowProps) {
       </td>
       <td className="px-3 py-4 align-top">
         <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+          {/* Backend export names the zip after the project → 500 once the project is gone;
+              a Pending report has no files yet. */}
           <RowIconButton
             label="Export"
             icon={Download}
             onClick={onExport}
-            disabled={item.result !== 'Success'}
+            disabled={!item.project || item.result === 'Pending'}
           />
           <RowIconButton label="Delete" icon={Trash2} onClick={onDelete} variant="danger" />
         </div>

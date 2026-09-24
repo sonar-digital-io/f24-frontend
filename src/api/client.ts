@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosResponse } from 'axios';
 import { getAuthState, clearAuthState } from './authStorage';
 
 export const apiClient = axios.create({
@@ -27,3 +27,14 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+/** Filename from an attachment response's `Content-Disposition` header, if any.
+ *  Matches a bare `filename=` segment only — not RFC 5987's `filename*=`, which has a
+ *  different (encoded) value format and would otherwise get captured as garbage. */
+export function attachmentFilename(response: AxiosResponse): string | undefined {
+  const match = (response.headers['content-disposition'] as string | undefined)
+    ?.split(';')
+    .map((part) => part.trim())
+    .find((part) => /^filename=/.test(part));
+  return match?.slice('filename='.length).replace(/^"|"$/g, '') || undefined;
+}

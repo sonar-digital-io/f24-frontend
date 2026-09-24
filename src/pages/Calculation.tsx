@@ -20,7 +20,7 @@ import { useDeleteConfirm } from '@/hooks/useDeleteConfirm';
 import { useSortState } from '@/hooks/useSortState';
 import { matchesDateRange, matchesQuery, paginate, sortItems } from '@/lib/listTable';
 import type { CalculationSortKey } from '@/types';
-import { formatDateTime } from '@/lib/utils';
+import { downloadBlob, formatDateTime } from '@/lib/utils';
 import { type Calculation } from '@/data/calculations';
 import {
   useDeleteProject,
@@ -85,12 +85,7 @@ export function Calculation() {
   async function handleExport(item: Calculation) {
     try {
       const { blob, filename } = await exportMutation.mutateAsync(item.id);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, filename);
     } catch {
       // exportMutation's onError (via the global mutation cache) already surfaces a toast.
     }

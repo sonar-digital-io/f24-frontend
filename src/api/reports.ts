@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, attachmentFilename } from './client';
 import type { Report, ReportExport, ReportFile, ReportListItem } from './types/reports';
 
 export async function getReportList(): Promise<ReportListItem[]> {
@@ -20,12 +20,10 @@ export async function exportReport(reportId: number): Promise<ReportExport> {
   const response = await apiClient.get(`/report/${reportId}/export/`, {
     responseType: 'arraybuffer',
   });
-  const match = response.headers['content-disposition']
-    ?.split(';')
-    .map((part: string) => part.trim())
-    .find((part: string) => /^filename=/.test(part));
-  const filename = match?.slice('filename='.length).replace(/^"|"$/g, '');
-  return { blob: new Blob([response.data]), filename: filename || `report-${reportId}.zip` };
+  return {
+    blob: new Blob([response.data]),
+    filename: attachmentFilename(response) || `report-${reportId}.zip`,
+  };
 }
 
 export async function getReportFileList(reportId: number): Promise<ReportFile[]> {

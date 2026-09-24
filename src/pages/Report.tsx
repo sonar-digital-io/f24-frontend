@@ -17,6 +17,7 @@ import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
 import { useDeleteConfirm } from '@/hooks/useDeleteConfirm';
 import { useSortState } from '@/hooks/useSortState';
 import { matchesDateRange, matchesQuery, paginate, sortItems } from '@/lib/listTable';
+import { downloadBlob } from '@/lib/utils';
 import { useDeleteReport, useExportReport, useReportList } from '@/hooks/api/useReports';
 import type { ReportListItem } from '@/api/types/reports';
 import type { ReportSortKey } from '@/types';
@@ -40,12 +41,7 @@ export function Report() {
   async function handleExport(item: ReportListItem) {
     try {
       const { blob, filename } = await exportMutation.mutateAsync(item.id);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, filename);
     } catch {
       // exportMutation's onError (via the global mutation cache) already surfaces a toast.
     }
@@ -57,7 +53,7 @@ export function Report() {
   const filtered = useMemo(
     () =>
       reports.filter((r) => {
-        if (!matchesQuery(query, [r.project, String(r.id)])) return false;
+        if (!matchesQuery(query, [r.project, `#${r.id}`])) return false;
         if (resultFilter.selected.size > 0 && !resultFilter.selected.has(r.result)) return false;
         return matchesDateRange(r.created_at, dateRange);
       }),
