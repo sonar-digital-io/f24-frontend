@@ -13,6 +13,7 @@ interface ChartAnchorPointsLayerProps {
   onPointerUp: (idx: number, e: PointerEvent<SVGCircleElement>) => void;
   onDoubleClick: (idx: number, e: MouseEvent<SVGCircleElement>) => void;
   onKeyDown: (idx: number, e: KeyboardEvent<SVGCircleElement>) => void;
+  color?: string;
 }
 
 /** Draggable `ChartAnchorPoint`s for every control point — shared by `CurveEditor`
@@ -28,6 +29,7 @@ export function ChartAnchorPointsLayer({
   onPointerUp,
   onDoubleClick,
   onKeyDown,
+  color,
 }: ChartAnchorPointsLayerProps) {
   return (
     <>
@@ -45,6 +47,7 @@ export function ChartAnchorPointsLayer({
             onPointerCancel={(e) => onPointerUp(idx, e)}
             onDoubleClick={(e) => onDoubleClick(idx, e)}
             onKeyDown={(e) => onKeyDown(idx, e)}
+            color={color}
             tooltip={points.length > minPoints ? 'Drag to move · Double-click to remove' : 'Drag to move'}
           />
         );

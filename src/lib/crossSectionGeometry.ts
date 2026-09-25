@@ -232,15 +232,34 @@ export const LAYUP_COLORS = [
   '#ca8a04',
 ];
 
-/** Layup-mapping (longitudinal upper/lower boundary strip) reference-region
- *  colors — blue for the upper side, yellow/amber for the lower side. Shared
- *  by the Cross-section view's rings and the 3D preview's per-part mesh
- *  color, so a layup reads as the same color in both. */
-export const LAYUP_MAPPING_COLORS = { upper: '#2563eb', lower: '#eab308' };
+/** Layup-mapping (longitudinal boundary strip) colors — one per mapping, not
+ *  per side or per layup, so even two mappings of the same layup read apart.
+ *  Hues kept away from TRANSVERSAL_MAPPING_COLORS and the blade's grey, and
+ *  checked for lightness/chroma/adjacent-pair (incl. colorblind) separation.
+ *  See layupMappingColor. (The Layup builder colors plies by material instead —
+ *  getMaterialColor.) */
+export const LAYUP_MAPPING_COLORS = [
+  '#2563eb', // blue
+  '#ca8a04', // gold
+  '#7b3577', // plum
+  '#629036', // moss
+  '#9b2014', // brick
+  '#085b87', // deep sky
+  '#9e6ba2', // mauve
+  '#555b02', // olive
+];
+
+/** A layup mapping's color by its position across the composition's upper-side
+ *  mappings followed by its lower-side ones (table order) — the same order the
+ *  Layup mapping tab, the Cross-section view and the 3D preview all read, so a
+ *  mapping is the same color in all three. */
+export function layupMappingColor(index: number): string {
+  return LAYUP_MAPPING_COLORS[index % LAYUP_MAPPING_COLORS.length];
+}
 
 /** Transversal-mapping colors — a wide, distinct set (not just green/red) so
  *  different mappings are actually told apart, not just alternating between
- *  two. Avoids the blues/yellows LAYUP_MAPPING_COLORS already owns. Shared by
+ *  two. Kept apart from LAYUP_MAPPING_COLORS' hues. Shared by
  *  the Cross-section view list, the profile modal, and the 3D preview's
  *  per-part mesh color. */
 export const TRANSVERSAL_MAPPING_COLORS = [
