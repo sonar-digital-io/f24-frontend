@@ -34,10 +34,13 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
   }
 
   function updateLimitCurvePoint(sub: LimitsSubTab, idx: number, field: 'rpm' | 'value', val: number) {
-    setLimits((prev) => ({
-      ...prev,
-      [sub]: { ...prev[sub], curve: prev[sub].curve.map((c, i) => (i === idx ? { ...c, [field]: val } : c)) },
-    }));
+    setLimits((prev) => {
+      const curve = prev[sub].curve.map((c, i) => (i === idx ? { ...c, [field]: val } : c));
+      // A typed RPM can overtake a neighbour — re-sort so the limit stays a
+      // function of RPM (the chart draws/drags assuming x-sorted points).
+      if (field === 'rpm') curve.sort((a, b) => a.rpm - b.rpm);
+      return { ...prev, [sub]: { ...prev[sub], curve } };
+    });
     markDirty();
   }
 
