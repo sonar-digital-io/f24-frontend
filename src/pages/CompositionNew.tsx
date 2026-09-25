@@ -335,6 +335,15 @@ export function CompositionNew() {
     return arr.find((x) => x.id === bezierFor.mappingId)?.points ?? defaultMappingPoints;
   })();
 
+  // The edited side's other mappings, shown faint (read-only) behind the edited polygon.
+  const bezierOtherPolygons = (() => {
+    if (!bezierFor) return [];
+    const arr = bezierFor.side === 'upper' ? upperMappings : lowerMappings;
+    return arr
+      .filter((x) => x.id !== bezierFor.mappingId)
+      .map((x) => x.points ?? defaultMappingPoints);
+  })();
+
   function duplicateMapping(side: 'upper' | 'lower', id: string) {
     const setter = side === 'upper' ? setUpperMappings : setLowerMappings;
     setter((arr) => {
@@ -821,6 +830,7 @@ export function CompositionNew() {
           }
           leadingEdge={leadingEdge}
           trailingEdge={trailingEdge}
+          otherPolygons={bezierOtherPolygons}
           xMin={mappingBounds.longitudinalMin}
           xMax={mappingBounds.longitudinalMax}
           xStep={mappingXStep}

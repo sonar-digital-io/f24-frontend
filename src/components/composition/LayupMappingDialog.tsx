@@ -33,6 +33,8 @@ interface LayupMappingDialogProps {
   /** Blade planform background — from GET /geometry/:id/top-view/, in the chart's own data scale. */
   leadingEdge: ControlPoint[];
   trailingEdge: ControlPoint[];
+  /** The side's other mapping polygons — shown faint and read-only in the chart. */
+  otherPolygons?: ControlPoint[][];
   /** Chart axis bounds — computed from the blade's real geometry, see computeMappingBounds. */
   xMin: number;
   xMax: number;
@@ -56,6 +58,7 @@ export function LayupMappingDialog({
   onChange,
   leadingEdge,
   trailingEdge,
+  otherPolygons,
   xMin,
   xMax,
   xStep,
@@ -243,6 +246,7 @@ export function LayupMappingDialog({
               onChange={onChange}
               leadingEdge={leadingEdge}
               trailingEdge={trailingEdge}
+              otherPolygons={otherPolygons}
               xMin={xMin}
               xMax={xMax}
               xStep={xStep}
