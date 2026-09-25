@@ -2,16 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useUpdateLoadGroupLimits } from '@/hooks/api/useLoadGroups';
 import { INITIAL_LOAD_LIMITS, type LimitsSubTab } from '@/data/loadGroupForm';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
-import type { LoadLimitRange, LoadLimitRangePayload } from '@/api/types/loadGroups';
+import type { LoadLimitRange } from '@/api/types/loadGroups';
 import { COMMIT_DEBOUNCE_MS } from '@/hooks/useDeferredCommit';
-import type { CurveType } from '@/types';
 
 /**
  * Limits tab state — hydrated from the load group's GET (in LoadGroupNew),
  * autosaved via PUT /load/:id/limits/ shortly after a bound/curve edit
- * settles (bezier drag release, point/bounds input blur). Each of the three
+ * settles (curve drag release, point/bounds input blur). Each of the three
  * sub-tabs needs at least 2 curve points to save — always true in practice
- * since the UI blocks deleting either endpoint, kept as a defensive gate.
+ * since the UI blocks deleting below 2 points, kept as a defensive gate.
  */
 export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
   const updateLimitsMutation = useUpdateLoadGroupLimits(loadGroupId);
@@ -47,22 +46,23 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
     markDirty();
   }
 
-  function updateLimitCurveType(sub: LimitsSubTab, curveType: CurveType) {
-    setLimits((prev) => ({
-      ...prev,
-      [sub]: { ...prev[sub], curve_type: curveType, curve: INITIAL_LOAD_LIMITS[sub].curve },
-    }));
-    markDirty();
-  }
-
+  /** Appends a point after the last one (one previous-segment width further,
+   *  same value, capped at x_max). If the last point already sits at x_max,
+   *  falls back to the midpoint of the last segment. */
   function addLimitCurvePoint(sub: LimitsSubTab) {
     setLimits((prev) => {
-      const curve = prev[sub].curve;
+      const { curve, x_max } = prev[sub];
       const secondLast = curve[curve.length - 2];
       const last = curve[curve.length - 1];
-      const newRpm = (secondLast.rpm + last.rpm) / 2;
-      const newValue = (secondLast.value + last.value) / 2;
-      const nextCurve = [...curve.slice(0, curve.length - 1), { rpm: newRpm, value: newValue }, last];
+      const appendRpm = Math.min(x_max, last.rpm + (last.rpm - secondLast.rpm));
+      const nextCurve =
+        appendRpm > last.rpm
+          ? [...curve, { rpm: appendRpm, value: last.value }]
+          : [
+              ...curve.slice(0, -1),
+              { rpm: (secondLast.rpm + last.rpm) / 2, value: (secondLast.value + last.value) / 2 },
+              last,
+            ];
       return { ...prev, [sub]: { ...prev[sub], curve: nextCurve } };
     });
     markDirty();
@@ -88,12 +88,6 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
   dirtyRef.current = dirty;
   const retrySaveRef = useRef(false);
 
-  // curve_type is UI-only — the backend's limits schema rejects it as an
-  // unknown property, so strip it before PUT.
-  function toPayloadRange({ curve_type: _curve_type, ...rest }: LoadLimitRange): LoadLimitRangePayload {
-    return rest;
-  }
-
   async function commitLimits() {
     if (updateLimitsMutation.isPending) {
       retrySaveRef.current = true;
@@ -104,9 +98,9 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
     try {
       const { thrust, torque, power } = limitsRef.current;
       await updateLimitsMutation.mutateAsync({
-        rpm_thrust_limit: toPayloadRange(thrust),
-        rpm_torque_limit: toPayloadRange(torque),
-        rpm_power_limit: toPayloadRange(power),
+        rpm_thrust_limit: thrust,
+        rpm_torque_limit: torque,
+        rpm_power_limit: power,
       });
       setDirty(false);
       setStatus('saved');
@@ -134,7 +128,6 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
     setLimitsSubTab,
     updateLimitBounds,
     updateLimitCurvePoint,
-    updateLimitCurveType,
     handleLimitCurveChange,
     addLimitCurvePoint,
     deleteLimitCurvePoint,

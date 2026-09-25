@@ -305,6 +305,23 @@ export function catmullRomPath(
   return d;
 }
 
+/** Straight segments through every point (piecewise linear). */
+export function linearPath(
+  pts: ControlPoint[],
+  xMin: number,
+  xMax: number,
+  yMin: number,
+  yMax: number,
+): string {
+  if (pts.length < 2) return '';
+  return pts
+    .map((p, i) => {
+      const { cx, cy } = dataToPx(p, xMin, xMax, yMin, yMax);
+      return `${i === 0 ? 'M' : 'L'} ${cx.toFixed(1)},${cy.toFixed(1)}`;
+    })
+    .join(' ');
+}
+
 /** One step of De Casteljau's algorithm: lerp every adjacent pair by `t`. */
 function lerpOnce(pts: { cx: number; cy: number }[], t: number): { cx: number; cy: number }[] {
   const next: { cx: number; cy: number }[] = [];

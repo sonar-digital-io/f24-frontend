@@ -15,6 +15,7 @@ import {
   clamp,
   computeChartAxis,
   catmullRomPath,
+  linearPath,
   bezierControlPolygonPath,
   pointsToPolygonString,
 } from '@/lib/bezierMath';
@@ -46,7 +47,8 @@ import {
  *   was BEFORE the drag started. It vanishes the moment you release.
  */
 export interface CurveEditorProps {
-  curveType: CurveType;
+  /** `'linear'`: straight segments through every point (e.g. load limits). */
+  curveType: CurveType | 'linear';
   points: ControlPoint[];
   onChange: (points: ControlPoint[]) => void;
   /** Fires once per completed point drag (on release) — for callers that autosave
@@ -71,6 +73,10 @@ export interface CurveEditorProps {
   /** Fewest points the curve may shrink to via double-click delete — callers
    *  vary (e.g. 2 for load limits, more where a curve needs extra shape). */
   minPoints?: number;
+  /** Background clicks left of the first / right of the last point add a new
+   *  first/last point (anywhere in xMin..xMax), instead of only inserting between
+   *  the existing endpoints — for curves whose ends aren't fixed (e.g. load limits). */
+  extendable?: boolean;
   xUnit?: string;
   yUnit?: string;
   className?: string;
@@ -91,6 +97,7 @@ export function CurveEditor({
   onZoomYRange,
   showRootIndicator = true,
   minPoints = 2,
+  extendable = false,
   xUnit = '',
   yUnit = '',
   className,
@@ -134,6 +141,7 @@ export function CurveEditor({
     rootX,
     showRootIndicator,
     minPoints,
+    extendable,
     screenToViewBox,
     hasPannedRef,
   });
@@ -173,7 +181,8 @@ export function CurveEditor({
     );
   }
 
-  const buildPath = curveType === 'bezier' ? bezierControlPolygonPath : catmullRomPath;
+  const buildPath =
+    curveType === 'bezier' ? bezierControlPolygonPath : curveType === 'linear' ? linearPath : catmullRomPath;
   const xAxis = computeChartAxis(xMin, xMax, xStep);
   const yAxis = computeChartAxis(yMin, yMax, yStep);
   const rootPx = dataToPx({ x: rootX, y: 0 }, xMin, xMax, yMin, yMax).cx;
