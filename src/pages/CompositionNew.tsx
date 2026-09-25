@@ -26,6 +26,7 @@ import {
   type LayupMapping,
 } from '@/components/composition/LayupMappingTable';
 import { nextLocalId, todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
+import { layupMappingColor } from '@/lib/crossSectionGeometry';
 import { getApiErrorMessage } from '@/lib/apiError';
 import { computeMappingBounds, computeProfilesBoundingRect, niceStep, round6 } from '@/lib/bezierMath';
 import type { ControlPoint } from '@/types';
@@ -303,6 +304,11 @@ export function CompositionNew() {
       ? upperMappings
       : lowerMappings;
   const bezierMapping = bezierSideMappings.find((x) => x.id === bezierFor?.mappingId);
+  // Upper-side mappings first, then lower — see layupMappingColor.
+  const bezierColorOffset = bezierFor?.side === 'lower' ? upperMappings.length : 0;
+  const bezierColor = layupMappingColor(
+    bezierColorOffset + Math.max(0, bezierSideMappings.findIndex((x) => x === bezierMapping)),
+  );
 
   const bezierTitle = (() => {
     if (!bezierFor) return '';
@@ -339,9 +345,11 @@ export function CompositionNew() {
   const bezierPoints = bezierMapping?.points ?? defaultMappingPoints;
 
   // The edited side's other mappings, shown faint (read-only) behind the edited polygon.
-  const bezierOtherPolygons = bezierSideMappings
-    .filter((x) => x !== bezierMapping)
-    .map((x) => x.points ?? defaultMappingPoints);
+  const bezierOtherPolygons = bezierSideMappings.flatMap((x, i) =>
+    x === bezierMapping
+      ? []
+      : [{ points: x.points ?? defaultMappingPoints, color: layupMappingColor(bezierColorOffset + i) }],
+  );
 
   function duplicateMapping(side: 'upper' | 'lower', id: string) {
     const setter = side === 'upper' ? setUpperMappings : setLowerMappings;
@@ -829,6 +837,7 @@ export function CompositionNew() {
           }
           leadingEdge={leadingEdge}
           trailingEdge={trailingEdge}
+          color={bezierColor}
           otherPolygons={bezierOtherPolygons}
           xMin={mappingBounds.longitudinalMin}
           xMax={mappingBounds.longitudinalMax}

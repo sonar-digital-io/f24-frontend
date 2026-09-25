@@ -34,7 +34,7 @@ import {
 } from '@/hooks/api/useComposition';
 import { geometryKeys, useGeometryProfiles, useGeometryProfile } from '@/hooks/api/useGeometry';
 import { getGeometryProfile } from '@/api/geometry';
-import { LAYUP_MAPPING_COLORS, transversalMappingColorForName } from '@/lib/crossSectionGeometry';
+import { layupMappingColor, transversalMappingColorForName } from '@/lib/crossSectionGeometry';
 
 interface TransversalMappingSectionProps {
   compositionId: number;
@@ -209,8 +209,9 @@ export function TransversalMappingSection({
     bySideAndMapping.forEach((arr, key) => {
       if (arr.length < 2) return; // need both edges to draw a region
       const [a, b] = [...arr].sort((x, y) => (x.index ?? 0) - (y.index ?? 0));
-      const [longitudinalMappingId, side] = key.split(':');
-      const lmEntry = longitudinalEntries.find((e) => String(e.id) === longitudinalMappingId);
+      const [longitudinalMappingId] = key.split(':');
+      const lmIndex = longitudinalEntries.findIndex((e) => String(e.id) === longitudinalMappingId);
+      const lmEntry = longitudinalEntries[lmIndex];
       result.push({
         id: `lm-${key}`,
         name: a.longitudinal_mapping_name ?? 'Layup mapping',
@@ -220,7 +221,7 @@ export function TransversalMappingSection({
         endFrac: b.position,
         startLockedToLabel: describeIntersection(a),
         endLockedToLabel: describeIntersection(b),
-        color: side === 'upper' ? LAYUP_MAPPING_COLORS.upper : LAYUP_MAPPING_COLORS.lower,
+        color: layupMappingColor(Math.max(0, lmIndex)),
       });
     });
     return result;

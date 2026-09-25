@@ -1,5 +1,6 @@
 import { forwardRef } from 'react';
 import { LayupMappingTable, type LayupMapping } from '@/components/composition/LayupMappingTable';
+import { layupMappingColor } from '@/lib/crossSectionGeometry';
 
 interface CompositionLayupMappingPanelProps {
   visible: boolean;
@@ -57,6 +58,7 @@ export const CompositionLayupMappingPanel = forwardRef<HTMLDivElement, Compositi
           mappings={upperMappings}
           layupOptions={layupOptions}
           activeMappingId={activeBezierSide === 'upper' ? activeBezierMappingId : null}
+          colorFor={(idx) => layupMappingColor(idx)}
           onAdd={() => onAdd('upper')}
           onDelete={(id) => onDelete('upper', id)}
           onUpdate={(id, next) => onUpdate('upper', id, next)}
@@ -73,6 +75,7 @@ export const CompositionLayupMappingPanel = forwardRef<HTMLDivElement, Compositi
           mappings={lowerMappings}
           layupOptions={layupOptions}
           activeMappingId={activeBezierSide === 'lower' ? activeBezierMappingId : null}
+          colorFor={(idx) => layupMappingColor(upperMappings.length + idx)}
           onAdd={() => onAdd('lower')}
           onDelete={(id) => onDelete('lower', id)}
           onUpdate={(id, next) => onUpdate('lower', id, next)}

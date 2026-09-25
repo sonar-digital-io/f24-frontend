@@ -46,6 +46,8 @@ export interface LayupMappingTableProps {
   /** Composition's own saved layups, for resolving `layupId` to a display name. */
   layupOptions: { id: number; name: string }[];
   activeMappingId?: string | null;
+  /** Color of each row's mapping (see layupMappingColor). */
+  colorFor: (idx: number) => string;
   onAdd: () => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, next: Partial<LayupMapping>) => void;
@@ -62,6 +64,7 @@ export function LayupMappingTable({
   mappings,
   layupOptions,
   activeMappingId,
+  colorFor,
   onAdd,
   onDelete,
   onUpdate,
@@ -129,7 +132,16 @@ export function LayupMappingTable({
                     <GripVertical className="h-4 w-4" strokeWidth={2} />
                   </span>
                 </td>
-                <td className="px-2 py-2 text-[#0a0a0a]">{idx}</td>
+                <td className="px-2 py-2 text-[#0a0a0a]">
+                  <span className="flex items-center gap-2">
+                    <span
+                      aria-hidden
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: colorFor(idx) }}
+                    />
+                    {idx}
+                  </span>
+                </td>
                 <td className="px-2 py-2">
                   <TooltipRoot delayDuration={400}>
                     <TooltipTrigger asChild>

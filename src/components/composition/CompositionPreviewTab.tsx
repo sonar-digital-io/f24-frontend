@@ -4,7 +4,7 @@ import { OccViewer } from '@/components/common/viewer/OccViewer';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useCompositionDetail, useCompositionPreview } from '@/hooks/api/useComposition';
 import { useGeometryDetail } from '@/hooks/api/useGeometry';
-import { LAYUP_MAPPING_COLORS } from '@/lib/crossSectionGeometry';
+import { layupMappingColor, transversalMappingColorForName } from '@/lib/crossSectionGeometry';
 
 export interface CompositionPreviewTabProps {
   compositionId: number;
@@ -43,11 +43,11 @@ export function CompositionPreviewTab({ compositionId, geometryId }: Composition
   // miscategorized as a transversal mapping part in the 3D view.
   const { data: compositionDetail } = useCompositionDetail(compositionId);
   const layupColorOverride: Record<string, string> = {};
-  (compositionDetail?.longitudinal_mapping?.upper_side ?? []).forEach((entry) => {
-    layupColorOverride[entry.name] = LAYUP_MAPPING_COLORS.upper;
-  });
-  (compositionDetail?.longitudinal_mapping?.lower_side ?? []).forEach((entry) => {
-    layupColorOverride[entry.name] = LAYUP_MAPPING_COLORS.lower;
+  [
+    ...(compositionDetail?.longitudinal_mapping?.upper_side ?? []),
+    ...(compositionDetail?.longitudinal_mapping?.lower_side ?? []),
+  ].forEach((entry, i) => {
+    layupColorOverride[entry.name] = layupMappingColor(i);
   });
 
   return (
@@ -81,6 +81,13 @@ export function CompositionPreviewTab({ compositionId, geometryId }: Composition
               onCheckedChange={(checked) =>
                 setLayupVisibility((prev) => ({ ...prev, [name]: checked === true }))
               }
+            />
+            <span
+              aria-hidden
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{
+                backgroundColor: layupColorOverride[name] ?? transversalMappingColorForName(name),
+              }}
             />
             {name}
           </label>

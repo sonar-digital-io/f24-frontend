@@ -26,8 +26,10 @@ interface LayupMappingChartProps {
   leadingEdge: ControlPoint[];
   /** Trailing-edge points [longitudinal, transversal], in the chart's own data scale. */
   trailingEdge: ControlPoint[];
-  /** The side's other mapping polygons — drawn faint, read-only, for reference. */
-  otherPolygons?: ControlPoint[][];
+  /** The edited polygon's own color (see layupMappingColor). */
+  color?: string;
+  /** The side's other mapping polygons, each in its own color — drawn faint, read-only, for reference. */
+  otherPolygons?: { points: ControlPoint[]; color: string }[];
   xMin?: number;
   xMax?: number;
   xStep?: number;
@@ -44,6 +46,7 @@ export function LayupMappingChart({
   onChange,
   leadingEdge,
   trailingEdge,
+  color = '#0066cc',
   otherPolygons = [],
   xMin = 5,
   xMax = 55,
@@ -202,9 +205,9 @@ export function LayupMappingChart({
       {otherPolygons.map((poly, i) => (
         <polygon
           key={i}
-          points={pointsToPolygonString(poly, xMin, xMax, yMin, yMax)}
+          points={pointsToPolygonString(poly.points, xMin, xMax, yMin, yMax)}
           fill="none"
-          stroke="#0066cc"
+          stroke={poly.color}
           strokeOpacity="0.35"
           strokeWidth="1"
           vectorEffect="non-scaling-stroke"
@@ -215,8 +218,9 @@ export function LayupMappingChart({
       {/* Closed polygon */}
       <polygon
         points={polygonPoints}
-        fill="rgba(0, 102, 204, 0.08)"
-        stroke="#0066cc"
+        fill={color}
+        fillOpacity="0.08"
+        stroke={color}
         strokeWidth="2"
         vectorEffect="non-scaling-stroke"
         style={{ pointerEvents: 'none' }}
@@ -233,6 +237,7 @@ export function LayupMappingChart({
         onPointerUp={handlePointerUp}
         onDoubleClick={handlePointDoubleClick}
         onKeyDown={handleKeyDown}
+        color={color}
       />
     </ChartFrame>
   );

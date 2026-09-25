@@ -394,8 +394,12 @@ export function OccViewer({
           m.dispose();
         });
         obj.material = mat;
-        obj.castShadow = true;
-        obj.receiveShadow = true;
+        // Only the blade takes part in shadowing: layup/mapping parts are thin
+        // shells lying right on (or just above) the blade surface, so any shadow
+        // they cast or receive just shows up as a dark smudge on themselves/the
+        // blade instead of anything meaningful.
+        obj.castShadow = isBlade;
+        obj.receiveShadow = isBlade;
         newMeshes.push(obj);
 
         if (isBlade) {

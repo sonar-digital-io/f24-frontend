@@ -13,6 +13,8 @@ interface ChartAnchorPointProps {
    *  the point is otherwise mouse/touch-only, which the drag itself already is. */
   onKeyDown?: (e: KeyboardEvent<SVGCircleElement>) => void;
   tooltip?: string;
+  /** Dot color — defaults to the chart blue. */
+  color?: string;
 }
 
 /** Draggable chart control-point dot (with an oversized invisible hit area), shared by `CurveEditor`/`LayupMappingChart`. */
@@ -27,6 +29,7 @@ export function ChartAnchorPoint({
   onDoubleClick,
   onKeyDown,
   tooltip,
+  color = '#0066cc',
 }: ChartAnchorPointProps) {
   return (
     <g>
@@ -50,7 +53,7 @@ export function ChartAnchorPoint({
         {tooltip && <title>{tooltip}</title>}
       </circle>
       {/* Visible dot */}
-      <circle cx={cx} cy={cy} r={isDragging ? 7 : 6} fill="#0066cc" style={{ pointerEvents: 'none' }} />
+      <circle cx={cx} cy={cy} r={isDragging ? 7 : 6} fill={color} style={{ pointerEvents: 'none' }} />
       <circle cx={cx} cy={cy} r="3" fill="white" style={{ pointerEvents: 'none' }} />
     </g>
   );
