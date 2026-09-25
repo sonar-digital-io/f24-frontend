@@ -3,10 +3,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CurveEditor } from '@/components/common/viewer/CurveEditor';
-import { CurveTypeToggle } from '@/components/common/viewer/CurveTypeToggle';
 import { BufferedNumberInput } from '@/components/common/BufferedNumberInput';
 import { niceStep } from '@/lib/bezierMath';
-import type { CurveType } from '@/types';
 import type { LoadLimitRange } from '@/api/types/loadGroups';
 import { LIMITS_UNITS, type LimitsSubTab } from '@/data/loadGroupForm';
 
@@ -16,7 +14,6 @@ interface LoadGroupLimitsTabProps {
   limits: Record<LimitsSubTab, LoadLimitRange>;
   onUpdateBounds: (sub: LimitsSubTab, field: 'x_min' | 'x_max' | 'y_min' | 'y_max', val: number) => void;
   onUpdateCurvePoint: (sub: LimitsSubTab, idx: number, field: 'rpm' | 'value', val: number) => void;
-  onUpdateCurveType: (sub: LimitsSubTab, curveType: CurveType) => void;
   onCurveChange: (sub: LimitsSubTab, curve: LoadLimitRange['curve']) => void;
   onAddCurvePoint: (sub: LimitsSubTab) => void;
   onDeleteCurvePoint: (sub: LimitsSubTab, idx: number) => void;
@@ -29,7 +26,6 @@ export function LoadGroupLimitsTab({
   limits,
   onUpdateBounds,
   onUpdateCurvePoint,
-  onUpdateCurveType,
   onCurveChange,
   onAddCurvePoint,
   onDeleteCurvePoint,
@@ -87,11 +83,8 @@ export function LoadGroupLimitsTab({
         <div className="grid grid-cols-[minmax(480px,1fr)_260px] gap-6">
           {/* Interactive curve chart */}
           <div className="flex flex-col gap-3">
-            <div className="flex justify-end">
-              <CurveTypeToggle value={bounds.curve_type} onChange={(next) => onUpdateCurveType(limitsSubTab, next)} />
-            </div>
             <CurveEditor
-              curveType={bounds.curve_type}
+              curveType="linear"
               points={points}
               onChange={handleCurveChange}
               xMin={bounds.x_min}
@@ -108,6 +101,7 @@ export function LoadGroupLimitsTab({
               yUnit={LIMITS_UNITS[limitsSubTab]}
               showRootIndicator={false}
               minPoints={2}
+              extendable
             />
           </div>
 
@@ -127,7 +121,6 @@ export function LoadGroupLimitsTab({
                 </thead>
                 <tbody>
                   {bounds.curve.map((pt, idx) => {
-                    const isEndpoint = idx === 0 || idx === bounds.curve.length - 1;
                     return (
                       <tr
                         key={idx}
@@ -157,7 +150,7 @@ export function LoadGroupLimitsTab({
                           />
                         </td>
                         <td className="px-1 py-2">
-                          {!isEndpoint && (
+                          {bounds.curve.length > 2 && (
                             <button
                               type="button"
                               onClick={() => onDeleteCurvePoint(limitsSubTab, idx)}
