@@ -26,6 +26,8 @@ interface LayupMappingChartProps {
   leadingEdge: ControlPoint[];
   /** Trailing-edge points [longitudinal, transversal], in the chart's own data scale. */
   trailingEdge: ControlPoint[];
+  /** The side's other mapping polygons — drawn faint, read-only, for reference. */
+  otherPolygons?: ControlPoint[][];
   xMin?: number;
   xMax?: number;
   xStep?: number;
@@ -42,6 +44,7 @@ export function LayupMappingChart({
   onChange,
   leadingEdge,
   trailingEdge,
+  otherPolygons = [],
   xMin = 5,
   xMax = 55,
   xStep = 5,
@@ -194,6 +197,20 @@ export function LayupMappingChart({
         vectorEffect="non-scaling-stroke"
         style={{ pointerEvents: 'none' }}
       />
+
+      {/* Other mappings of the same side — faint outline, not interactive */}
+      {otherPolygons.map((poly, i) => (
+        <polygon
+          key={i}
+          points={pointsToPolygonString(poly, xMin, xMax, yMin, yMax)}
+          fill="none"
+          stroke="#0066cc"
+          strokeOpacity="0.35"
+          strokeWidth="1"
+          vectorEffect="non-scaling-stroke"
+          style={{ pointerEvents: 'none' }}
+        />
+      ))}
 
       {/* Closed polygon */}
       <polygon

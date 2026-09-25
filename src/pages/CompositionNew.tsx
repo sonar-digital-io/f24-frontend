@@ -296,10 +296,17 @@ export function CompositionNew() {
     return arr.find((m) => m.id === layupPicker.mappingId)?.layupId ?? null;
   })();
 
+  // The edited side's mappings, and the mapping open in the bezier dialog.
+  const bezierSideMappings = !bezierFor
+    ? []
+    : bezierFor.side === 'upper'
+      ? upperMappings
+      : lowerMappings;
+  const bezierMapping = bezierSideMappings.find((x) => x.id === bezierFor?.mappingId);
+
   const bezierTitle = (() => {
     if (!bezierFor) return '';
-    const arr = bezierFor.side === 'upper' ? upperMappings : lowerMappings;
-    const m = arr.find((x) => x.id === bezierFor.mappingId);
+    const m = bezierMapping;
     const sideLabel = bezierFor.side === 'upper' ? 'Upper side' : 'Lower side';
     return `${sideLabel} / ${m?.name?.trim() || 'untitled'}`;
   })();
@@ -329,11 +336,12 @@ export function CompositionNew() {
     { x: profileRect.longitudinalMax, y: profileRect.transversalMin },
   ];
 
-  const bezierPoints = (() => {
-    if (!bezierFor) return defaultMappingPoints;
-    const arr = bezierFor.side === 'upper' ? upperMappings : lowerMappings;
-    return arr.find((x) => x.id === bezierFor.mappingId)?.points ?? defaultMappingPoints;
-  })();
+  const bezierPoints = bezierMapping?.points ?? defaultMappingPoints;
+
+  // The edited side's other mappings, shown faint (read-only) behind the edited polygon.
+  const bezierOtherPolygons = bezierSideMappings
+    .filter((x) => x !== bezierMapping)
+    .map((x) => x.points ?? defaultMappingPoints);
 
   function duplicateMapping(side: 'upper' | 'lower', id: string) {
     const setter = side === 'upper' ? setUpperMappings : setLowerMappings;
@@ -821,6 +829,7 @@ export function CompositionNew() {
           }
           leadingEdge={leadingEdge}
           trailingEdge={trailingEdge}
+          otherPolygons={bezierOtherPolygons}
           xMin={mappingBounds.longitudinalMin}
           xMax={mappingBounds.longitudinalMax}
           xStep={mappingXStep}
