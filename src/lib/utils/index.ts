@@ -4,3 +4,4 @@ export { todayISO, toIsoDateTime, toDateInputValue, formatDateTime, formatDateLa
 export { uniqueId, nextLocalId } from './id';
 export { toTitleCase } from './titleCase';
 export { hashString } from './hash';
+export { downloadBlob } from './download';

@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, attachmentFilename } from './client';
 import type {
   ProjectPayload,
   ProjectCreateResponse,
@@ -83,14 +83,7 @@ export async function exportProject(projectId: string): Promise<ProjectExport> {
   // decoded back to text by getApiErrorMessage, so the backend's own error
   // message reaches the user instead of a generic fallback.
   const response = await apiClient.get(`/project/${projectId}/export/`, { responseType: 'arraybuffer' });
-  // Match a bare `filename=` segment only — not RFC 5987's `filename*=`, which has a
-  // different (encoded) value format and would otherwise get captured as garbage.
-  const match = response.headers['content-disposition']
-    ?.split(';')
-    .map((part: string) => part.trim())
-    .find((part: string) => /^filename=/.test(part));
-  const filename = match?.slice('filename='.length).replace(/^"|"$/g, '');
-  return { blob: new Blob([response.data]), filename: filename || `calculation-${projectId}.txt` };
+  return { blob: new Blob([response.data]), filename: attachmentFilename(response) || `calculation-${projectId}.txt` };
 }
 
 export async function getProjectLog(projectId: string, query?: ProjectLogQuery): Promise<ProjectLogResponse> {

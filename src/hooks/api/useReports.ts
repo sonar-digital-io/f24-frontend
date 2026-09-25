@@ -1,14 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as reportsApi from '@/api/reports';
 
+const PENDING_REFETCH_INTERVAL = 5000;
+
 export const reportKeys = {
   list: () => ['reports', 'list'] as const,
   detail: (reportId: number) => ['reports', 'detail', reportId] as const,
   fileList: (reportId: number) => ['reports', 'file-list', reportId] as const,
 };
 
+/** Polls while any report is still Pending, so its result updates without a reload. */
 export function useReportList() {
-  return useQuery({ queryKey: reportKeys.list(), queryFn: () => reportsApi.getReportList() });
+  return useQuery({
+    queryKey: reportKeys.list(),
+    queryFn: () => reportsApi.getReportList(),
+    refetchInterval: (query) =>
+      query.state.data?.some((r) => r.result === 'Pending') ? PENDING_REFETCH_INTERVAL : false,
+  });
 }
 
 export function useReportDetail(reportId: number) {

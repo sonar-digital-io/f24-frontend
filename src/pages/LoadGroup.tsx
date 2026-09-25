@@ -75,7 +75,7 @@ export function LoadGroup() {
 
   const sorted = useMemo(() => sortItems(filtered, sort, (g, key) => g[key]), [filtered, sort]);
 
-  const { totalPages, pageRows } = paginate(sorted, page, PAGE_SIZE);
+  const { totalPages, pageRows, currentPage } = paginate(sorted, page, PAGE_SIZE);
 
   const COLUMNS: ListTableHeadColumn<LoadGroupSortKey>[] = [
     { label: 'Name', sortKey: 'name', className: 'w-[260px]' },
@@ -122,7 +122,7 @@ export function LoadGroup() {
                 />
               ) : undefined
             }
-            pagination={{ page, totalPages, onChange: setPage }}
+            pagination={{ page: currentPage, totalPages, onChange: setPage }}
           >
             <ListTable>
               <ListTableHead

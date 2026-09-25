@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, attachmentFilename } from './client';
 import type {
   MaterialPayload,
   MaterialCreateResponse,
@@ -50,12 +50,5 @@ export interface MaterialExport {
 
 export async function exportMaterial(materialId: number): Promise<MaterialExport> {
   const response = await apiClient.get(`/material/${materialId}/export/`, { responseType: 'blob' });
-  // Match a bare `filename=` segment only — not RFC 5987's `filename*=`, which has a
-  // different (encoded) value format and would otherwise get captured as garbage.
-  const match = response.headers['content-disposition']
-    ?.split(';')
-    .map((part: string) => part.trim())
-    .find((part: string) => /^filename=/.test(part));
-  const filename = match?.slice('filename='.length).replace(/^"|"$/g, '');
-  return { blob: response.data, filename: filename || `material-${materialId}.txt` };
+  return { blob: response.data, filename: attachmentFilename(response) || `material-${materialId}.txt` };
 }

@@ -61,3 +61,8 @@ export type NurbsGeometryType = 'nurbs-wave' | 'nurbs-dome' | 'nurbs-saddle';
 /** Every geometry the /nurbs page can switch to — the NURBS presets plus the loft mode
  *  (rendered by `LoftViewer` instead of `NurbsViewer`). */
 export type GeometryType = NurbsGeometryType | 'loft';
+
+// ─── /report ──────────────────────────────────────────────────────────────────
+
+/** Sortable columns on the /report list page. */
+export type ReportSortKey = 'id' | 'project' | 'createdAt';

@@ -5,7 +5,7 @@ import { Pagination } from '@/components/common/list/Pagination';
 
 interface ListPageCardProps {
   title: string;
-  headerActions: ReactNode;
+  headerActions?: ReactNode;
   search: {
     value: string;
     onChange: (value: string) => void;

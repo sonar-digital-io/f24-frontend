@@ -43,7 +43,7 @@ export function useCalculationCompositionState(ensureProjectId: (fallbackName?: 
     () => sortItems(compFiltered, compSort, (c, key) => (key === 'last_modified' ? c.lastUpdated : c.name)),
     [compFiltered, compSort]
   );
-  const { totalPages: compTotalPages, pageRows: compPageRows } = paginate(compSorted, compPage, TAB_PAGE_SIZE);
+  const { totalPages: compTotalPages, pageRows: compPageRows, currentPage: compCurrentPage } = paginate(compSorted, compPage, TAB_PAGE_SIZE);
 
   function handleCompSearchChange(value: string) {
     setCompSearch(value);
@@ -67,7 +67,7 @@ export function useCalculationCompositionState(ensureProjectId: (fallbackName?: 
     selectedCompositionId,
     compSearch,
     compSort,
-    compPage,
+    compPage: compCurrentPage,
     compPageRows,
     compTotalPages,
     handleCompSearchChange,
