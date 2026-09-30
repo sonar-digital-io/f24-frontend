@@ -58,7 +58,7 @@ export interface ProjectLogEntry {
   module: string;
   function_name: string;
   line_number: number;
-  created: number;
+  created: string;
   process: number;
   thread: number;
 }
