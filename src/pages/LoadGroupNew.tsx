@@ -12,7 +12,7 @@ import { LoadCasePickerDialog } from '@/components/load-group/LoadCasePickerDial
 import { useCreateLoadGroup, useLoadGroupDetail, useUpdateLoadGroup } from '@/hooks/api/useLoadGroups';
 import { useHydrateOnce } from '@/hooks/useHydrateOnce';
 import { useLoadGroupLoadCasesState } from '@/hooks/useLoadGroupLoadCasesState';
-import { useLoadGroupLimitsState } from '@/hooks/useLoadGroupLimitsState';
+import { useLoadGroupLimitsState, withPointIds } from '@/hooks/useLoadGroupLimitsState';
 import { useLoadGroupFatigueProfilesState } from '@/hooks/useLoadGroupFatigueProfilesState';
 import { todayISO, toIsoDateTime, toDateInputValue } from '@/lib/utils';
 import type { LoadLimitRange } from '@/api/types/loadGroups';
@@ -71,7 +71,7 @@ export function LoadGroupNew() {
     // along unchanged into the next PUT and get rejected as additionalProperties.
     const withCurve = (incoming: LoadLimitRange | undefined, fallback: LoadLimitRange) =>
       incoming && incoming.curve.length >= 2
-        ? { ...incoming, curve: incoming.curve.map((c) => ({ rpm: c.rpm, value: c.value })) }
+        ? { ...incoming, curve: withPointIds(incoming.curve) }
         : fallback;
     setLimits((prev) => ({
       thrust: withCurve(g.rpm_thrust_limit, prev.thrust),

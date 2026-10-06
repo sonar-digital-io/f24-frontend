@@ -1,5 +1,11 @@
 import { apiClient, attachmentFilename } from './client';
-import type { Report, ReportExport, ReportFile, ReportListItem } from './types/reports';
+import type {
+  Report,
+  ReportExport,
+  ReportFile,
+  ReportListItem,
+  ReportLogResponse,
+} from './types/reports';
 
 export async function getReportList(): Promise<ReportListItem[]> {
   const { data } = await apiClient.get<ReportListItem[]>('/report/list/');
@@ -28,5 +34,13 @@ export async function exportReport(reportId: number): Promise<ReportExport> {
 
 export async function getReportFileList(reportId: number): Promise<ReportFile[]> {
   const { data } = await apiClient.get<ReportFile[]>(`/report/${reportId}/file/list/`);
+  return data;
+}
+
+/** Not yet wired up — see useReportLog's own comment for why. Mirrors
+ *  getProjectLog's endpoint shape (same backend logging format) so swapping
+ *  the hook over once the report-log endpoint exists is a one-line change. */
+export async function getReportLog(reportId: number): Promise<ReportLogResponse> {
+  const { data } = await apiClient.get<ReportLogResponse>(`/report/${reportId}/log/`);
   return data;
 }

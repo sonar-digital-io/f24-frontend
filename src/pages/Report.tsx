@@ -12,6 +12,7 @@ import { DateColumnFilter } from '@/components/common/list/DateColumnFilter';
 import { DateRangeFilterChip } from '@/components/common/list/DateRangeFilterChip';
 import { DeleteConfirmDialog } from '@/components/common/list/DeleteConfirmDialog';
 import { ReportRow } from '@/components/report/ReportRow';
+import { ReportLogDialog } from '@/components/report/ReportLogDialog';
 import { useColumnFilter } from '@/hooks/useColumnFilter';
 import { useDateFilterPopover } from '@/hooks/useDateFilterPopover';
 import { useDeleteConfirm } from '@/hooks/useDeleteConfirm';
@@ -37,6 +38,7 @@ export function Report() {
   const deleteMutation = useDeleteReport();
   const { pendingDelete, setPendingDelete, handleConfirmDelete } = useDeleteConfirm(deleteMutation);
   const exportMutation = useExportReport();
+  const [logsFor, setLogsFor] = useState<ReportListItem | null>(null);
 
   async function handleExport(item: ReportListItem) {
     try {
@@ -146,6 +148,7 @@ export function Report() {
                   <ReportRow
                     key={item.id}
                     item={item}
+                    onShowLogs={() => setLogsFor(item)}
                     onExport={() => handleExport(item)}
                     onDelete={() =>
                       setPendingDelete({
@@ -165,6 +168,14 @@ export function Report() {
       </main>
 
       <Footer />
+
+      {logsFor && (
+        <ReportLogDialog
+          reportId={logsFor.id}
+          reportLabel={logsFor.project ? `${logsFor.project} #${logsFor.id}` : `#${logsFor.id}`}
+          onClose={() => setLogsFor(null)}
+        />
+      )}
 
       <DeleteConfirmDialog
         entityLabel="report"

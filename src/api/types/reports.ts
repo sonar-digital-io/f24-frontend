@@ -1,5 +1,7 @@
+import type { ProjectLogEntry } from './projects';
+
 /** `Result` choices of the backend ReportModel. */
-export type ReportResult = 'Success' | 'Error' | 'Pending' | 'Timeout';
+export type ReportResult = 'Success' | 'Error' | 'Timeout';
 
 /** One row of `GET /report/list/` (ReportListSerializer). */
 export interface ReportListItem {
@@ -23,4 +25,11 @@ export interface ReportFile {
 export interface ReportExport {
   blob: Blob;
   filename: string;
+}
+
+/** Same shape as a calculation's own log (ProjectLogEntry) — the backend's
+ *  logging format is shared across both. */
+export type ReportLogEntry = ProjectLogEntry;
+export interface ReportLogResponse {
+  log: ProjectLogEntry[];
 }

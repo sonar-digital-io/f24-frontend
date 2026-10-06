@@ -123,7 +123,7 @@ export function LoadGroupLimitsTab({
                   {bounds.curve.map((pt, idx) => {
                     return (
                       <tr
-                        key={idx}
+                        key={pt.id ?? idx}
                         className="group border-b border-[#e5e7eb] last:border-b-0"
                       >
                         <td className="px-2 py-2 text-[#6b7280]">{idx}</td>
