@@ -2,8 +2,35 @@ import { useEffect, useRef, useState } from 'react';
 import { useUpdateLoadGroupLimits } from '@/hooks/api/useLoadGroups';
 import { INITIAL_LOAD_LIMITS, type LimitsSubTab } from '@/data/loadGroupForm';
 import type { SaveStatus } from '@/components/common/layout/EditPageToolbarActions';
-import type { LoadLimitRange } from '@/api/types/loadGroups';
+import type { LoadLimitCurvePoint, LoadLimitRange } from '@/api/types/loadGroups';
 import { COMMIT_DEBOUNCE_MS } from '@/hooks/useDeferredCommit';
+
+let nextPointId = 1;
+
+/** Gives every point a client-only id so a table row keeps its identity when
+ *  the curve is re-sorted. Ids carry over by index from `prev` when the point
+ *  count is unchanged (an in-place edit), otherwise every point gets a fresh one. */
+export function withPointIds(curve: LoadLimitCurvePoint[], prev?: LoadLimitCurvePoint[]): LoadLimitCurvePoint[] {
+  const sameShape = prev?.length === curve.length;
+  return curve.map((c, i) => ({
+    rpm: c.rpm,
+    value: c.value,
+    id: sameShape && prev![i].id != null ? prev![i].id : nextPointId++,
+  }));
+}
+
+/** Client-only point ids must not reach the backend — its limits schema rejects unknown fields. */
+function toPayloadRange(range: LoadLimitRange): LoadLimitRange {
+  return { ...range, curve: range.curve.map(({ rpm, value }) => ({ rpm, value })) };
+}
+
+function withIdsForAll(limits: Record<LimitsSubTab, LoadLimitRange>): Record<LimitsSubTab, LoadLimitRange> {
+  return {
+    thrust: { ...limits.thrust, curve: withPointIds(limits.thrust.curve) },
+    torque: { ...limits.torque, curve: withPointIds(limits.torque.curve) },
+    power: { ...limits.power, curve: withPointIds(limits.power.curve) },
+  };
+}
 
 /**
  * Limits tab state — hydrated from the load group's GET (in LoadGroupNew),
@@ -15,7 +42,9 @@ import { COMMIT_DEBOUNCE_MS } from '@/hooks/useDeferredCommit';
 export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
   const updateLimitsMutation = useUpdateLoadGroupLimits(loadGroupId);
   const [limitsSubTab, setLimitsSubTab] = useState<LimitsSubTab>('thrust');
-  const [limits, setLimits] = useState<Record<LimitsSubTab, LoadLimitRange>>(INITIAL_LOAD_LIMITS);
+  const [limits, setLimits] = useState<Record<LimitsSubTab, LoadLimitRange>>(() =>
+    withIdsForAll(INITIAL_LOAD_LIMITS),
+  );
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<SaveStatus | undefined>(undefined);
 
@@ -45,7 +74,7 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
   }
 
   function handleLimitCurveChange(sub: LimitsSubTab, curve: LoadLimitRange['curve']) {
-    setLimits((prev) => ({ ...prev, [sub]: { ...prev[sub], curve } }));
+    setLimits((prev) => ({ ...prev, [sub]: { ...prev[sub], curve: withPointIds(curve, prev[sub].curve) } }));
     markDirty();
   }
 
@@ -60,10 +89,14 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
       const appendRpm = Math.min(x_max, last.rpm + (last.rpm - secondLast.rpm));
       const nextCurve =
         appendRpm > last.rpm
-          ? [...curve, { rpm: appendRpm, value: last.value }]
+          ? [...curve, { rpm: appendRpm, value: last.value, id: nextPointId++ }]
           : [
               ...curve.slice(0, -1),
-              { rpm: (secondLast.rpm + last.rpm) / 2, value: (secondLast.value + last.value) / 2 },
+              {
+                rpm: (secondLast.rpm + last.rpm) / 2,
+                value: (secondLast.value + last.value) / 2,
+                id: nextPointId++,
+              },
               last,
             ];
       return { ...prev, [sub]: { ...prev[sub], curve: nextCurve } };
@@ -101,9 +134,9 @@ export function useLoadGroupLimitsState(loadGroupId: number, isNew: boolean) {
     try {
       const { thrust, torque, power } = limitsRef.current;
       await updateLimitsMutation.mutateAsync({
-        rpm_thrust_limit: thrust,
-        rpm_torque_limit: torque,
-        rpm_power_limit: power,
+        rpm_thrust_limit: toPayloadRange(thrust),
+        rpm_torque_limit: toPayloadRange(torque),
+        rpm_power_limit: toPayloadRange(power),
       });
       setDirty(false);
       setStatus('saved');

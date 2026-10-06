@@ -20,6 +20,8 @@ export interface LoadGroup {
 export interface LoadLimitCurvePoint {
   rpm: number;
   value: number;
+  /** Client-only row identity (see withPointIds) — never sent to the backend. */
+  id?: number;
 }
 
 export interface LoadLimitRange {
