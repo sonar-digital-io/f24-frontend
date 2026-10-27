@@ -10,7 +10,7 @@
 - **B-Rep / NURBS**: OpenCascade.js (a `/nurbs` és `/composition` route-okon)
 - **UI**: shadcn/ui (Radix UI primitives) + Tailwind CSS 3.4
 - **Routing**: React Router DOM 7
-- **Deploy**: Vercel (SPA rewrite `vercel.json`-ben)
+- **Deploy**: `app.econblades.com` → backoffice k3s klaszter (`backoffice-cluster` repo, `apps/f24-frontend`). Image: `Dockerfile` (Vite build + nginx), CI: `.github/workflows/image.yml` → `ghcr.io/sonar-digital-io/f24-frontend:sha-…`. Az nginx (`deploy/nginx.conf.template`) a `/api/*`-t a külső backendre proxyzza: Origin/Referer átírás, Basic Auth, cookie Domain átírás — ezért a backenden nem kell semmit állítani. Runtime env: `API_PROXY_TARGET`, `API_PROXY_AUTH`, `GATE_AUTH` (közös belépés: `LoginGate.tsx` → nginx `/gate` cookie, enélkül `/api` 401; `vite dev` alatt kikapcsolva). A régi `vercel.json` is működik még.
 
 ## Parancsok
 

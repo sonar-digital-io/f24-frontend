@@ -1,0 +1,12 @@
+#!/bin/sh
+# Sourced by the nginx entrypoint before envsubst: derive what the template needs.
+# API_PROXY_TARGET: backend origin, no trailing slash (https://backend.example.com)
+# API_PROXY_AUTH:   "user:pass" for the backend's Basic Auth
+# GATE_AUTH:        "user:pass" for the shared login screen (LoginGate.tsx)
+: "${API_PROXY_TARGET:?API_PROXY_TARGET is required}"
+# Required, else an empty value would match a missing cookie and open /api to everyone.
+: "${GATE_AUTH:?GATE_AUTH is required}"
+API_PROXY_HOST=${API_PROXY_TARGET#*://}
+export API_PROXY_HOST=${API_PROXY_HOST%%/*}
+export API_PROXY_AUTH_B64=$(printf %s "${API_PROXY_AUTH:-}" | base64 | tr -d '\n')
+export GATE_AUTH_B64=$(printf %s "$GATE_AUTH" | base64 | tr -d '\n')
